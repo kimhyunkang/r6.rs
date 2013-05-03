@@ -29,6 +29,7 @@ mod r5rs {
             _ => false,
         }
     }
+
     pub impl Parser {
         fn parse(&mut self) -> Result<LDatum, ~str> {
             do result::chain(self.parse_datum()) |v| {
