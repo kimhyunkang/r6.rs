@@ -1,0 +1,5 @@
+# test binaries
+*-tests
+
+# OS X dynamic linker libraries
+*.dSYM
