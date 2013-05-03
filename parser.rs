@@ -3,6 +3,7 @@ mod r5rs {
     enum LDatum {
         LIdent(~str),
         LString(~str),
+        LChar(char),
     }
 
     struct Parser {
@@ -90,24 +91,52 @@ mod r5rs {
                 return Err(~"unexpected EOF");
             }
 
-            let c = self.lookahead();
+            let c = self.consume();
             match(c) {
                 _ if id_init(c) =>
-                    Ok(LIdent(self.parse_ident())),
+                    Ok(LIdent(self.parse_ident(c))),
                 '"' => {
-                        self.consume();
                         match(self.parse_string()) {
                             Ok(s) => Ok(LString(s)),
                             Err(e) => Err(e),
                         }
+                    },
+                '#' => {
+                        self.parse_sharp()
                     },
                 _ =>
                     Err(~"unexpected character: " + str::from_char(c)),
             }
         }
 
-        fn parse_ident(&mut self) -> ~str {
+        fn parse_sharp(&mut self) -> Result<LDatum, ~str> {
+            if(self.eof()) {
+                return Err(~"unexpected EOF");
+            }
+
+            let c = self.consume();
+            match(c) {
+                '\\' =>
+                    do result::map(&self.parse_char()) |&c| {
+                        LChar(c)
+                    },
+                _ =>
+                    Err(~"unexpected character: " + str::from_char(c)),
+            }
+        }
+
+        fn parse_char(&mut self) -> Result<char, ~str> {
+            if(self.eof()) {
+                Err(~"unexpected EOF")
+            } else {
+                Ok(self.consume())
+            }
+        }
+
+        fn parse_ident(&mut self, init: char) -> ~str {
             do io::with_str_writer |wr| {
+                wr.write_char(init);
+
                 while(!self.eof()) {
                     let c = self.lookahead();
 
@@ -167,6 +196,17 @@ mod r5rs {
             let mut parser = Parser(rdr);
             let val = parser.parse();
             assert_eq!(Ok(LString(~"ab\"c")), val);
+        }
+    }
+
+    #[test]
+    fn test_parse_char() {
+        let test_src = ~"#\\h";
+
+        do io::with_str_reader(test_src) |rdr| {
+            let mut parser = Parser(rdr);
+            let val = parser.parse();
+            assert_eq!(Ok(LChar('h')), val);
         }
     }
 }
