@@ -4,6 +4,7 @@ mod r5rs {
         LIdent(~str),
         LString(~str),
         LChar(char),
+        LBool(bool),
     }
 
     struct Parser {
@@ -120,6 +121,10 @@ mod r5rs {
                     do result::map(&self.parse_char()) |&c| {
                         LChar(c)
                     },
+                't' =>
+                    Ok(LBool(true)),
+                'f' =>
+                    Ok(LBool(false)),
                 _ =>
                     Err(~"unexpected character: " + str::from_char(c)),
             }
@@ -127,9 +132,27 @@ mod r5rs {
 
         fn parse_char(&mut self) -> Result<char, ~str> {
             if(self.eof()) {
-                Err(~"unexpected EOF")
+                return Err(~"unexpected EOF");
+            }
+
+            let lit =
+            do io::with_str_writer |wr| {
+                while(!self.eof()) {
+                    match(self.lookahead()) {
+                        ' ' | '\t' | '\r' | '\n' => break,
+                        _ => wr.write_char(self.consume()),
+                    }
+                }
+            };
+
+            if(lit.len() == 1) {
+                Ok(lit.char_at(0))
+            } else if(lit == ~"space") {
+                Ok(' ')
+            } else if(lit == ~"newline") {
+                Ok('\n')
             } else {
-                Ok(self.consume())
+                Err(~"unknown character literal " + lit)
             }
         }
 
@@ -207,6 +230,28 @@ mod r5rs {
             let mut parser = Parser(rdr);
             let val = parser.parse();
             assert_eq!(Ok(LChar('h')), val);
+        }
+    }
+
+    #[test]
+    fn test_parse_space() {
+        let test_src = ~"#\\space";
+
+        do io::with_str_reader(test_src) |rdr| {
+            let mut parser = Parser(rdr);
+            let val = parser.parse();
+            assert_eq!(Ok(LChar(' ')), val);
+        }
+    }
+
+    #[test]
+    fn test_parse_bool() {
+        let test_src = ~"#t";
+
+        do io::with_str_reader(test_src) |rdr| {
+            let mut parser = Parser(rdr);
+            let val = parser.parse();
+            assert_eq!(Ok(LBool(true)), val);
         }
     }
 }
