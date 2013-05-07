@@ -1,0 +1,11 @@
+#[link(name = "r5",
+       vers = "0.0.1",
+       uuid = "4a7c7cc0-b6e3-11e2-9e96-0800200c9a66")];
+
+#[comment = "r5.rs library"];
+#[license = "MIT/ASL2"];
+#[crate_type = "lib"];
+
+pub mod rational;
+pub mod complex;
+pub mod parser;
