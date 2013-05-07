@@ -320,7 +320,7 @@ priv impl Parser {
     fn parse_string(&mut self) -> Result<~str, ~str> {
         let mut escape_fail = false;
 
-        if(self.consume() != '"') {
+        if(self.eof() || self.consume() != '"') {
             fail!(~"internal parser error");
         }
 
