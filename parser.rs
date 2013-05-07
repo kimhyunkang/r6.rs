@@ -195,8 +195,20 @@ priv impl Parser {
 
                     match(self.parse_ureal(r)) {
                         Err(e) => Err(e),
-                        Ok(Left(d)) => Ok(LInt(d)),
-                        Ok(Right(f)) => Ok(LRational(f)),
+                        Ok(Left(d)) => {
+                                let z = if sign { d } else { -d };
+                                match(exactness) {
+                                    Some(false) => Ok(LFloat(z as f64)),
+                                    _ => Ok(LInt(z)),
+                                }
+                            },
+                        Ok(Right(f)) => {
+                                let z = if sign { f } else { -f };
+                                match(exactness) {
+                                    Some(false) => Ok(LFloat(z.to_f64())),
+                                    _ => Ok(LRational(z)),
+                                }
+                            },
                     }
                 }
             }
@@ -421,5 +433,27 @@ fn test_parse_rational() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LRational(Rational::new(1,2))));
+    }
+}
+
+#[test]
+fn test_parse_rational_float() {
+    let test_src = ~"#i3/6";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LFloat(0.5)));
+    }
+}
+
+#[test]
+fn test_parse_integral_float() {
+    let test_src = ~"#i3";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LFloat(3.0)));
     }
 }

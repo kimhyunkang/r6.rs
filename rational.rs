@@ -53,6 +53,10 @@ pub impl Rational {
     fn get_numerator(&self) -> int {
         self.n
     }
+
+    fn to_f64(&self) -> f64 {
+        (self.d as f64) / (self.n as f64)
+    }
 }
 
 impl One for Rational {
