@@ -26,6 +26,12 @@ pub impl<T:Copy> Complex<T> {
     }
 }
 
+pub impl<T:Add<T,T> + Mul<T,T>> Complex<T> {
+    fn abs(&self) -> T {
+        self.real * self.real + self.imag * self.imag
+    }
+}
+
 impl<T:One + Zero> One for Complex<T> {
     fn one() -> Complex<T> {
         Complex {
@@ -91,7 +97,7 @@ impl<T: Mul<T,T> + Add<T,T> + Sub<T,T>> Mul<Complex<T>, Complex<T>> for Complex<
 
 impl<T: Mul<T,T> + Add<T,T> + Sub<T,T> + Div<T,T>> Div<Complex<T>, Complex<T>> for Complex<T> {
     fn div(&self, rhs: &Complex<T>) -> Complex<T> {
-        let n = rhs.real * rhs.real + rhs.imag * rhs.imag;
+        let n = rhs.abs();
         Complex {
             real: (self.real * rhs.real + self.imag * rhs.imag) / n,
             imag: (self.imag * rhs.real - self.real * rhs.imag) / n,
