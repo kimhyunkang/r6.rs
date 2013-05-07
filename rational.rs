@@ -46,16 +46,24 @@ pub impl Rational {
         }
     }
 
-    fn get_denominator(&self) -> int {
+    fn denominator(&self) -> int {
         self.d
     }
 
-    fn get_numerator(&self) -> int {
+    fn numerator(&self) -> int {
         self.n
     }
 
     fn to_f64(&self) -> f64 {
         (self.d as f64) / (self.n as f64)
+    }
+
+    fn is_nonnegative(&self) -> bool {
+        int::is_nonnegative(self.d)
+    }
+
+    fn is_negative(&self) -> bool {
+        int::is_negative(self.d)
     }
 }
 

@@ -1,17 +1,62 @@
 use rational::Rational;
-use complex::Complex;
 
 #[deriving(Eq)]
-enum LDatum {
+pub enum LDatum {
     LIdent(~str),
     LString(~str),
     LChar(char),
     LBool(bool),
-    LEComplex(~Complex<Rational>),
-    LIComplex(~Complex<f64>),
     LRational(Rational),
     LFloat(f64),
     LInt(int),
+}
+
+priv enum PResult {
+    PFloat(~str, ~str, ~str),
+    PRational(~str, ~str),
+    PInt(~str),
+    PErr(~str),
+    PNone,
+}
+
+priv enum RResult {
+    RInt(int),
+    RRational(Rational),
+    RFloat(f64),
+    RErr(~str),
+    RNone,
+}
+
+priv fn s_to_f64(s: &str) -> f64 {
+    match f64::from_str(s) {
+        Some(f) => f,
+        None => fail!(~"failed to convert float literal: " + s),
+    }
+}
+
+priv fn s_to_int(s: &str, r: uint) -> int {
+    match int::from_str_radix(s, r) {
+        Some(z) => z,
+        None => fail!(~"failed to convert int literal " + s + " with radix " + r.to_str()),
+    }
+}
+
+pub fn to_sexpr(&x: &LDatum) -> ~str {
+    match(x) {
+        LIdent(s) => s,
+        LString(s) => fmt!("%?", copy s),
+        LChar(' ') => ~"#\\space",
+        LChar('\n') => ~"#\\newline",
+        LChar(c) => ~"#\\" + str::from_char(c),
+        LBool(true) => ~"#t",
+        LBool(false) => ~"#f",
+        LRational(f) => {
+                let s = if f.is_negative() { ~"-" } else { ~"" };
+                s + f.denominator().to_str() + "/" + f.numerator().to_str()
+            },
+        LFloat(f) => f.to_str(),
+        LInt(z) => z.to_str(),
+    }
 }
 
 struct Parser {
@@ -175,75 +220,184 @@ priv impl Parser {
     }
 
     fn parse_number(&mut self, init: &str) -> Result<LDatum, ~str> {
-        match(self.parse_num_prefix(init)) {
+        match self.parse_num_prefix(init) {
             Err(e) => Err(e),
             Ok((exactness, radix)) => {
                 if(self.eof()) {
-                    Err(~"unexpected EOF")
-                } else {
-                    let sign =
-                    match(self.lookahead()) {
-                        '+' => { self.consume(); true },
-                        '-' => { self.consume(); false },
-                        _ => true,
-                    };
+                    return Err(~"unexpected EOF");
+                }
 
-                    let r = match(radix) {
-                        None => 10,
-                        Some(x) => x,
-                    };
+                let r = match radix { None => 10, Some(d) => d };
 
-                    match(self.parse_ureal(r)) {
-                        Err(e) => Err(e),
-                        Ok(Left(d)) => {
-                                let z = if sign { d } else { -d };
-                                match(exactness) {
-                                    Some(false) => Ok(LFloat(z as f64)),
-                                    _ => Ok(LInt(z)),
-                                }
-                            },
-                        Ok(Right(f)) => {
-                                let z = if sign { f } else { -f };
-                                match(exactness) {
-                                    Some(false) => Ok(LFloat(z.to_f64())),
-                                    _ => Ok(LRational(z)),
-                                }
-                            },
-                    }
+                let sign =
+                match(self.lookahead()) {
+                    '+' => { self.consume(); true },
+                    '-' => { self.consume(); false },
+                    _ => true,
+                };
+
+                match self.parse_ureal(exactness, r) {
+                    RInt(z) => Ok(LInt(if sign { z } else { -z })),
+                    RRational(f) => Ok(LRational(if sign { f } else { -f })),
+                    RFloat(f) => Ok(LFloat(if sign { f } else { -f })),
+                    RErr(e) => Err(e),
+                    RNone => Err(~"empty number literal"),
                 }
             }
         }
     }
 
-    fn parse_ureal(&mut self, r: uint) -> Result<Either<int, Rational>, ~str> {
+    fn parse_ureal(&mut self, exactness: Option<bool>, radix: uint) -> RResult {
+        let res =
+        if radix == 10 {
+            self.parse_decimal()
+        } else {
+            self.parse_urational(radix)
+        };
+
+        match res {
+            PErr(e) => RErr(e),
+            PNone => RNone,
+            PInt(zs) =>
+                match exactness {
+                    Some(false) => RFloat(s_to_int(zs, radix) as f64),
+                    _ => RInt(s_to_int(zs, radix)),
+                },
+            PRational(ds, ns) =>
+                match exactness {
+                    Some(false) => RFloat((s_to_int(ds, radix) as f64) / (s_to_int(ns, radix) as f64)),
+                    _ => RRational(Rational::new(s_to_int(ds, radix), s_to_int(ns, radix))),
+                },
+            PFloat(i, f, e) => 
+                match exactness {
+                    Some(true) => {
+                        let exp =
+                        if e.is_empty() {
+                            0
+                        } else {
+                            s_to_int(e, 10)
+                        };
+
+                        let n:int = num::pow_with_uint(10, f.len());
+                        let d = s_to_int(i + f, 10);
+                        let p = num::pow_with_uint(10, num::abs(exp) as uint);
+
+                        if(exp < 0) {
+                            RRational(Rational::new(d, n*p))
+                        } else {
+                            RRational(Rational::new(d*p, n))
+                        }
+                    },
+                    _ => {
+                        let s = if e.is_empty() { i + "." + f } else { i + "." + f + "e" + e };
+                        RFloat(s_to_f64(s))
+                    },
+                },
+        }
+    }
+
+    fn parse_exponent(&mut self) -> Option<~str> {
+        if self.eof() {
+            None
+        } else {
+            let s =
+            match self.lookahead() {
+                '+' | '-' => str::from_char(self.consume()),
+                _ => ~""
+            };
+
+            let mut exp = ~"";
+            while(!self.eof()) {
+                match self.lookahead() {
+                    '0' .. '9' => exp.push_char(self.consume()),
+                    _ => break,
+                }
+            }
+
+            if exp.is_empty() {
+                None
+            } else {
+                Some(s + exp)
+            }
+        }
+    }
+
+    fn parse_decimal(&mut self) -> PResult {
+        let (x, xr) = self.parse_radix(10);
+        let int_part = x + str::repeat("0", xr);
+
+        if self.eof() {
+            if(int_part.is_empty()) {
+                PNone
+            } else {
+                PInt(int_part)
+            }
+        } else {
+            match self.lookahead() {
+                '.' => {
+                    self.consume();
+                    let float_part =
+                    if(xr == 0) {
+                        let (y, _) = self.parse_radix(10);
+                        y
+                    } else {
+                        while(!self.eof() && self.lookahead() == '#') {
+                            self.consume();
+                        }
+                        ~""
+                    };
+
+                    if self.eof() {
+                        PFloat(int_part, float_part, ~"")
+                    } else {
+                        match(self.lookahead()) {
+                            'e' | 's' | 'f' | 'd' | 'l' => {
+                                self.consume();
+                                match self.parse_exponent() {
+                                    None => PErr(~"invalid exponent"),
+                                    Some(e) => PFloat(int_part, float_part, e),
+                                }
+                            },
+                            _ => PFloat(int_part, float_part, ~"")
+                        }
+                    }
+                },
+                'e' | 's' | 'f' | 'd' | 'l' => {
+                    self.consume();
+                    match self.parse_exponent() {
+                        None => PErr(~"invalid exponent"),
+                        Some(e) => PFloat(int_part, ~"", e),
+                    }
+                },
+                '/' => {
+                    self.consume();
+                    let (y, yr) = self.parse_radix(10);
+                    if(y.is_empty()) {
+                        PErr(~"invalid rational literal")
+                    } else {
+                        PRational(int_part, y + str::repeat("0", yr))
+                    }
+                },
+                _ => PInt(int_part)
+            }
+        }
+    }
+
+    fn parse_urational(&mut self, r: uint) -> PResult {
         let (x, xr) = self.parse_radix(r);
 
         if(x.is_empty()) {
-            Err(~"")
-        } else {
-            match(int::from_str_radix(x, r)) {
-                None => Err(~"invalid number literal"),
-                Some(z) => {
-                    let d = z * num::pow_with_uint(r, xr) as int;
-                    if(!self.eof() && self.lookahead() == '/') {
-                        self.consume();
-                        let (y, yr) = self.parse_radix(r);
-                        if(y.is_empty()) {
-                            Err(~"invalid rational number")
-                        } else {
-                            match(int::from_str_radix(y, r)) {
-                                None => Err(~"invalid number literal"),
-                                Some(z2) => {
-                                    let n = z2 * num::pow_with_uint(r, yr) as int;
-                                    Ok(Right(Rational::new(d, n)))
-                                },
-                            }
-                        }
-                    } else {
-                        Ok(Left(d))
-                    }
-                },
+            PNone
+        } else if(!self.eof() && self.lookahead() == '/') {
+            self.consume();
+            let (y, yr) = self.parse_radix(r);
+            if(y.is_empty()) {
+                PErr(~"invalid rational number")
+            } else {
+                PRational(x + str::repeat("0", xr), y + str::repeat("0", yr))
             }
+        } else {
+            PInt(x + str::repeat("0", xr))
         }
     }
 
@@ -455,5 +609,49 @@ fn test_parse_integral_float() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LFloat(3.0)));
+    }
+}
+
+#[test]
+fn test_parse_decimal_float() {
+    let test_src = ~"3.6";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LFloat(3.6)));
+    }
+}
+
+#[test]
+fn test_parse_decimal_float_exp() {
+    let test_src = ~"31.4e-1";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LFloat(3.14)));
+    }
+}
+
+#[test]
+fn test_parse_exact_decimal_float() {
+    let test_src = ~"#e3.6";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LRational(Rational::new(36, 10))));
+    }
+}
+
+#[test]
+fn test_parse_exact_decimal_float_exp() {
+    let test_src = ~"#e31.4e-1";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LRational(Rational::new(314, 100))));
     }
 }
