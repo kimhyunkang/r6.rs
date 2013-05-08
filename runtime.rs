@@ -8,8 +8,21 @@ struct Runtime {
 
 #[deriving(Eq)]
 enum RuntimeError {
-    UnknownLocalVariable,
+    UnknownLocalVariable(~str),
     NotImplemented,
+}
+
+impl ToStr for RuntimeError {
+    fn to_str(&self) -> ~str {
+        err_to_str(self)
+    }
+}
+
+priv fn err_to_str(&err: &RuntimeError) -> ~str {
+    match err {
+        UnknownLocalVariable(name) => ~"unknown local variable: " + copy name,
+        NotImplemented => ~"not implemented",
+    }
 }
 
 pub impl Runtime {
@@ -22,8 +35,8 @@ pub impl Runtime {
     }
 
     fn eval(&mut self, &val: &LDatum) -> Result<LDatum, RuntimeError> {
-        match val {
-            LIdent(_) => Err(UnknownLocalVariable),
+        match copy val {
+            LIdent(name) => Err(UnknownLocalVariable(name)),
             LCons(_,_) => Err(NotImplemented),
             LNil => Err(NotImplemented),
             _ => Ok(val),

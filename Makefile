@@ -1,7 +1,13 @@
+all: repl.rs lib
+	rustc $< -L .
+
 test: parser-tests
 	./parser-tests
 
-parser-tests: r5.rc parser.rs rational.rs complex.rs
+lib: r5.rc parser.rs rational.rs complex.rs datum.rs runtime.rs
+	rustc $< --lib
+
+parser-tests: r5.rc parser.rs rational.rs complex.rs datum.rs runtime.rs
 	rustc $< --test -o $@
 
 clean:

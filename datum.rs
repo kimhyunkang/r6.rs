@@ -19,7 +19,7 @@ pub enum LDatum {
 impl ToStr for LDatum {
     fn to_str(&self) -> ~str {
         do io::with_str_writer |wr| {
-            LDatum::write_ldatum(wr, self)
+            self.write(wr)
         }
     }
 
@@ -32,6 +32,10 @@ pub impl LDatum {
             LNil => Some(~[]),
             _ => None,
         }
+    }
+
+    fn write(&self, writer: @io::Writer) {
+        write_ldatum(writer, self)
     }
 }
 
@@ -64,53 +68,51 @@ priv fn datum_to_list(head: @LDatum, tail: @LDatum) -> Option<~[@LDatum]> {
     }
 }
 
-priv impl LDatum {
-    fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
-        match v {
-            LIdent(s) => wr.write_str(s),
-            LString(s) => wr.write_str(fmt!("%?", copy s)),
-            LChar(' ') => wr.write_str("#\\space"),
-            LChar('\n') => wr.write_str("#\\newline"),
-            LChar(c) => {
-                wr.write_str("#\\");
-                wr.write_char(c);
+priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
+    match v {
+        LIdent(s) => wr.write_str(s),
+        LString(s) => wr.write_str(fmt!("%?", copy s)),
+        LChar(' ') => wr.write_str("#\\space"),
+        LChar('\n') => wr.write_str("#\\newline"),
+        LChar(c) => {
+            wr.write_str("#\\");
+            wr.write_char(c);
+        }
+        LBool(true) => wr.write_str("#t"),
+        LBool(false) => wr.write_str("#f"),
+        LRational(f) => {
+            if f.is_negative() {
+                wr.write_char('-');
             }
-            LBool(true) => wr.write_str("#t"),
-            LBool(false) => wr.write_str("#f"),
-            LRational(f) => {
-                if f.is_negative() {
-                    wr.write_char('-');
-                }
-                wr.write_str(f.denominator().to_str());
-                wr.write_char('/');
-                wr.write_str(f.numerator().to_str());
-            },
-            LFloat(f) => wr.write_str(f.to_str()),
-            LInt(z) => wr.write_str(z.to_str()),
-            LICmplx(c) => wr.write_str(c.to_str()),
-            LECmplx(c) => wr.write_str(c.to_str()),
-            LCons(head, tail) => {
-                wr.write_char('(');
-                LDatum::write_ldatum(wr, head);
-                LDatum::write_list(wr, tail);
-            },
-            LNil => wr.write_str("()"),
-        }
+            wr.write_str(f.denominator().to_str());
+            wr.write_char('/');
+            wr.write_str(f.numerator().to_str());
+        },
+        LFloat(f) => wr.write_str(f.to_str()),
+        LInt(z) => wr.write_str(z.to_str()),
+        LICmplx(c) => wr.write_str(c.to_str()),
+        LECmplx(c) => wr.write_str(c.to_str()),
+        LCons(head, tail) => {
+            wr.write_char('(');
+            write_ldatum(wr, head);
+            write_list(wr, tail);
+        },
+        LNil => wr.write_str("()"),
     }
+}
 
-    fn write_list(wr: @io::Writer, &v: &LDatum) {
-        match v {
-            LCons(head, tail) => {
-                wr.write_str(", ");
-                LDatum::write_ldatum(wr, head);
-                LDatum::write_list(wr, tail);
-            },
-            LNil => wr.write_char(')'),
-            _ => {
-                wr.write_str(" . ");
-                LDatum::write_ldatum(wr, &v);
-                wr.write_char(')');
-            },
-        }
+priv fn write_list(wr: @io::Writer, &v: &LDatum) {
+    match v {
+        LCons(head, tail) => {
+            wr.write_str(", ");
+            write_ldatum(wr, head);
+            write_list(wr, tail);
+        },
+        LNil => wr.write_char(')'),
+        _ => {
+            wr.write_str(" . ");
+            write_ldatum(wr, &v);
+            wr.write_char(')');
+        },
     }
 }

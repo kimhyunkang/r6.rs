@@ -1,5 +1,9 @@
+# repl binary
+repl
+
 # test binaries
 *-tests
 
 # OS X dynamic linker libraries
 *.dSYM
+*.dylib

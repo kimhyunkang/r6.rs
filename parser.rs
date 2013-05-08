@@ -100,6 +100,12 @@ priv fn id_init(c: char) -> bool {
 }
 
 pub impl Parser {
+
+    #[inline(always)]
+    fn pos(&self) -> (uint, uint) {
+        (self.line, self.col)
+    }
+
     fn parse(&mut self) -> Result<LDatum, ~str> {
         do result::chain(self.parse_datum()) |v| {
             self.consume_whitespace();
@@ -109,6 +115,57 @@ pub impl Parser {
             } else {
                 Err(~"trailing input")
             }
+        }
+    }
+
+    fn parse_datum(&mut self) -> Result<LDatum, ~str> {
+        self.consume_whitespace();
+
+        if(self.eof()) {
+            return Err(~"unexpected EOF");
+        }
+
+        let c = self.lookahead();
+        match(c) {
+            _ if id_init(c) =>
+                Ok(LIdent(self.parse_ident())),
+            '"' => {
+                    match(self.parse_string()) {
+                        Ok(s) => Ok(LString(s)),
+                        Err(e) => Err(e),
+                    }
+                },
+            '#' => {
+                    self.consume();
+                    self.parse_sharp()
+                },
+            '0'..'9' =>
+                self.parse_number(~""),
+            '(' => {
+                    self.consume();
+                    match self.parse_datum() {
+                        Err(e) => Err(e),
+                        Ok(head) => self.parse_list(@head),
+                    }
+                },
+            '+' | '-' => {
+                self.consume();
+                if self.consume_whitespace() {
+                    Ok(LIdent(str::from_char(c)))
+                } else {
+                    self.parse_number(str::from_char(c))
+                }
+            }
+            '.' => {
+                self.consume();
+                match self.parse_dot() {
+                    DSingle => Err(~"invalid token '.' in data context"),
+                    DDatum(x) => Ok(x),
+                    DErr(e) => Err(e),
+                }
+            }
+            _ =>
+                Err(~"unexpected character: " + str::from_char(c)),
         }
     }
 }
@@ -183,57 +240,6 @@ priv impl Parser {
         }
 
         consumed
-    }
-
-    fn parse_datum(&mut self) -> Result<LDatum, ~str> {
-        self.consume_whitespace();
-
-        if(self.eof()) {
-            return Err(~"unexpected EOF");
-        }
-
-        let c = self.lookahead();
-        match(c) {
-            _ if id_init(c) =>
-                Ok(LIdent(self.parse_ident())),
-            '"' => {
-                    match(self.parse_string()) {
-                        Ok(s) => Ok(LString(s)),
-                        Err(e) => Err(e),
-                    }
-                },
-            '#' => {
-                    self.consume();
-                    self.parse_sharp()
-                },
-            '0'..'9' =>
-                self.parse_number(~""),
-            '(' => {
-                    self.consume();
-                    match self.parse_datum() {
-                        Err(e) => Err(e),
-                        Ok(head) => self.parse_list(@head),
-                    }
-                },
-            '+' | '-' => {
-                self.consume();
-                if self.consume_whitespace() {
-                    Ok(LIdent(str::from_char(c)))
-                } else {
-                    self.parse_number(str::from_char(c))
-                }
-            }
-            '.' => {
-                self.consume();
-                match self.parse_dot() {
-                    DSingle => Err(~"invalid token '.' in data context"),
-                    DDatum(x) => Ok(x),
-                    DErr(e) => Err(e),
-                }
-            }
-            _ =>
-                Err(~"unexpected character: " + str::from_char(c)),
-        }
     }
 
     fn parse_sharp(&mut self) -> Result<LDatum, ~str> {
