@@ -8,6 +8,7 @@
 
 pub mod rational;
 pub mod complex;
+pub mod numeric;
 pub mod parser;
 pub mod datum;
 pub mod runtime;

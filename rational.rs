@@ -58,12 +58,24 @@ pub impl Rational {
         (self.d as f64) / (self.n as f64)
     }
 
+    fn is_zero(&self) -> bool {
+        self.d == 0
+    }
+
     fn is_nonnegative(&self) -> bool {
         int::is_nonnegative(self.d)
     }
 
     fn is_negative(&self) -> bool {
         int::is_negative(self.d)
+    }
+
+    fn is_nonpositive(&self) -> bool {
+        int::is_nonpositive(self.d)
+    }
+
+    fn is_positive(&self) -> bool {
+        int::is_positive(self.d)
     }
 }
 
