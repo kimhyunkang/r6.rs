@@ -481,7 +481,7 @@ priv impl Parser {
                     },
                 };
 
-                match self.parse_real(exactness, rsign, r) {
+                match self.parse_real(exactness, rsign, r, init == ".") {
                     RErr(e) => Err(e),
                     RNone => 
                         match self.try_consume(['i']) {
@@ -521,7 +521,7 @@ priv impl Parser {
                                         Some('-') => false,
                                         _ => true,
                                     };
-                                    let arg = match self.parse_real(exactness, asign, r) {
+                                    let arg = match self.parse_real(exactness, asign, r, false) {
                                         RInt(z) => z as f64,
                                         RRational(f) => f.to_f64(),
                                         RFloat(f) => f,
@@ -533,7 +533,7 @@ priv impl Parser {
                                 },
                             Some(s) => {
                                     let isign = s == '+';
-                                    let ipart = self.parse_real(exactness, isign, r);
+                                    let ipart = self.parse_real(exactness, isign, r, false);
                                     match self.try_consume(['i']) {
                                         Some(_) => build_complex(&rpart, &ipart),
                                         None => Err(~"invalid complex literal"),
@@ -552,9 +552,11 @@ priv impl Parser {
         }
     }
 
-    fn parse_real(&mut self, exactness: Option<bool>, sign: bool, radix: uint) -> RResult {
+    fn parse_real(&mut self, exactness: Option<bool>, sign: bool, radix: uint, dot_start: bool) -> RResult {
         let res =
-        if radix == 10 {
+        if dot_start {
+            self.parse_dotnumber()
+        } else if radix == 10 {
             self.parse_decimal()
         } else {
             self.parse_urational(radix)
@@ -624,6 +626,19 @@ priv impl Parser {
             None
         } else {
             Some(s + exp)
+        }
+    }
+
+    fn parse_dotnumber(&mut self) -> PResult {
+        let (float_part, _) = self.parse_radix(10);
+
+        match self.try_consume(['e', 's', 'f', 'd', 'l']) {
+            Some(_) => 
+                match self.parse_exponent() {
+                    None => PErr(~"invalid exponent"),
+                    Some(e) => PFloat(~"", float_part, e),
+                },
+            None => PFloat(~"", float_part, ~""),
         }
     }
 
@@ -1026,5 +1041,16 @@ fn test_dots_ident() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LCons(@LIdent(~"..."), @LCons(@LIdent(~"a"), @LNil))));
+    }
+}
+
+#[test]
+fn test_parse_dotted_number() {
+    let test_src = ~".1";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LFloat(0.1f64)));
     }
 }
