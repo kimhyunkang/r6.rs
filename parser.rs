@@ -1,4 +1,7 @@
 use rational::Rational;
+use complex::Complex;
+use core::num::One::one;
+use core::num::Zero::zero;
 
 #[deriving(Eq)]
 pub enum LDatum {
@@ -6,6 +9,8 @@ pub enum LDatum {
     LString(~str),
     LChar(char),
     LBool(bool),
+    LECmplx(Complex<Rational>),
+    LICmplx(Complex<f64>),
     LRational(Rational),
     LFloat(f64),
     LInt(int),
@@ -27,35 +32,77 @@ priv enum RResult {
     RNone,
 }
 
-priv fn s_to_f64(s: &str) -> f64 {
+priv enum CResult {
+    CReal(bool, RResult),
+    CECmplx(bool, Rational, bool, Rational),
+    CICmplx(bool, f64, bool, f64),
+    CArc(bool, RResult, bool, RResult),
+    CErr(~str),
+}
+
+priv fn build_complex(rpart: &RResult, ipart: &RResult) -> Result<LDatum, ~str> {
+    let re =
+    match *rpart {
+        RInt(rz) => Left(Rational::new(rz, 1)),
+        RRational(f) => Left(f),
+        RFloat(f) => Right(f),
+        _ => return Err(~"invalid number literal"),
+    };
+
+    let im =
+    match *ipart {
+        RInt(rz) => Left(Rational::new(rz, 1)),
+        RRational(f) => Left(f),
+        RFloat(f) => Right(f),
+        _ => return Err(~"invalid number literal"),
+    };
+
+    match (re, im) {
+        (Left(r), Left(i)) => Ok(LECmplx(Complex::new(r, i))),
+        (Right(r), Right(i)) => Ok(LICmplx(Complex::new(r, i))),
+        _ => fail!(~"internal parser error"),
+    }
+}
+
+priv fn s_to_f64(s: &str, sign: bool) -> f64 {
     match f64::from_str(s) {
-        Some(f) => f,
+        Some(f) => if sign { f } else { -f },
         None => fail!(~"failed to convert float literal: " + s),
     }
 }
 
-priv fn s_to_int(s: &str, r: uint) -> int {
+priv fn s_to_int(s: &str, sign: bool, r: uint) -> int {
     match int::from_str_radix(s, r) {
-        Some(z) => z,
+        Some(z) => if sign { z } else { -z },
         None => fail!(~"failed to convert int literal " + s + " with radix " + r.to_str()),
     }
 }
 
-pub fn to_sexpr(&x: &LDatum) -> ~str {
-    match(x) {
-        LIdent(s) => s,
-        LString(s) => fmt!("%?", copy s),
-        LChar(' ') => ~"#\\space",
-        LChar('\n') => ~"#\\newline",
-        LChar(c) => ~"#\\" + str::from_char(c),
-        LBool(true) => ~"#t",
-        LBool(false) => ~"#f",
-        LRational(f) => {
-                let s = if f.is_negative() { ~"-" } else { ~"" };
-                s + f.denominator().to_str() + "/" + f.numerator().to_str()
-            },
-        LFloat(f) => f.to_str(),
-        LInt(z) => z.to_str(),
+impl ToStr for LDatum {
+    fn to_str(&self) -> ~str {
+        LDatum::to_str(self)
+    }
+}
+
+pub impl LDatum {
+    pub fn to_str(&v: &LDatum) -> ~str {
+        match v {
+            LIdent(s) => s,
+            LString(s) => fmt!("%?", copy s),
+            LChar(' ') => ~"#\\space",
+            LChar('\n') => ~"#\\newline",
+            LChar(c) => ~"#\\" + str::from_char(c),
+            LBool(true) => ~"#t",
+            LBool(false) => ~"#f",
+            LRational(f) => {
+                    let s = if f.is_negative() { ~"-" } else { ~"" };
+                    s + f.denominator().to_str() + "/" + f.numerator().to_str()
+                },
+            LFloat(f) => f.to_str(),
+            LInt(z) => z.to_str(),
+            LICmplx(c) => c.to_str(),
+            LECmplx(c) => c.to_str(),
+        }
     }
 }
 
@@ -79,7 +126,9 @@ pub fn Parser(reader: @io::Reader) -> Parser {
 
 priv fn id_init(c: char) -> bool {
     match(c) {
-        '!' | '$' | '%' | '&' | '*' | '/' | ':' | '<' | '=' | '>' | '?' | '^' | '_' | '~' | 'a' .. 'z' | 'A' .. 'Z' => true,
+        '!' | '$' | '%' | '&' | '*' | '/' | ':' |
+        '<' | '=' | '>' | '?' | '^' | '_' | '~' |
+        'a' .. 'z' | 'A' .. 'Z' => true,
         _ => false,
     }
 }
@@ -128,16 +177,36 @@ priv impl Parser {
         self.buf
     }
 
+    fn try_consume(&mut self, v: &[char]) -> Option<char> {
+        if !self.has_buf {
+            if self.reader.eof() {
+                return None;
+            } else {
+                self.has_buf = true;
+                self.buf = self.reader.read_char();
+            }
+        }
+
+        if v.contains(&self.buf) {
+            self.has_buf = false;
+            if(self.buf == '\n') {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
+            Some(self.buf)
+        } else {
+            None
+        }
+    }
+
     fn consume_whitespace(&mut self) {
         while(!self.eof()) {
-            match(self.lookahead()) {
-                ' '| '\t' | '\r' | '\n' => { self.consume(); },
-                ';' =>
-                    {
-                        self.consume();
-                        while(!self.eof() && self.consume() != '\n') { () }
-                    },
-                _ => break
+            match self.try_consume([' ', '\t', '\r', '\n', ';']) {
+                Some(';') => while(!self.eof() && self.consume() != '\n') { () },
+                Some(_) => (),
+                None => break,
             }
         }
     }
@@ -223,31 +292,86 @@ priv impl Parser {
         match self.parse_num_prefix(init) {
             Err(e) => Err(e),
             Ok((exactness, radix)) => {
-                if(self.eof()) {
-                    return Err(~"unexpected EOF");
-                }
-
                 let r = match radix { None => 10, Some(d) => d };
 
-                let sign =
-                match(self.lookahead()) {
-                    '+' => { self.consume(); true },
-                    '-' => { self.consume(); false },
+                let rsign =
+                match self.try_consume(['+', '-']) {
+                    Some('-') => false,
                     _ => true,
                 };
 
-                match self.parse_ureal(exactness, r) {
-                    RInt(z) => Ok(LInt(if sign { z } else { -z })),
-                    RRational(f) => Ok(LRational(if sign { f } else { -f })),
-                    RFloat(f) => Ok(LFloat(if sign { f } else { -f })),
+                match self.parse_real(exactness, rsign, r) {
                     RErr(e) => Err(e),
-                    RNone => Err(~"empty number literal"),
+                    RNone => 
+                        match self.try_consume(['i']) {
+                            Some(_) =>
+                                match exactness {
+                                    Some(false) => {
+                                        Ok(LICmplx(Complex::new(0f64, if rsign { 1f64 } else { -1f64 })))
+                                    },
+                                    _ => {
+                                        let re:Rational = zero();
+                                        let im:Rational = one();
+                                        if rsign {
+                                            Ok(LECmplx(Complex::new(re, im)))
+                                        } else {
+                                            Ok(LECmplx(Complex::new(re, -im)))
+                                        }
+                                    },
+                                },
+                            None => Err(~"empty number literal"),
+                        },
+                    rpart =>
+                        match self.try_consume(['i', '@', '+', '-']) {
+                            Some('i') => match rpart {
+                                    RInt(z) => Ok(LECmplx(Complex::new(zero(), Rational::new(z, 1)))),
+                                    RRational(f) => Ok(LECmplx(Complex::new(zero(), f))),
+                                    RFloat(f) => Ok(LICmplx(Complex::new(0.0, f))),
+                                    _ => fail!(~"internal parser error"), 
+                                },
+                            Some('@') => {
+                                    let abs = match rpart {
+                                        RInt(z) => z as f64,
+                                        RRational(f) => f.to_f64(),
+                                        RFloat(f) => f,
+                                        _ => fail!(~"internal parser error"),
+                                    };
+                                    let asign = match self.try_consume(['+', '-']) {
+                                        Some('-') => false,
+                                        _ => true,
+                                    };
+                                    let arg = match self.parse_real(exactness, asign, r) {
+                                        RInt(z) => z as f64,
+                                        RRational(f) => f.to_f64(),
+                                        RFloat(f) => f,
+                                        _ => return Err(~"invalid polar literal"),
+                                    };
+                                    let re = abs * f64::cos(arg);
+                                    let im = abs * f64::sin(arg);
+                                    Ok(LICmplx(Complex::new(re, im)))
+                                },
+                            Some(s) => {
+                                    let isign = s == '+';
+                                    let ipart = self.parse_real(exactness, isign, r);
+                                    match self.try_consume(['i']) {
+                                        Some(_) => build_complex(&rpart, &ipart),
+                                        None => Err(~"invalid complex literal"),
+                                    }
+                                },
+                            None => 
+                                match rpart {
+                                    RInt(z) => Ok(LInt(z)),
+                                    RRational(f) => Ok(LRational(f)),
+                                    RFloat(f) => Ok(LFloat(f)),
+                                    _ => fail!(~"internal parser error"),
+                                },
+                        },
                 }
             }
         }
     }
 
-    fn parse_ureal(&mut self, exactness: Option<bool>, radix: uint) -> RResult {
+    fn parse_real(&mut self, exactness: Option<bool>, sign: bool, radix: uint) -> RResult {
         let res =
         if radix == 10 {
             self.parse_decimal()
@@ -260,13 +384,16 @@ priv impl Parser {
             PNone => RNone,
             PInt(zs) =>
                 match exactness {
-                    Some(false) => RFloat(s_to_int(zs, radix) as f64),
-                    _ => RInt(s_to_int(zs, radix)),
+                    Some(false) => RFloat(s_to_int(zs, sign, radix) as f64),
+                    _ => RInt(s_to_int(zs, sign, radix)),
                 },
-            PRational(ds, ns) =>
-                match exactness {
-                    Some(false) => RFloat((s_to_int(ds, radix) as f64) / (s_to_int(ns, radix) as f64)),
-                    _ => RRational(Rational::new(s_to_int(ds, radix), s_to_int(ns, radix))),
+            PRational(ds, ns) => {
+                    let d = s_to_int(ds, sign, radix);
+                    let n = s_to_int(ns, sign, radix);
+                    match exactness {
+                        Some(false) => RFloat((d as f64) / (n as f64)),
+                        _ => RRational(Rational::new(d, n)),
+                    }
                 },
             PFloat(i, f, e) => 
                 match exactness {
@@ -275,11 +402,11 @@ priv impl Parser {
                         if e.is_empty() {
                             0
                         } else {
-                            s_to_int(e, 10)
+                            s_to_int(e, true, 10)
                         };
 
                         let n:int = num::pow_with_uint(10, f.len());
-                        let d = s_to_int(i + f, 10);
+                        let d = s_to_int(i + f, sign, 10);
                         let p = num::pow_with_uint(10, num::abs(exp) as uint);
 
                         if(exp < 0) {
@@ -290,35 +417,32 @@ priv impl Parser {
                     },
                     _ => {
                         let s = if e.is_empty() { i + "." + f } else { i + "." + f + "e" + e };
-                        RFloat(s_to_f64(s))
+                        RFloat(s_to_f64(s, sign))
                     },
                 },
         }
     }
 
     fn parse_exponent(&mut self) -> Option<~str> {
-        if self.eof() {
+        let s =
+        match self.try_consume(['+', '-']) {
+            Some('+') => ~"+",
+            Some('-') => ~"-",
+            _ => return None,
+        };
+
+        let mut exp = ~"";
+        while(!self.eof()) {
+            match self.lookahead() {
+                '0' .. '9' => exp.push_char(self.consume()),
+                _ => break,
+            }
+        }
+
+        if exp.is_empty() {
             None
         } else {
-            let s =
-            match self.lookahead() {
-                '+' | '-' => str::from_char(self.consume()),
-                _ => ~""
-            };
-
-            let mut exp = ~"";
-            while(!self.eof()) {
-                match self.lookahead() {
-                    '0' .. '9' => exp.push_char(self.consume()),
-                    _ => break,
-                }
-            }
-
-            if exp.is_empty() {
-                None
-            } else {
-                Some(s + exp)
-            }
+            Some(s + exp)
         }
     }
 
@@ -326,60 +450,41 @@ priv impl Parser {
         let (x, xr) = self.parse_radix(10);
         let int_part = x + str::repeat("0", xr);
 
-        if self.eof() {
-            if(int_part.is_empty()) {
-                PNone
-            } else {
-                PInt(int_part)
-            }
-        } else {
-            match self.lookahead() {
-                '.' => {
-                    self.consume();
-                    let float_part =
-                    if(xr == 0) {
-                        let (y, _) = self.parse_radix(10);
-                        y
-                    } else {
-                        while(!self.eof() && self.lookahead() == '#') {
-                            self.consume();
-                        }
-                        ~""
-                    };
+        match self.try_consume(['.', 'e', 's', 'f', 'd', 'l', '/']) {
+            Some('.') => {
+                let float_part =
+                if(xr == 0) {
+                    let (y, _) = self.parse_radix(10);
+                    y
+                } else {
+                    while(self.try_consume(['#']).is_some()) { () }
+                    ~""
+                };
 
-                    if self.eof() {
-                        PFloat(int_part, float_part, ~"")
-                    } else {
-                        match(self.lookahead()) {
-                            'e' | 's' | 'f' | 'd' | 'l' => {
-                                self.consume();
-                                match self.parse_exponent() {
-                                    None => PErr(~"invalid exponent"),
-                                    Some(e) => PFloat(int_part, float_part, e),
-                                }
-                            },
-                            _ => PFloat(int_part, float_part, ~"")
-                        }
-                    }
-                },
-                'e' | 's' | 'f' | 'd' | 'l' => {
-                    self.consume();
-                    match self.parse_exponent() {
-                        None => PErr(~"invalid exponent"),
-                        Some(e) => PFloat(int_part, ~"", e),
-                    }
-                },
-                '/' => {
-                    self.consume();
-                    let (y, yr) = self.parse_radix(10);
-                    if(y.is_empty()) {
-                        PErr(~"invalid rational literal")
-                    } else {
-                        PRational(int_part, y + str::repeat("0", yr))
-                    }
-                },
-                _ => PInt(int_part)
-            }
+                match self.try_consume(['e', 's', 'f', 'd', 'l']) {
+                    Some(_) => 
+                        match self.parse_exponent() {
+                            None => PErr(~"invalid exponent"),
+                            Some(e) => PFloat(int_part, float_part, e),
+                        },
+                    None => PFloat(int_part, float_part, ~""),
+                }
+            },
+            Some('/') => {
+                let (y, yr) = self.parse_radix(10);
+                if(y.is_empty()) {
+                    PErr(~"invalid rational literal")
+                } else {
+                    PRational(int_part, y + str::repeat("0", yr))
+                }
+            },
+            Some(_) => {
+                match self.parse_exponent() {
+                    None => PErr(~"invalid exponent"),
+                    Some(e) => PFloat(int_part, ~"", e),
+                }
+            },
+            None => PInt(int_part)
         }
     }
 
@@ -388,7 +493,7 @@ priv impl Parser {
 
         if(x.is_empty()) {
             PNone
-        } else if(!self.eof() && self.lookahead() == '/') {
+        } else if(self.try_consume(['/']).is_some()) {
             self.consume();
             let (y, yr) = self.parse_radix(r);
             if(y.is_empty()) {
@@ -410,9 +515,8 @@ priv impl Parser {
             let c = self.lookahead();
 
             if(c == '#' && consumed) {
-                while(!self.eof() && self.lookahead() == '#') {
+                while(self.try_consume(['#']).is_some()) {
                     sharps += 1u;
-                    self.consume();
                 }
                 break;
             } else if(char::is_digit_radix(c, radix)) {
@@ -444,26 +548,20 @@ priv impl Parser {
             _ => None,
         };
 
-        if(!self.eof() && self.lookahead() == '#') {
-            self.consume();
-
-            if(self.eof()) {
-                Err(~"unexpected EOF")
-            } else {
-                match(self.consume()) {
-                    'i' if exactness == None => Ok((Some(false), radix)),
-                    'e' if exactness == None => Ok((Some(true), radix)),
-                    'i' | 'e' => Err(~"multiple exactness prefix"),
-                    'b' if radix == None => Ok((exactness, Some(2u))),
-                    'o' if radix == None => Ok((exactness, Some(8u))),
-                    'd' if radix == None => Ok((exactness, Some(10u))),
-                    'x' if radix == None => Ok((exactness, Some(16u))),
-                    'b' | 'o' | 'd' | 'x' => Err(~"multiple radix prefix"),
-                    x => Err(~"unexpected prefix #" + str::from_char(x)),
-                }
-            }
-        } else {
-            Ok((exactness, radix))
+        match self.try_consume(['#']) {
+            None => Ok((exactness, radix)),
+            Some(_) => 
+                match self.try_consume(['i','e','b','o','d','x']) {
+                    Some('i') if exactness == None => Ok((Some(false), radix)),
+                    Some('e') if exactness == None => Ok((Some(true), radix)),
+                    Some('i') | Some('e') => Err(~"multiple exactness prefix"),
+                    Some('b') if radix == None => Ok((exactness, Some(2u))),
+                    Some('o') if radix == None => Ok((exactness, Some(8u))),
+                    Some('d') if radix == None => Ok((exactness, Some(10u))),
+                    Some('x') if radix == None => Ok((exactness, Some(16u))),
+                    Some(_) => Err(~"multiple radix prefix"),
+                    None => Err(~"invalid number prefix #" + str::from_char(self.lookahead())),
+                },
         }
     }
 
@@ -474,8 +572,12 @@ priv impl Parser {
 
                 match(c) {
                     '0' .. '9' | '+' | '-' | '.' | '@' => wr.write_char(c),
-                    _ if id_init(c) => wr.write_char(c),
-                    _ => break,
+                    _ =>
+                        if id_init(c) {
+                            wr.write_char(c)
+                        } else {
+                            break
+                        },
                 }
 
                 self.consume();
@@ -653,5 +755,38 @@ fn test_parse_exact_decimal_float_exp() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LRational(Rational::new(314, 100))));
+    }
+}
+
+#[test]
+fn test_parse_complex() {
+    let test_src = ~"1+2i";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LECmplx(Complex::new(Rational::new(1, 1), Rational::new(2, 1)))));
+    }
+}
+
+#[test]
+fn test_parse_icomplex() {
+    let test_src = ~"1.0+2.0i";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LICmplx(Complex::new(1f64, 2f64))));
+    }
+}
+
+#[test]
+fn test_parse_polar_complex() {
+    let test_src = ~"1@0";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LICmplx(Complex::new(1f64, 0f64))));
     }
 }

@@ -1,15 +1,16 @@
 use core::num::{One, Zero};
 use core::num::One::one;
 use core::num::Zero::zero;
-use core::cmp::{Eq};
+use core::cmp::{Eq, Ord};
 use core::ops::{Neg, Add, Sub, Mul, Div};
+use core::to_str::ToStr;
 
 pub struct Complex<T> {
     priv real: T,
     priv imag: T,
 }
 
-pub impl<T:Copy> Complex<T> {
+pub impl<T:Copy + Add<T,T> + Mul<T,T>> Complex<T> {
     fn new(real: T, imag: T) -> Complex<T> {
         Complex {
             real: real,
@@ -24,11 +25,24 @@ pub impl<T:Copy> Complex<T> {
     fn get_imag(&self) -> T {
         self.imag
     }
-}
 
-pub impl<T:Add<T,T> + Mul<T,T>> Complex<T> {
     fn abs(&self) -> T {
         self.real * self.real + self.imag * self.imag
+    }
+}
+
+impl<T:ToStr + Zero + Eq + Ord> ToStr for Complex<T> {
+    fn to_str(&self) -> ~str {
+        let z = zero();
+        let im = self.real.to_str();
+
+        if(self.imag == z) {
+            im
+        } else if (self.imag < z) {
+            im + self.imag.to_str() + "i"
+        } else {
+            im + "+" + self.imag.to_str() + "i"
+        }
     }
 }
 
@@ -95,7 +109,7 @@ impl<T: Mul<T,T> + Add<T,T> + Sub<T,T>> Mul<Complex<T>, Complex<T>> for Complex<
     }
 }
 
-impl<T: Mul<T,T> + Add<T,T> + Sub<T,T> + Div<T,T>> Div<Complex<T>, Complex<T>> for Complex<T> {
+impl<T: Copy + Mul<T,T> + Add<T,T> + Sub<T,T> + Div<T,T>> Div<Complex<T>, Complex<T>> for Complex<T> {
     fn div(&self, rhs: &Complex<T>) -> Complex<T> {
         let n = rhs.abs();
         Complex {
