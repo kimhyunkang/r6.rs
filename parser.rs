@@ -381,7 +381,9 @@ priv impl Parser {
                             Some(_) =>
                                 match exactness {
                                     Some(false) => {
-                                        Ok(LICmplx(Complex::new(0f64, if rsign { 1f64 } else { -1f64 })))
+                                        let re = 0f64;
+                                        let im = if rsign { 1f64 } else { -1f64 };
+                                        Ok(LICmplx(Complex::new(re, im)))
                                     },
                                     _ => {
                                         let re:Rational = zero();
@@ -398,7 +400,11 @@ priv impl Parser {
                     rpart =>
                         match self.try_consume(['i', '@', '+', '-']) {
                             Some('i') => match rpart {
-                                    RInt(z) => Ok(LECmplx(Complex::new(zero(), Rational::new(z, 1)))),
+                                    RInt(z) => {
+                                        let re:Rational = zero();
+                                        let im = Rational::new(z, 1);
+                                        Ok(LECmplx(Complex::new(re, im)))
+                                    },
                                     RRational(f) => Ok(LECmplx(Complex::new(zero(), f))),
                                     RFloat(f) => Ok(LICmplx(Complex::new(0.0, f))),
                                     _ => fail!(~"internal parser error"), 
@@ -445,7 +451,11 @@ priv impl Parser {
         }
     }
 
-    fn parse_real(&mut self, exactness: Option<bool>, sign: bool, radix: uint, dot_start: bool) -> RResult {
+    fn parse_real(&mut self,
+                    exactness: Option<bool>,
+                    sign: bool,
+                    radix: uint,
+                    dot_start: bool) -> RResult {
         let res =
         if dot_start {
             self.parse_dotnumber()
