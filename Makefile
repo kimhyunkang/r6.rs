@@ -11,4 +11,4 @@ parser-tests: r5.rc parser.rs rational.rs complex.rs datum.rs runtime.rs
 	rustc $< --test -o $@
 
 clean:
-	rm -rf parser-tests *.dSYM
+	rm -rf parser-tests *.dSYM *.dylib repl
