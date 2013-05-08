@@ -352,11 +352,24 @@ priv impl Parser {
                 _ => match self.parse_datum() {
                     Err(e) => Err(e),
                     Ok(head) => {
-                            match self.parse_list() {
+                        self.consume_whitespace();
+                        match self.try_consume(['.']) {
+                            Some(_) => match self.parse_datum() {
+                                Err(e) => Err(e),
+                                Ok(tail) => {
+                                    self.consume_whitespace();
+                                    match self.try_consume([')']) {
+                                        None => Err(~"RPAREN not found after DOT"),
+                                        Some(_) => Ok(LCons(@head, @tail)),
+                                    }
+                                },
+                            },
+                            None => match self.parse_list() {
                                 Err(e) => Err(e),
                                 Ok(tail) => Ok(LCons(@head, @tail)),
-                            }
-                        },
+                            },
+                        }
+                    },
                 },
             }
         }
@@ -901,5 +914,16 @@ fn test_parse_list() {
             Err(e) => fail!(e),
             Ok(val) => assert_eq!(val.to_list(), Some(~[@LIdent(~"a"), @LIdent(~"b"), @LInt(1)])),
         };
+    }
+}
+
+#[test]
+fn test_parse_cons() {
+    let test_src = ~"(a b . 1)";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LCons(@LIdent(~"a"), @LCons(@LIdent(~"b"), @LInt(1)))));
     }
 }
