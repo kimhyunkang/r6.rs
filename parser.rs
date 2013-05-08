@@ -274,14 +274,22 @@ priv impl Parser {
         }
     }
 
-    fn consume_whitespace(&mut self) {
+    fn consume_whitespace(&mut self) -> bool {
+        let mut consumed = false;
         while(!self.eof()) {
             match self.try_consume([' ', '\t', '\r', '\n', ';']) {
-                Some(';') => while(!self.eof() && self.consume() != '\n') { () },
-                Some(_) => (),
+                Some(';') => {
+                    consumed = true;
+                    while(!self.eof() && self.consume() != '\n') { () }
+                },
+                Some(_) => {
+                    consumed = true;
+                },
                 None => break,
             }
         }
+
+        consumed
     }
 
     fn parse_datum(&mut self) -> Result<LDatum, ~str> {
@@ -311,6 +319,14 @@ priv impl Parser {
                     self.consume();
                     self.parse_list()
                 },
+            '+' | '-' => {
+                self.consume();
+                if self.consume_whitespace() {
+                    Ok(LIdent(str::from_char(c)))
+                } else {
+                    self.parse_number(str::from_char(c))
+                }
+            }
             _ =>
                 Err(~"unexpected character: " + str::from_char(c)),
         }
@@ -408,9 +424,13 @@ priv impl Parser {
                 let r = match radix { None => 10, Some(d) => d };
 
                 let rsign =
-                match self.try_consume(['+', '-']) {
-                    Some('-') => false,
-                    _ => true,
+                match init {
+                    "+" => true,
+                    "-" => false,
+                    _ => match self.try_consume(['+', '-']) {
+                        Some('-') => false,
+                        _ => true,
+                    },
                 };
 
                 match self.parse_real(exactness, rsign, r) {
@@ -925,5 +945,27 @@ fn test_parse_cons() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LCons(@LIdent(~"a"), @LCons(@LIdent(~"b"), @LInt(1)))));
+    }
+}
+
+#[test]
+fn test_plus_ident() {
+    let test_src = ~"(+ 1)";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LCons(@LIdent(~"+"), @LCons(@LInt(1), @LNil))));
+    }
+}
+
+#[test]
+fn test_minus_ident() {
+    let test_src = ~"(- 2)";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LCons(@LIdent(~"-"), @LCons(@LInt(2), @LNil))));
     }
 }
