@@ -42,6 +42,12 @@ priv enum CResult {
     CErr(~str),
 }
 
+priv enum DResult {
+    DSingle,
+    DDatum(LDatum),
+    DErr(~str),
+}
+
 priv fn build_complex(rpart: &RResult, ipart: &RResult) -> Result<LDatum, ~str> {
     let re =
     match *rpart {
@@ -317,7 +323,10 @@ priv impl Parser {
                 self.parse_number(~""),
             '(' => {
                     self.consume();
-                    self.parse_list()
+                    match self.parse_datum() {
+                        Err(e) => Err(e),
+                        Ok(head) => self.parse_list(@head),
+                    }
                 },
             '+' | '-' => {
                 self.consume();
@@ -325,6 +334,14 @@ priv impl Parser {
                     Ok(LIdent(str::from_char(c)))
                 } else {
                     self.parse_number(str::from_char(c))
+                }
+            }
+            '.' => {
+                self.consume();
+                match self.parse_dot() {
+                    DSingle => Err(~"invalid token '.' in data context"),
+                    DDatum(x) => Ok(x),
+                    DErr(e) => Err(e),
                 }
             }
             _ =>
@@ -355,7 +372,7 @@ priv impl Parser {
         }
     }
 
-    fn parse_list(&mut self) -> Result<LDatum, ~str> {
+    fn parse_list(&mut self, head: @LDatum) -> Result<LDatum, ~str> {
         self.consume_whitespace();
         if(self.eof()) {
             Err(~"parenthesis not closed")
@@ -363,30 +380,61 @@ priv impl Parser {
             match self.lookahead() {
                 ')' => {
                     self.consume();
-                    Ok(LNil)
+                    Ok(LCons(head, @LNil))
                 },
-                _ => match self.parse_datum() {
-                    Err(e) => Err(e),
-                    Ok(head) => {
-                        self.consume_whitespace();
-                        match self.try_consume(['.']) {
-                            Some(_) => match self.parse_datum() {
+                '.' => {
+                    self.consume();
+                    match self.parse_dot() {
+                        DSingle => 
+                            match self.parse_datum() {
                                 Err(e) => Err(e),
                                 Ok(tail) => {
                                     self.consume_whitespace();
                                     match self.try_consume([')']) {
                                         None => Err(~"RPAREN not found after DOT"),
-                                        Some(_) => Ok(LCons(@head, @tail)),
+                                        Some(_) => Ok(LCons(head, @tail)),
                                     }
                                 },
                             },
-                            None => match self.parse_list() {
+                        DDatum(tail1) => {
+                            match self.parse_list(@tail1) {
+                                Ok(tail) => Ok(LCons(head, @tail)),
                                 Err(e) => Err(e),
-                                Ok(tail) => Ok(LCons(@head, @tail)),
-                            },
+                            }
+                        },
+                        DErr(e) => Err(e),
+                    }
+                },
+                _ => match self.parse_datum() {
+                    Err(e) => Err(e),
+                    Ok(tail1) => {
+                        match self.parse_list(@tail1) {
+                            Ok(tail) => Ok(LCons(head, @tail)),
+                            Err(e) => Err(e),
                         }
                     },
                 },
+            }
+        }
+    }
+
+    fn parse_dot(&mut self) -> DResult {
+        if self.eof() {
+            DSingle
+        } else {
+            match self.lookahead() {
+                '0'..'9' => match self.parse_number(~".") {
+                    Ok(x) => DDatum(x),
+                    Err(e) => DErr(e),
+                },
+                '.' => {
+                    self.consume();
+                    match self.try_consume(['.']) {
+                        None => DErr(~"invalid token '..'"),
+                        _ => DDatum(LIdent(~"...")),
+                    }
+                }
+                _ => DSingle
             }
         }
     }
@@ -967,5 +1015,16 @@ fn test_minus_ident() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LCons(@LIdent(~"-"), @LCons(@LInt(2), @LNil))));
+    }
+}
+
+#[test]
+fn test_dots_ident() {
+    let test_src = ~"(... a)";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LCons(@LIdent(~"..."), @LCons(@LIdent(~"a"), @LNil))));
     }
 }
