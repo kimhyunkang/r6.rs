@@ -9,3 +9,4 @@
 pub mod rational;
 pub mod complex;
 pub mod parser;
+pub mod datum;
