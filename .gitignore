@@ -4,6 +4,7 @@ repl
 # test binaries
 *-tests
 
-# OS X dynamic linker libraries
+# dynamic linker libraries
 *.dSYM
 *.dylib
+*.so
