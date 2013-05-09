@@ -2,6 +2,8 @@ use datum::*;
 use primitive::*;
 use numeric::LNumeric;
 use core::hashmap::linear::LinearMap;
+use core::num::Zero::zero;
+use core::num::One::one;
 
 struct Runtime {
     stdin: @io::Reader,
@@ -76,6 +78,39 @@ priv fn call_num_prim2(args: &[@LDatum],
     }
 }
 
+priv fn call_num_foldl(args: &[@LDatum],
+                    a0: LNumeric,
+                    op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
+    -> Result<@LDatum, RuntimeError>
+{
+    let mut res = a0;
+    let mut err = false;
+    do args.each |&arg| {
+        match *arg {
+            LNum(a) => {
+                match op(&res, &a) {
+                    Ok(n) => {
+                        res = n;
+                        err = false;
+                    },
+                    _ => {
+                        err = true;
+                    }
+                }
+            },
+            _ => {
+                err = true;
+            }
+        }
+        !err
+    }
+    if err {
+        Err(TypeError)
+    } else {
+        Ok(@LNum(res))
+    }
+}
+
 pub impl Runtime {
     fn new_std() -> Runtime {
         Runtime {
@@ -119,20 +154,14 @@ pub impl Runtime {
             PEval => do call_prim1(args) |arg| {
                 self.eval(arg)
             },
-            PAdd => do call_num_prim2(args) |&lhs, &rhs| {
-                Ok(@LNum(lhs + rhs))
-            },
-            PSub => do call_num_prim2(args) |&lhs, &rhs| {
-                Ok(@LNum(lhs - rhs))
-            },
-            PMul => do call_num_prim2(args) |&lhs, &rhs| {
-                Ok(@LNum(lhs * rhs))
-            },
-            PDiv => do call_num_prim2(args) |&lhs, &rhs| {
+            PAdd => do call_num_foldl(args, zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
+            PSub => do call_num_foldl(args, one()) |&lhs, &rhs| { Ok(lhs - rhs) },
+            PMul => do call_num_foldl(args, one()) |&lhs, &rhs| { Ok(lhs * rhs) },
+            PDiv => do call_num_foldl(args, one()) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
-                    Ok(@LNum(lhs / rhs))
+                    Ok(lhs / rhs)
                 }
             },
         }

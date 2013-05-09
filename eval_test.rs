@@ -7,23 +7,34 @@ fn eval_test(src: ~str, expected_src: ~str) {
     let expr =
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
-        @result::unwrap(parser.parse_datum())
+        match parser.parse_datum() {
+            Ok(v) => @v,
+            Err(e) => fail!(e),
+        }
     };
 
     let expected =
     do io::with_str_reader(expected_src) |rdr| {
         let mut parser = Parser(rdr);
-        @result::unwrap(parser.parse_datum())
+        match parser.parse_datum() {
+            Ok(v) => @v,
+            Err(e) => fail!(e),
+        }
     };
 
     let mut runtime = Runtime::new_std();
 
-    let val = result::unwrap(runtime.eval(expr));
+    let val = runtime.eval(expr);
 
-    assert_eq!(val, expected);
+    assert_eq!(val, Ok(expected));
 }
 
 #[test]
 fn add_test() {
     eval_test(~"(+ 1 2)", ~"3");
+}
+
+#[test]
+fn mul_test() {
+    eval_test(~"(* 1 2 3)", ~"6");
 }
