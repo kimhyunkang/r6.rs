@@ -15,12 +15,12 @@ struct Runtime {
 #[deriving(Eq)]
 enum RuntimeError {
     UnboundVariable(~str),
-    NotImplemented,
     NotCallable,
     NotList,
     ArgNumError,
     TypeError,
     DivideByZeroError,
+    NilEval,
 }
 
 impl ToStr for RuntimeError {
@@ -32,12 +32,12 @@ impl ToStr for RuntimeError {
 priv fn err_to_str(&err: &RuntimeError) -> ~str {
     match err {
         UnboundVariable(name) => ~"unbound variable: " + copy name,
-        NotImplemented => ~"not implemented",
         NotCallable => ~"not callable",
         NotList => ~"not list",
         ArgNumError => ~"bad number of arguments",
         TypeError => ~"type error",
         DivideByZeroError => ~"divide by zero",
+        NilEval => ~"() cannot be evaluated",
     }
 }
 
@@ -145,6 +145,7 @@ pub impl Runtime {
                     },
                 },
             LQuote(val) => Ok(val),
+            LNil => Err(NilEval),
             _ => Ok(val),
         }
     }
