@@ -53,3 +53,13 @@ fn car_test() {
 fn cdr_test() {
     eval_test(~"(cdr '(a b))", ~"(b)");
 }
+
+#[test]
+fn if_true_test() {
+    eval_test(~"(if #t 1 0)", ~"1");
+}
+
+#[test]
+fn if_false_test() {
+    eval_test(~"(if #f 1 0)", ~"0");
+}

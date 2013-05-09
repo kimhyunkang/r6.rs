@@ -9,7 +9,8 @@ struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    global: LinearMap<~str, @LDatum>
+    global: LinearMap<~str, @LDatum>,
+    syntax: LinearMap<~str, PrimSyntax>,
 }
 
 #[deriving(Eq)]
@@ -46,6 +47,15 @@ fn load_prelude() -> LinearMap<~str, @LDatum> {
     for vec::each(prelude()) |&pair| {
         let (key, func) = pair;
         map.insert(key, @LPrim(func));
+    }
+    map
+}
+
+fn load_prelude_macro() -> LinearMap<~str, PrimSyntax> {
+    let mut map = LinearMap::new();
+    for vec::each(syntax_prelude()) |&pair| {
+        let (key, syntax) = pair;
+        map.insert(key, syntax);
     }
     map
 }
@@ -111,42 +121,30 @@ priv fn call_num_foldl(args: &[@LDatum],
     }
 }
 
-pub impl Runtime {
-    fn new_std() -> Runtime {
-        Runtime {
-            stdin: io::stdin(),
-            stdout: io::stdout(),
-            stderr: io::stderr(),
-            global: load_prelude(),
+priv impl Runtime {
+    fn get_syntax(&self, val: @LDatum) -> Option<PrimSyntax> {
+        match copy *val {
+            LIdent(name) => match self.syntax.find(&name) {
+                Some(syn) => Some(*syn),
+                None => None,
+            },
+            _ => None,
         }
     }
 
-    fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
-        match copy *val {
-            LIdent(name) => 
-                match self.global.find(&name) {
-                    Some(&datum) => Ok(datum),
-                    None => Err(UnboundVariable(name)),
-                },
-            LCons(fexpr, aexpr) =>
-                match aexpr.to_list() {
-                    None => Err(NotList),
-                    Some(aexprs) => {
-                        match self.eval(fexpr) {
-                            Ok(@LPrim(f)) => {
-                                match result::map_vec(aexprs, |&expr| self.eval(expr)) {
-                                    Ok(args) => self.call_prim(f, args),
-                                    Err(e) => Err(e),
-                                }
-                            }
-                            Ok(_) => Err(NotCallable),
-                            Err(e) => Err(e),
+    fn run_syntax(&mut self, syn: PrimSyntax, args: &[@LDatum]) -> Result<@LDatum, RuntimeError> {
+        match syn {
+            SynIf => if args.len() == 3 {
+                    do result::chain(self.eval(args[0])) |cond| {
+                        match *cond {
+                            LBool(true) => self.eval(args[1]),
+                            LBool(false) => self.eval(args[2]),
+                            _ => Err(TypeError),
                         }
-                    },
+                    }
+                } else {
+                    Err(ArgNumError)
                 },
-            LQuote(val) => Ok(val),
-            LNil => Err(NilEval),
-            _ => Ok(val),
         }
     }
 
@@ -179,4 +177,51 @@ pub impl Runtime {
             },
         }
     }
+}
+
+pub impl Runtime {
+    fn new_std() -> Runtime {
+        Runtime {
+            stdin: io::stdin(),
+            stdout: io::stdout(),
+            stderr: io::stderr(),
+            global: load_prelude(),
+            syntax: load_prelude_macro(),
+        }
+    }
+
+    fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+        match copy *val {
+            LIdent(name) => 
+                match self.global.find(&name) {
+                    Some(&datum) => Ok(datum),
+                    None => Err(UnboundVariable(name)),
+                },
+            LCons(fexpr, aexpr) =>
+                match aexpr.to_list() {
+                    None => Err(NotList),
+                    Some(aexprs) => {
+                        match self.get_syntax(fexpr) {
+                            Some(syntax) =>
+                                self.run_syntax(syntax, aexprs),
+                            None =>
+                                match self.eval(fexpr) {
+                                    Ok(@LPrim(f)) => {
+                                        match result::map_vec(aexprs, |&expr| self.eval(expr)) {
+                                            Ok(args) => self.call_prim(f, args),
+                                            Err(e) => Err(e),
+                                        }
+                                    }
+                                    Ok(_) => Err(NotCallable),
+                                    Err(e) => Err(e),
+                                },
+                        }
+                    },
+                },
+            LQuote(val) => Ok(val),
+            LNil => Err(NilEval),
+            _ => Ok(val),
+        }
+    }
+
 }
