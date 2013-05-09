@@ -164,6 +164,18 @@ pub impl Runtime {
                     Ok(lhs / rhs)
                 }
             },
+            PCar => do call_prim1(args) |arg| {
+                match *arg {
+                    LCons(h, _) => Ok(h),
+                    _ => Err(TypeError),
+                }
+            },
+            PCdr => do call_prim1(args) |arg| {
+                match *arg {
+                    LCons(_, t) => Ok(t),
+                    _ => Err(TypeError),
+                }
+            },
         }
     }
 }

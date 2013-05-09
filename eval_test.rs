@@ -43,3 +43,13 @@ fn mul_test() {
 fn quote_test() {
     eval_test(~"'(a b)", ~"(a b)");
 }
+
+#[test]
+fn car_test() {
+    eval_test(~"(car '(a b))", ~"a");
+}
+
+#[test]
+fn cdr_test() {
+    eval_test(~"(cdr '(a b))", ~"(b)");
+}
