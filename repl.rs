@@ -16,7 +16,7 @@ fn main() {
             let mut parser = Parser(rdr);
             match parser.parse() {
                 Ok(datum) => {
-                    match runtime.eval(&datum) {
+                    match runtime.eval(@datum) {
                         Ok(result) => {
                             result.write(io::stdout());
                             print("\n");

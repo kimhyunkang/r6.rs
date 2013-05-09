@@ -1,4 +1,5 @@
 use numeric::LNumeric;
+use primitive::PFunc;
 
 #[deriving(Eq)]
 pub enum LDatum {
@@ -9,6 +10,7 @@ pub enum LDatum {
     LNum(LNumeric),
     LCons(@LDatum, @LDatum),
     LNil,
+    LPrim(PFunc),
 }
 
 impl ToStr for LDatum {
@@ -72,7 +74,7 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
         LChar(c) => {
             wr.write_str("#\\");
             wr.write_char(c);
-        }
+        },
         LBool(true) => wr.write_str("#t"),
         LBool(false) => wr.write_str("#f"),
         LNum(f) => wr.write_str(f.to_str()),
@@ -82,6 +84,11 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             write_list(wr, tail);
         },
         LNil => wr.write_str("()"),
+        LPrim(f) => {
+            wr.write_str("<primitive function ");
+            wr.write_str(f.to_str());
+            wr.write_char('>');
+        },
     }
 }
 

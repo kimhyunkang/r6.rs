@@ -1,15 +1,24 @@
 use datum::*;
+use primitive::*;
+use numeric::LNumeric;
+use core::hashmap::linear::LinearMap;
 
 struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
+    global: LinearMap<~str, @LDatum>
 }
 
 #[deriving(Eq)]
 enum RuntimeError {
     UnknownLocalVariable(~str),
     NotImplemented,
+    NotCallable,
+    NotList,
+    ArgNumError,
+    TypeError,
+    DivideByZeroError,
 }
 
 impl ToStr for RuntimeError {
@@ -22,6 +31,48 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
     match err {
         UnknownLocalVariable(name) => ~"unknown local variable: " + copy name,
         NotImplemented => ~"not implemented",
+        NotCallable => ~"not callable",
+        NotList => ~"not list",
+        ArgNumError => ~"bad number of arguments",
+        TypeError => ~"type error",
+        DivideByZeroError => ~"divide by zero",
+    }
+}
+
+fn load_prelude() -> LinearMap<~str, @LDatum> {
+    let mut map = LinearMap::new();
+    for vec::each(prelude()) |&pair| {
+        let (key, func) = pair;
+        map.insert(key, @LPrim(func));
+    }
+    map
+}
+
+priv fn call_prim1(args: &[@LDatum],
+                op: &fn(@LDatum) -> Result<@LDatum, RuntimeError>)
+    -> Result<@LDatum, RuntimeError>
+{
+    if args.len() == 1 {
+        op(args[0])
+    } else {
+        Err(ArgNumError)
+    }
+}
+
+priv fn call_num_prim2(args: &[@LDatum],
+                    op: &fn(&LNumeric, &LNumeric) -> Result<@LDatum, RuntimeError>)
+    -> Result<@LDatum, RuntimeError>
+{
+    if args.len() == 2 {
+        match *args[0] {
+            LNum(lhs) => match *args[1] {
+                LNum(rhs) => op(&lhs, &rhs),
+                _ => Err(TypeError),
+            },
+            _ => Err(TypeError),
+        }
+    } else {
+        Err(ArgNumError)
     }
 }
 
@@ -31,15 +82,59 @@ pub impl Runtime {
             stdin: io::stdin(),
             stdout: io::stdout(),
             stderr: io::stderr(),
+            global: load_prelude(),
         }
     }
 
-    fn eval(&mut self, &val: &LDatum) -> Result<LDatum, RuntimeError> {
-        match copy val {
-            LIdent(name) => Err(UnknownLocalVariable(name)),
-            LCons(_,_) => Err(NotImplemented),
-            LNil => Err(NotImplemented),
+    fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+        match copy *val {
+            LIdent(name) => 
+                match self.global.find(&name) {
+                    Some(&datum) => Ok(datum),
+                    None => Err(UnknownLocalVariable(name)),
+                },
+            LCons(fexpr, aexpr) =>
+                match aexpr.to_list() {
+                    None => Err(NotList),
+                    Some(aexprs) => {
+                        match self.eval(fexpr) {
+                            Ok(@LPrim(f)) => {
+                                match result::map_vec(aexprs, |&expr| self.eval(expr)) {
+                                    Ok(args) => self.call_prim(f, args),
+                                    Err(e) => Err(e),
+                                }
+                            }
+                            Ok(_) => Err(NotCallable),
+                            Err(e) => Err(e),
+                        }
+                    },
+                },
+            LNil => Ok(@LNil),
             _ => Ok(val),
+        }
+    }
+
+    fn call_prim(&mut self, f: PFunc, args: &[@LDatum]) -> Result<@LDatum, RuntimeError> {
+        match f {
+            PEval => do call_prim1(args) |arg| {
+                self.eval(arg)
+            },
+            PAdd => do call_num_prim2(args) |&lhs, &rhs| {
+                Ok(@LNum(lhs + rhs))
+            },
+            PSub => do call_num_prim2(args) |&lhs, &rhs| {
+                Ok(@LNum(lhs - rhs))
+            },
+            PMul => do call_num_prim2(args) |&lhs, &rhs| {
+                Ok(@LNum(lhs * rhs))
+            },
+            PDiv => do call_num_prim2(args) |&lhs, &rhs| {
+                if rhs.is_zero() {
+                    Err(DivideByZeroError)
+                } else {
+                    Ok(@LNum(lhs / rhs))
+                }
+            },
         }
     }
 }

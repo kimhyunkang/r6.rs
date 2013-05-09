@@ -27,6 +27,10 @@ pub impl LNumeric {
             NInexact(_,_) => false,
         }
     }
+
+    fn is_zero(&self) -> bool {
+        is_zero(self)
+    }
 }
 
 pub fn to_str(&n: &LNumeric) -> ~str {
@@ -74,10 +78,17 @@ impl Zero for LNumeric {
     }
 }
 
-fn to_inexact(&n: &LNumeric) -> (f64, f64) {
+pub fn to_inexact(&n: &LNumeric) -> (f64, f64) {
     match n {
         NExact(re, im) => (re.to_f64(), im.to_f64()),
         NInexact(re, im) => (re, im),
+    }
+}
+
+pub fn is_zero(&n: &LNumeric) -> bool {
+    match n {
+        NExact(re, im) => re.is_zero() && im.is_zero(),
+        NInexact(re, im) => re == 0f64 && im == 0f64,
     }
 }
 

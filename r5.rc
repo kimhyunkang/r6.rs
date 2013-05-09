@@ -6,9 +6,9 @@
 #[license = "MIT/ASL2"];
 #[crate_type = "lib"];
 
+pub mod primitive;
+pub mod datum;
 pub mod rational;
-pub mod complex;
 pub mod numeric;
 pub mod parser;
-pub mod datum;
 pub mod runtime;
