@@ -12,7 +12,7 @@ struct Runtime {
 
 #[deriving(Eq)]
 enum RuntimeError {
-    UnknownLocalVariable(~str),
+    UnboundVariable(~str),
     NotImplemented,
     NotCallable,
     NotList,
@@ -29,7 +29,7 @@ impl ToStr for RuntimeError {
 
 priv fn err_to_str(&err: &RuntimeError) -> ~str {
     match err {
-        UnknownLocalVariable(name) => ~"unknown local variable: " + copy name,
+        UnboundVariable(name) => ~"unbound variable: " + copy name,
         NotImplemented => ~"not implemented",
         NotCallable => ~"not callable",
         NotList => ~"not list",
@@ -91,7 +91,7 @@ pub impl Runtime {
             LIdent(name) => 
                 match self.global.find(&name) {
                     Some(&datum) => Ok(datum),
-                    None => Err(UnknownLocalVariable(name)),
+                    None => Err(UnboundVariable(name)),
                 },
             LCons(fexpr, aexpr) =>
                 match aexpr.to_list() {
