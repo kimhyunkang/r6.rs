@@ -2,6 +2,9 @@ use rational::Rational;
 use numeric::*;
 use datum::*;
 
+#[cfg(test)]
+use numeric::{from_int, from_rational};
+
 priv enum PResult {
     PFloat(~str, ~str, ~str),
     PRational(~str, ~str),
@@ -456,11 +459,16 @@ priv impl Parser {
                         },
                         Some(s) => {
                             let isign = s == '+';
+                            let res =
                             match self.parse_real(r, false) {
                                 NSome(ipart) =>
                                     build_complex(exactness, r, rsign, &rpart, isign, &ipart),
                                 _ =>
                                     Err(~"invalid complex literal"),
+                            };
+                            match self.try_consume(['i']) {
+                                Some(_) => res,
+                                None => Err(~"invalid complex literal"),
                             }
                         },
                         None => 
@@ -740,136 +748,116 @@ fn test_parse_bool() {
     }
 }
 
-#[test]
-fn test_parse_int() {
-    let test_src = ~"10";
-
-    do io::with_str_reader(test_src) |rdr| {
+#[cfg(test)]
+fn expect_int(src: ~str, n: int) {
+    do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LInt(10)));
+        assert_eq!(val, Ok(LNum(from_int(n))));
     }
+}
+
+#[cfg(test)]
+fn expect_rational(src: ~str, d:int, n: int) {
+    do io::with_str_reader(src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LNum(from_rational(Rational::new(d, n)))));
+    }
+}
+
+#[cfg(test)]
+fn expect_f64(src: ~str, f: f64) {
+    do io::with_str_reader(src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LNum(from_f64(f))));
+    }
+}
+
+#[cfg(test)]
+fn expect_ecmplx(src: ~str, re_d: int, re_n: int, im_d: int, im_n: int) {
+    do io::with_str_reader(src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LNum(NExact(Rational::new(re_d, re_n), Rational::new(im_d, im_n)))));
+    }
+}
+
+#[cfg(test)]
+fn expect_icmplx(src: ~str, re: f64, im: f64) {
+    do io::with_str_reader(src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LNum(NInexact(re, im))));
+    }
+}
+
+#[test]
+fn test_parse_int() {
+    expect_int(~"10", 10);
 }
 
 #[test]
 fn test_parse_rational() {
-    let test_src = ~"3/6";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LRational(Rational::new(1,2))));
-    }
+    expect_rational(~"3/6", 1, 2);
 }
 
 #[test]
 fn test_parse_rational_float() {
-    let test_src = ~"#i3/6";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LFloat(0.5)));
-    }
+    expect_f64(~"#i3/6", 0.5);
 }
 
 #[test]
 fn test_parse_integral_float() {
-    let test_src = ~"#i3";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LFloat(3.0)));
-    }
+    expect_f64(~"#i3", 3.0);
 }
 
 #[test]
 fn test_parse_decimal_float() {
-    let test_src = ~"3.6";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LFloat(3.6)));
-    }
+    expect_f64(~"3.6", 3.6);
 }
 
 #[test]
 fn test_parse_decimal_float_exp() {
-    let test_src = ~"31.4e-1";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LFloat(3.14)));
-    }
+    expect_f64(~"31.4e-1", 3.14);
 }
 
 #[test]
 fn test_parse_exact_decimal_float() {
-    let test_src = ~"#e3.6";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LRational(Rational::new(36, 10))));
-    }
+    expect_rational(~"#e3.6", 18, 5);
 }
 
 #[test]
 fn test_parse_exact_decimal_float_exp() {
-    let test_src = ~"#e31.4e-1";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LRational(Rational::new(314, 100))));
-    }
+    expect_rational(~"#e31.3e-1", 313, 100);
 }
 
 #[test]
 fn test_parse_complex() {
-    let test_src = ~"1+2i";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LECmplx(Complex::new(Rational::new(1, 1), Rational::new(2, 1)))));
-    }
+    expect_ecmplx(~"1+2i", 1, 1, 2, 1);
 }
 
 #[test]
 fn test_parse_icomplex() {
-    let test_src = ~"1.0+2.0i";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LICmplx(Complex::new(1f64, 2f64))));
-    }
+    expect_icmplx(~"1.0+2.0i", 1.0, 2.0);
 }
 
 #[test]
 fn test_parse_polar_complex() {
-    let test_src = ~"1@0";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LICmplx(Complex::new(1f64, 0f64))));
-    }
+    expect_icmplx(~"1@0", 1f64, 0f64);
 }
 
 #[test]
 fn test_parse_list() {
     let test_src = ~"(a b 1)";
+    let n = @LNum(from_int(1));
 
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         match parser.parse() {
             Err(e) => fail!(e),
-            Ok(val) => assert_eq!(val.to_list(), Some(~[@LIdent(~"a"), @LIdent(~"b"), @LInt(1)])),
+            Ok(val) => assert_eq!(val.to_list(), Some(~[@LIdent(~"a"), @LIdent(~"b"), n])),
         };
     }
 }
@@ -877,33 +865,36 @@ fn test_parse_list() {
 #[test]
 fn test_parse_cons() {
     let test_src = ~"(a b . 1)";
+    let n = @LNum(from_int(1));
 
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"a"), @LCons(@LIdent(~"b"), @LInt(1)))));
+        assert_eq!(val, Ok(LCons(@LIdent(~"a"), @LCons(@LIdent(~"b"), n))));
     }
 }
 
 #[test]
 fn test_plus_ident() {
     let test_src = ~"(+ 1)";
+    let n = @LNum(from_int(1));
 
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"+"), @LCons(@LInt(1), @LNil))));
+        assert_eq!(val, Ok(LCons(@LIdent(~"+"), @LCons(n, @LNil))));
     }
 }
 
 #[test]
 fn test_minus_ident() {
     let test_src = ~"(- 2)";
+    let n = @LNum(from_int(2));
 
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"-"), @LCons(@LInt(2), @LNil))));
+        assert_eq!(val, Ok(LCons(@LIdent(~"-"), @LCons(n, @LNil))));
     }
 }
 
@@ -920,11 +911,5 @@ fn test_dots_ident() {
 
 #[test]
 fn test_parse_dotted_number() {
-    let test_src = ~".1";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LFloat(0.1f64)));
-    }
+    expect_f64(~".1", 0.1f64);
 }

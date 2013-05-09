@@ -186,3 +186,15 @@ impl Div<LNumeric, LNumeric> for LNumeric {
         div(self, rhs)
     }
 }
+
+pub fn from_int(n: int) -> LNumeric {
+    NExact(Rational::new(n, 1), zero())
+}
+
+pub fn from_rational(re: Rational) -> LNumeric {
+    NExact(re, zero())
+}
+
+pub fn from_f64(re: f64) -> LNumeric {
+    NInexact(re, 0f64)
+}

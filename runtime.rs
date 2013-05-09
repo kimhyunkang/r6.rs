@@ -138,9 +138,3 @@ pub impl Runtime {
         }
     }
 }
-
-#[test]
-fn test_basic_eval() {
-    let mut runtime = Runtime::new_std();
-    assert_eq!(runtime.eval(@LInt(486)), Ok(LInt(486)));
-}
