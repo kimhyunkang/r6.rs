@@ -60,7 +60,7 @@ fn load_prelude_macro() -> LinearMap<~str, PrimSyntax> {
     map
 }
 
-priv fn call_prim1(args: &[@LDatum],
+priv fn call_prim1(args: ~[@LDatum],
                 op: &fn(@LDatum) -> Result<@LDatum, RuntimeError>)
     -> Result<@LDatum, RuntimeError>
 {
@@ -71,7 +71,7 @@ priv fn call_prim1(args: &[@LDatum],
     }
 }
 
-priv fn call_num_prim2(args: &[@LDatum],
+priv fn call_num_prim2(args: ~[@LDatum],
                     op: &fn(&LNumeric, &LNumeric) -> Result<@LDatum, RuntimeError>)
     -> Result<@LDatum, RuntimeError>
 {
@@ -88,7 +88,7 @@ priv fn call_num_prim2(args: &[@LDatum],
     }
 }
 
-priv fn call_num_foldl(args: &[@LDatum],
+priv fn call_num_foldl(args: ~[@LDatum],
                     a0: LNumeric,
                     op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
     -> Result<@LDatum, RuntimeError>
@@ -132,7 +132,7 @@ priv impl Runtime {
         }
     }
 
-    fn run_syntax(&mut self, syn: PrimSyntax, args: &[@LDatum]) -> Result<@LDatum, RuntimeError> {
+    fn run_syntax(&mut self, syn: PrimSyntax, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
         match syn {
             SynIf => if args.len() == 3 {
                     do result::chain(self.eval(args[0])) |cond| {
@@ -148,7 +148,7 @@ priv impl Runtime {
         }
     }
 
-    fn call_prim(&mut self, f: PFunc, args: &[@LDatum]) -> Result<@LDatum, RuntimeError> {
+    fn call_prim(&mut self, f: PFunc, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
         match f {
             PEval => do call_prim1(args) |arg| {
                 self.eval(arg)
