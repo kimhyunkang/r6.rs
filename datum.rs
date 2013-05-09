@@ -1,5 +1,4 @@
-use rational::Rational;
-use complex::Complex;
+use numeric::LNumeric;
 
 #[deriving(Eq)]
 pub enum LDatum {
@@ -7,11 +6,7 @@ pub enum LDatum {
     LString(~str),
     LChar(char),
     LBool(bool),
-    LECmplx(Complex<Rational>),
-    LICmplx(Complex<f64>),
-    LRational(Rational),
-    LFloat(f64),
-    LInt(int),
+    LNum(LNumeric),
     LCons(@LDatum, @LDatum),
     LNil,
 }
@@ -80,18 +75,7 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
         }
         LBool(true) => wr.write_str("#t"),
         LBool(false) => wr.write_str("#f"),
-        LRational(f) => {
-            if f.is_negative() {
-                wr.write_char('-');
-            }
-            wr.write_str(f.denominator().to_str());
-            wr.write_char('/');
-            wr.write_str(f.numerator().to_str());
-        },
-        LFloat(f) => wr.write_str(f.to_str()),
-        LInt(z) => wr.write_str(z.to_str()),
-        LICmplx(c) => wr.write_str(c.to_str()),
-        LECmplx(c) => wr.write_str(c.to_str()),
+        LNum(f) => wr.write_str(f.to_str()),
         LCons(head, tail) => {
             wr.write_char('(');
             write_ldatum(wr, head);

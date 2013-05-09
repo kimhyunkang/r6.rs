@@ -180,6 +180,10 @@ impl Div<Rational, Rational> for Rational {
 
 impl to_str::ToStr for Rational {
     fn to_str(&self) -> ~str {
-        self.d.to_str() + "/" + self.n.to_str()
+        if(self.n == 1) {
+            self.d.to_str()
+        } else {
+            self.d.to_str() + "/" + self.n.to_str()
+        }
     }
 }
