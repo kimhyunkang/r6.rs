@@ -38,3 +38,8 @@ fn add_test() {
 fn mul_test() {
     eval_test(~"(* 1 2 3)", ~"6");
 }
+
+#[test]
+fn quote_test() {
+    eval_test(~"'(a b)", ~"(a b)");
+}

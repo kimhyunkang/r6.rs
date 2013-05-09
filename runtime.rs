@@ -144,6 +144,7 @@ pub impl Runtime {
                         }
                     },
                 },
+            LQuote(val) => Ok(val),
             _ => Ok(val),
         }
     }
