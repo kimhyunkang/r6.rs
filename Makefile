@@ -1,6 +1,6 @@
 LIB=libr5-50612505c34cd7-0.0.1.dylib
 
-all: repl.rs ${LIB}
+repl: repl.rs ${LIB}
 	rustc $< -L .
 
 test: parser-test eval-test
