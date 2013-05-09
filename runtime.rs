@@ -144,7 +144,6 @@ pub impl Runtime {
                         }
                     },
                 },
-            LNil => Ok(@LNil),
             _ => Ok(val),
         }
     }
