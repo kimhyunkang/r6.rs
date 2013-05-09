@@ -193,9 +193,13 @@ pub impl Parser {
                 },
             '(' => {
                     self.consume();
-                    match self.parse_datum() {
-                        Err(e) => Err(e),
-                        Ok(head) => self.parse_list(@head),
+                    self.consume_whitespace();
+                    match self.try_consume([')']) {
+                        Some(_) => Ok(LNil),
+                        None => match self.parse_datum() {
+                            Err(e) => Err(e),
+                            Ok(head) => self.parse_list(@head),
+                        },
                     }
                 },
             '+' | '-' => {
@@ -207,7 +211,7 @@ pub impl Parser {
                         LNum(n)
                     }
                 }
-            }
+            },
             '.' => {
                 self.consume();
                 match self.parse_dot() {
@@ -215,7 +219,13 @@ pub impl Parser {
                     DDatum(x) => Ok(x),
                     DErr(e) => Err(e),
                 }
-            }
+            },
+            '\'' => {
+                self.consume();
+                do result::map(&self.parse_datum()) |&v| {
+                    LQuote(@v)
+                }
+            },
             _ =>
                 Err(~"unexpected character: " + str::from_char(c)),
         }
@@ -912,4 +922,15 @@ fn test_dots_ident() {
 #[test]
 fn test_parse_dotted_number() {
     expect_f64(~".1", 0.1f64);
+}
+
+#[test]
+fn test_parse_quotation() {
+    let test_src = ~"'()";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LQuote(@LNil)));
+    }
 }

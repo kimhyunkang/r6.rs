@@ -11,6 +11,7 @@ pub enum LDatum {
     LCons(@LDatum, @LDatum),
     LNil,
     LPrim(PFunc),
+    LQuote(@LDatum),
 }
 
 impl ToStr for LDatum {
@@ -89,6 +90,10 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             wr.write_str(f.to_str());
             wr.write_char('>');
         },
+        LQuote(v) => {
+            wr.write_char('\'');
+            write_ldatum(wr, v);
+        }
     }
 }
 
