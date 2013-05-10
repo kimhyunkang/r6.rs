@@ -12,6 +12,7 @@ pub enum LDatum {
     LNil,
     LPrim(PFunc),
     LQuote(@LDatum),
+    LProc(~[@str], ~[@LDatum]),
 }
 
 impl ToStr for LDatum {
@@ -67,6 +68,7 @@ priv fn datum_to_list(head: @LDatum, tail: @LDatum) -> Option<~[@LDatum]> {
 }
 
 priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
+    let addr = ptr::to_uint(&v);
     match v {
         LIdent(s) => wr.write_str(s),
         LString(s) => wr.write_str(fmt!("%?", copy s)),
@@ -93,7 +95,10 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
         LQuote(v) => {
             wr.write_char('\'');
             write_ldatum(wr, v);
-        }
+        },
+        LProc(_,_) => {
+            wr.write_str(fmt!("<procedure 0x%08x>", addr));
+        },
     }
 }
 

@@ -63,3 +63,8 @@ fn if_true_test() {
 fn if_false_test() {
     eval_test(~"(if #f 1 0)", ~"0");
 }
+
+#[test]
+fn lambda_test() {
+    eval_test(~"((lambda (x y) (+ x y)) 1 2)", ~"3");
+}

@@ -1,4 +1,4 @@
-LIB=libr5-50612505c34cd7-0.0.1.dylib
+LIB=libr5-84d4359e9b178dfc-0.0.1.dylib
 
 repl: repl.rs ${LIB}
 	rustc $< -L .

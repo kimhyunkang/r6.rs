@@ -23,6 +23,7 @@ enum RuntimeError {
     TypeError,
     DivideByZeroError,
     NilEval,
+    BadSyntax(PrimSyntax, ~str),
 }
 
 impl ToStr for RuntimeError {
@@ -33,13 +34,14 @@ impl ToStr for RuntimeError {
 
 priv fn err_to_str(&err: &RuntimeError) -> ~str {
     match err {
-        UnboundVariable(name) => ~"unbound variable: " + copy name,
+        UnboundVariable(name) => ~"unbound variable: " + name,
         NotCallable => ~"not callable",
         NotList => ~"not list",
         ArgNumError => ~"bad number of arguments",
         TypeError => ~"type error",
         DivideByZeroError => ~"divide by zero",
         NilEval => ~"() cannot be evaluated",
+        BadSyntax(syn, reason) => ~"bad syntax for " + syn.to_str() + ": " + reason,
     }
 }
 
@@ -145,8 +147,51 @@ priv impl Runtime {
                         }
                     }
                 } else {
-                    Err(ArgNumError)
+                    Err(BadSyntax(SynIf, ~"bad number of arguments"))
                 },
+            SynLambda => if args.len() < 2 {
+                    Err(BadSyntax(SynLambda, ~"no procedure given"))
+                } else {
+                    match args[0].to_list() {
+                        None => Err(BadSyntax(SynLambda, ~"non-list arguments")),
+                        Some(largs) => {
+                            let names = do result::map_vec(largs) |&arg| {
+                                match *arg {
+                                    LIdent(name) => Ok(name),
+                                    _ => Err(BadSyntax(SynLambda, ~"non-symbol arguments")),
+                                }
+                            };
+                            do result::map(&names) |&anames| {
+                                let seq = vec::from_slice(vec::slice(args, 1, args.len()));
+                                @LProc(anames, seq)
+                            }
+                        },
+                    }
+                }
+        }
+    }
+
+    fn call_proc(&self,
+                anames: &~[@str],
+                code: &~[@LDatum],
+                args: ~[@LDatum],
+                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    {
+        if anames.len() != args.len() {
+            Err(ArgNumError)
+        } else {
+            let mut new_stack = stack;
+            for uint::range(0, anames.len()) |i| {
+                new_stack = fun_treemap::insert(new_stack, anames[i], args[i]);
+            }
+
+            let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
+            do code.each() |&val| {
+                res = self.eval_local(val, new_stack);
+                res.is_ok()
+            }
+
+            res
         }
     }
 
@@ -184,15 +229,16 @@ priv impl Runtime {
         }
     }
 
-    fn eager_eval_prim(&self,
-                f: PFunc,
-                aexprs: &[@LDatum],
-                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    fn eager_eval(&self,
+                aexprs: ~[@LDatum],
+                stack: Treemap<@str, @LDatum>,
+                f: &fn(~[@LDatum]) -> Result<@LDatum, RuntimeError>)
+                    -> Result<@LDatum, RuntimeError>
     {
         match result::map_vec(aexprs,
                             |&expr| self.eval_local(expr, stack))
         {
-            Ok(args) => self.call_prim(f, args, stack),
+            Ok(args) => f(args),
             Err(e) => Err(e),
         }
     }
@@ -216,9 +262,14 @@ priv impl Runtime {
                                 self.run_syntax(syntax, aexprs, stack),
                             None =>
                                 match self.eval_local(fexpr, stack) {
-                                    Ok(@LPrim(f)) => {
-                                        self.eager_eval_prim(f, aexprs, stack)
-                                    }
+                                    Ok(@LPrim(f)) =>
+                                        do self.eager_eval(aexprs, stack) |args| {
+                                            self.call_prim(f, args, stack)
+                                        },
+                                    Ok(@LProc(ref anames, ref code)) =>
+                                        do self.eager_eval(aexprs, stack) |args| {
+                                            self.call_proc(anames, code, args, stack)
+                                        },
                                     Ok(_) => Err(NotCallable),
                                     Err(e) => Err(e),
                                 },
