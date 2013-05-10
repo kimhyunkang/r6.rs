@@ -89,3 +89,15 @@ fn quasiquote_test() {
 fn nested_quasiquote_test() {
     eval_test(~"`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)", ~"(a `(b ,(+ 1 2) ,(foo 4 d) e) f)");
 }
+
+#[test]
+fn lexical_scoping_test() {
+    /*
+    (\y f -> f(2)) dyn ((\y -> (\x -> y)) lex)
+    lexical scoping returns lex
+    dynamic scoping returns dyn
+    */
+
+    let src = ~"((lambda (y f) (f 2)) 'dyn ((lambda (y) (lambda (x) y)) 'lex))";
+    eval_test(src, ~"lex");
+}
