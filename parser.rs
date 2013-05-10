@@ -205,7 +205,7 @@ pub impl Parser {
             '+' | '-' => {
                 self.consume();
                 if self.consume_whitespace() {
-                    Ok(LIdent(str::from_char(c)))
+                    Ok(LIdent(str::from_char(c).to_managed()))
                 } else {
                     do result::map(&self.parse_number(str::from_char(c))) |&n| {
                         LNum(n)
@@ -388,7 +388,7 @@ priv impl Parser {
                     self.consume();
                     match self.try_consume(['.']) {
                         None => DErr(~"invalid token '..'"),
-                        _ => DDatum(LIdent(~"...")),
+                        _ => DDatum(LIdent(@"...")),
                     }
                 }
                 _ => DSingle
@@ -653,7 +653,7 @@ priv impl Parser {
         }
     }
 
-    fn parse_ident(&mut self) -> ~str {
+    fn parse_ident(&mut self) -> @str {
         do io::with_str_writer |wr| {
             while(!self.eof()) {
                 let c = self.lookahead();
@@ -670,7 +670,7 @@ priv impl Parser {
 
                 self.consume();
             }
-        }
+        }.to_managed()
     }
 
     fn parse_string(&mut self) -> Result<~str, ~str> {
@@ -710,7 +710,7 @@ fn test_parse_ident() {
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LIdent(~"a3!")));
+        assert_eq!(val, Ok(LIdent(@"a3!")));
     }
 }
 
@@ -867,7 +867,7 @@ fn test_parse_list() {
         let mut parser = Parser(rdr);
         match parser.parse() {
             Err(e) => fail!(e),
-            Ok(val) => assert_eq!(val.to_list(), Some(~[@LIdent(~"a"), @LIdent(~"b"), n])),
+            Ok(val) => assert_eq!(val.to_list(), Some(~[@LIdent(@"a"), @LIdent(@"b"), n])),
         };
     }
 }
@@ -880,7 +880,7 @@ fn test_parse_cons() {
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"a"), @LCons(@LIdent(~"b"), n))));
+        assert_eq!(val, Ok(LCons(@LIdent(@"a"), @LCons(@LIdent(@"b"), n))));
     }
 }
 
@@ -892,7 +892,7 @@ fn test_plus_ident() {
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"+"), @LCons(n, @LNil))));
+        assert_eq!(val, Ok(LCons(@LIdent(@"+"), @LCons(n, @LNil))));
     }
 }
 
@@ -904,7 +904,7 @@ fn test_minus_ident() {
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"-"), @LCons(n, @LNil))));
+        assert_eq!(val, Ok(LCons(@LIdent(@"-"), @LCons(n, @LNil))));
     }
 }
 
@@ -915,7 +915,7 @@ fn test_dots_ident() {
     do io::with_str_reader(test_src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(~"..."), @LCons(@LIdent(~"a"), @LNil))));
+        assert_eq!(val, Ok(LCons(@LIdent(@"..."), @LCons(@LIdent(@"a"), @LNil))));
     }
 }
 

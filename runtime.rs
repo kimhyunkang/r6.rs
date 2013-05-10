@@ -1,7 +1,8 @@
 use datum::*;
 use primitive::*;
 use numeric::LNumeric;
-use core::hashmap::linear::LinearMap;
+use std::fun_treemap;
+use std::fun_treemap::Treemap;
 use core::num::Zero::zero;
 use core::num::One::one;
 
@@ -9,13 +10,13 @@ struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    global: LinearMap<~str, @LDatum>,
-    syntax: LinearMap<~str, PrimSyntax>,
+    global: Treemap<@str, @LDatum>,
+    syntax: Treemap<@str, PrimSyntax>,
 }
 
 #[deriving(Eq)]
 enum RuntimeError {
-    UnboundVariable(~str),
+    UnboundVariable(@str),
     NotCallable,
     NotList,
     ArgNumError,
@@ -42,20 +43,20 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
     }
 }
 
-fn load_prelude() -> LinearMap<~str, @LDatum> {
-    let mut map = LinearMap::new();
+fn load_prelude() -> Treemap<@str, @LDatum> {
+    let mut map = fun_treemap::init();
     for vec::each(prelude()) |&pair| {
         let (key, func) = pair;
-        map.insert(key, @LPrim(func));
+        map = fun_treemap::insert(map, key, @LPrim(func));
     }
     map
 }
 
-fn load_prelude_macro() -> LinearMap<~str, PrimSyntax> {
-    let mut map = LinearMap::new();
+fn load_prelude_macro() -> Treemap<@str, PrimSyntax> {
+    let mut map = fun_treemap::init();
     for vec::each(syntax_prelude()) |&pair| {
         let (key, syntax) = pair;
-        map.insert(key, syntax);
+        map = fun_treemap::insert(map, key, syntax);
     }
     map
 }
@@ -123,11 +124,8 @@ priv fn call_num_foldl(args: ~[@LDatum],
 
 priv impl Runtime {
     fn get_syntax(&self, val: @LDatum) -> Option<PrimSyntax> {
-        match copy *val {
-            LIdent(name) => match self.syntax.find(&name) {
-                Some(syn) => Some(*syn),
-                None => None,
-            },
+        match *val {
+            LIdent(name) => fun_treemap::find(self.syntax, name),
             _ => None,
         }
     }
@@ -191,10 +189,10 @@ pub impl Runtime {
     }
 
     fn eval(&self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
-        match copy *val {
+        match *val {
             LIdent(name) => 
-                match self.global.find(&name) {
-                    Some(&datum) => Ok(datum),
+                match fun_treemap::find(self.global, name) {
+                    Some(datum) => Ok(datum),
                     None => Err(UnboundVariable(name)),
                 },
             LCons(fexpr, aexpr) =>

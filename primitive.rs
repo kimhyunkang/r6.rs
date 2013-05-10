@@ -9,9 +9,9 @@ pub enum PFunc {
     PCdr,
 }
 
-pub fn prelude() -> ~[(~str, PFunc)] {
+pub fn prelude() -> ~[(@str, PFunc)] {
     do vec::map([PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr]) |prim| {
-        (proc_to_str(prim), *prim)
+        (proc_to_str(prim).to_managed(), *prim)
     }
 }
 
@@ -38,9 +38,9 @@ pub enum PrimSyntax {
     SynIf,
 }
 
-pub fn syntax_prelude() -> ~[(~str, PrimSyntax)] {
+pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
     do vec::map([SynIf]) |syn| {
-        (syntax_to_str(syn), *syn)
+        (syntax_to_str(syn).to_managed(), *syn)
     }
 }
 

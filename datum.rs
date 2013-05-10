@@ -3,7 +3,7 @@ use primitive::PFunc;
 
 #[deriving(Eq)]
 pub enum LDatum {
-    LIdent(~str),
+    LIdent(@str),
     LString(~str),
     LChar(char),
     LBool(bool),

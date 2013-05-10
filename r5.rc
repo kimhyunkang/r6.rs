@@ -6,6 +6,8 @@
 #[license = "MIT/ASL2"];
 #[crate_type = "lib"];
 
+extern mod std;
+
 pub mod primitive;
 pub mod datum;
 pub mod rational;
