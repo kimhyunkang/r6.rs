@@ -6,11 +6,16 @@ use std::fun_treemap::Treemap;
 use core::num::Zero::zero;
 use core::num::One::one;
 
+enum Stack<T> {
+    Top(T, @Stack<T>),
+    Bot,
+}
+
 struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    global: Treemap<@str, @LDatum>,
+    stack: @Stack<Treemap<@str, @LDatum>>,
     syntax: Treemap<@str, PrimSyntax>,
 }
 
@@ -132,17 +137,16 @@ priv impl Runtime {
         }
     }
 
-    fn run_syntax(&self,
+    fn run_syntax(&mut self,
                 syn: PrimSyntax,
-                args: ~[@LDatum],
-                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+                args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
         match syn {
             SynIf => if args.len() == 3 {
-                    do result::chain(self.eval_local(args[0], stack)) |cond| {
+                    do result::chain(self.eval(args[0])) |cond| {
                         match *cond {
-                            LBool(true) => self.eval_local(args[1], stack),
-                            LBool(false) => self.eval_local(args[2], stack),
+                            LBool(true) => self.eval(args[1]),
+                            LBool(false) => self.eval(args[2]),
                             _ => Err(TypeError),
                         }
                     }
@@ -176,38 +180,51 @@ priv impl Runtime {
         }
     }
 
-    fn call_proc(&self,
+    fn call_proc(&mut self,
                 anames: &~[@str],
                 code: &~[@LDatum],
-                args: ~[@LDatum],
-                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+                args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
         if anames.len() != args.len() {
             Err(ArgNumError)
         } else {
-            let mut new_stack = stack;
+            // store current stack
+            let old_stack = self.stack;
+
+            let mut frame =
+            match *old_stack {
+                // this is a critical failure
+                Bot => fail!(~"stack underflow"),
+                Top(st, _) => st,
+            };
+
             for uint::range(0, anames.len()) |i| {
-                new_stack = fun_treemap::insert(new_stack, anames[i], args[i]);
+                frame = fun_treemap::insert(frame, anames[i], args[i]);
             }
+
+            // add new frame to the stack
+            self.stack = @Top(frame, old_stack);
 
             let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
             do code.each() |&val| {
-                res = self.eval_local(val, new_stack);
+                res = self.eval(val);
                 res.is_ok()
             }
+
+            // restore stack
+            self.stack = old_stack;
 
             res
         }
     }
 
-    fn call_prim(&self,
+    fn call_prim(&mut self,
                 f: PFunc,
-                args: ~[@LDatum],
-                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+                args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
         match f {
             PEval => do call_prim1(args) |arg| {
-                self.eval_local(arg, stack)
+                self.eval(arg)
             },
             PAdd => do call_num_foldl(args, zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
             PSub => do call_num_foldl(args, one()) |&lhs, &rhs| { Ok(lhs - rhs) },
@@ -233,30 +250,29 @@ priv impl Runtime {
             },
         }
     }
+}
 
-    fn eager_eval(&self,
-                aexprs: ~[@LDatum],
-                stack: Treemap<@str, @LDatum>,
-                f: &fn(~[@LDatum]) -> Result<@LDatum, RuntimeError>)
-                    -> Result<@LDatum, RuntimeError>
-    {
-        match result::map_vec(aexprs,
-                            |&expr| self.eval_local(expr, stack))
-        {
-            Ok(args) => f(args),
-            Err(e) => Err(e),
+pub impl Runtime {
+    fn new_std() -> Runtime {
+        Runtime {
+            stdin: io::stdin(),
+            stdout: io::stdout(),
+            stderr: io::stderr(),
+            stack: @Top(load_prelude(), @Bot),
+            syntax: load_prelude_macro(),
         }
     }
 
-    fn eval_local(&self,
-                val: @LDatum,
-                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError>
     {
         match *val {
             LIdent(name) => 
-                match fun_treemap::find(stack, name) {
-                    Some(datum) => Ok(datum),
-                    None => Err(UnboundVariable(name)),
+                match *self.stack {
+                    Bot => fail!(~"stack underflow"),
+                    Top(frame, _) => match fun_treemap::find(frame, name) {
+                        Some(datum) => Ok(datum),
+                        None => Err(UnboundVariable(name)),
+                    },
                 },
             LCons(fexpr, aexpr) =>
                 match aexpr.to_list() {
@@ -264,16 +280,20 @@ priv impl Runtime {
                     Some(aexprs) => {
                         match self.get_syntax(fexpr) {
                             Some(syntax) =>
-                                self.run_syntax(syntax, aexprs, stack),
+                                self.run_syntax(syntax, aexprs),
                             None =>
-                                match self.eval_local(fexpr, stack) {
+                                match self.eval(fexpr) {
                                     Ok(@LPrim(f)) =>
-                                        do self.eager_eval(aexprs, stack) |args| {
-                                            self.call_prim(f, args, stack)
+                                        match result::map_vec(aexprs, |&expr| self.eval(expr))
+                                        {
+                                            Ok(args) => self.call_prim(f, args),
+                                            Err(e) => Err(e),
                                         },
                                     Ok(@LProc(ref anames, ref code)) =>
-                                        do self.eager_eval(aexprs, stack) |args| {
-                                            self.call_proc(anames, code, args, stack)
+                                        match result::map_vec(aexprs, |&expr| self.eval(expr))
+                                        {
+                                            Ok(args) => self.call_proc(anames, code, args),
+                                            Err(e) => Err(e),
                                         },
                                     Ok(_) => Err(NotCallable),
                                     Err(e) => Err(e),
@@ -285,21 +305,5 @@ priv impl Runtime {
             LNil => Err(NilEval),
             _ => Ok(val),
         }
-    }
-}
-
-pub impl Runtime {
-    fn new_std() -> Runtime {
-        Runtime {
-            stdin: io::stdin(),
-            stdout: io::stdout(),
-            stderr: io::stderr(),
-            global: load_prelude(),
-            syntax: load_prelude_macro(),
-        }
-    }
-
-    fn eval(&self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
-        self.eval_local(val, self.global)
     }
 }
