@@ -1,7 +1,7 @@
 use numeric::LNumeric;
 use primitive::PFunc;
+use std::fun_treemap::Treemap;
 
-#[deriving(Eq)]
 pub enum LDatum {
     LIdent(@str),
     LString(~str),
@@ -14,7 +14,34 @@ pub enum LDatum {
     LQuote(@LDatum),
     LQQuote(@LDatum),
     LUnquote(@LDatum),
-    LProc(~[@str], ~[@LDatum]),
+    LProc(~[@str], ~[@LDatum], Treemap<@str, @LDatum>),
+}
+
+fn eq(&lhs: &LDatum, &rhs: &LDatum) -> bool {
+    match (lhs, rhs) {
+        (LIdent(l), LIdent(r)) => l == r,
+        (LString(l), LString(r)) => l == r,
+        (LChar(l), LChar(r)) => l == r,
+        (LBool(l), LBool(r)) => l == r,
+        (LNum(l), LNum(r)) => l == r,
+        (LCons(lh, lt), LCons(rh, rt)) => lh == rh && lt == rt,
+        (LNil, LNil) => true,
+        (LPrim(l), LPrim(r)) => l == r,
+        (LQuote(l), LQuote(r)) => l == r,
+        (LQQuote(l), LQQuote(r)) => l == r,
+        (LUnquote(l), LUnquote(r)) => l == r,
+        _ => false,
+    }
+}
+
+impl Eq for LDatum {
+    fn eq(&self, other: &LDatum) -> bool {
+        eq(self, other)
+    }
+
+    fn ne(&self, other: &LDatum) -> bool {
+        !eq(self, other)
+    }
 }
 
 impl ToStr for LDatum {
@@ -106,7 +133,7 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             wr.write_char(',');
             write_ldatum(wr, v);
         },
-        LProc(_,_) => {
+        LProc(_,_,_) => {
             wr.write_str(fmt!("<procedure 0x%08x>", addr));
         },
     }

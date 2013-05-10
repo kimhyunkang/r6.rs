@@ -6,16 +6,11 @@ use std::fun_treemap::Treemap;
 use core::num::Zero::zero;
 use core::num::One::one;
 
-enum Stack<T> {
-    Top(T, @Stack<T>),
-    Bot,
-}
-
 struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    stack: @Stack<Treemap<@str, @LDatum>>,
+    env: Treemap<@str, @LDatum>,
     syntax: Treemap<@str, PrimSyntax>,
     qq_lvl: uint,
 }
@@ -168,7 +163,7 @@ priv impl Runtime {
                             };
                             do result::map(&names) |&anames| {
                                 let seq = vec::from_slice(vec::slice(args, 1, args.len()));
-                                @LProc(anames, seq)
+                                @LProc(anames, seq, self.env)
                             }
                         },
                     }
@@ -194,27 +189,19 @@ priv impl Runtime {
     fn call_proc(&mut self,
                 anames: &~[@str],
                 code: &~[@LDatum],
+                &frame: &Treemap<@str, @LDatum>,
                 args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
         if anames.len() != args.len() {
             Err(ArgNumError)
         } else {
-            // store current stack
-            let old_stack = self.stack;
-
-            let mut frame =
-            match *old_stack {
-                // this is a critical failure
-                Bot => fail!(~"stack underflow"),
-                Top(st, _) => st,
-            };
+            // store current env
+            let old_env = self.env;
+            self.env = frame;
 
             for uint::range(0, anames.len()) |i| {
-                frame = fun_treemap::insert(frame, anames[i], args[i]);
+                self.env = fun_treemap::insert(self.env, anames[i], args[i]);
             }
-
-            // add new frame to the stack
-            self.stack = @Top(frame, old_stack);
 
             let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
             do code.each() |&val| {
@@ -222,8 +209,8 @@ priv impl Runtime {
                 res.is_ok()
             }
 
-            // restore stack
-            self.stack = old_stack;
+            // restore env
+            self.env = old_env;
 
             res
         }
@@ -313,7 +300,7 @@ pub impl Runtime {
             stdin: io::stdin(),
             stdout: io::stdout(),
             stderr: io::stderr(),
-            stack: @Top(load_prelude(), @Bot),
+            env: load_prelude(),
             syntax: load_prelude_macro(),
             qq_lvl: 0,
         }
@@ -323,12 +310,9 @@ pub impl Runtime {
     {
         match *val {
             LIdent(name) => 
-                match *self.stack {
-                    Bot => fail!(~"stack underflow"),
-                    Top(frame, _) => match fun_treemap::find(frame, name) {
-                        Some(datum) => Ok(datum),
-                        None => Err(UnboundVariable(name)),
-                    },
+                match fun_treemap::find(self.env, name) {
+                    Some(datum) => Ok(datum),
+                    None => Err(UnboundVariable(name)),
                 },
             LCons(fexpr, aexpr) =>
                 match aexpr.to_list() {
@@ -345,10 +329,10 @@ pub impl Runtime {
                                             Ok(args) => self.call_prim(f, args),
                                             Err(e) => Err(e),
                                         },
-                                    Ok(@LProc(ref anames, ref code)) =>
+                                    Ok(@LProc(ref anames, ref code, ref env)) =>
                                         match result::map_vec(aexprs, |&expr| self.eval(expr))
                                         {
-                                            Ok(args) => self.call_proc(anames, code, args),
+                                            Ok(args) => self.call_proc(anames, code, env, args),
                                             Err(e) => Err(e),
                                         },
                                     Ok(_) => Err(NotCallable),
