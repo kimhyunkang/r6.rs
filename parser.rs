@@ -226,6 +226,18 @@ pub impl Parser {
                     LQuote(@v)
                 }
             },
+            '`' => {
+                self.consume();
+                do result::map(&self.parse_datum()) |&v| {
+                    LQQuote(@v)
+                }
+            },
+            ',' => {
+                self.consume();
+                do result::map(&self.parse_datum()) |&v| {
+                    LUnquote(@v)
+                }
+            },
             _ =>
                 Err(~"unexpected character: " + str::from_char(c)),
         }

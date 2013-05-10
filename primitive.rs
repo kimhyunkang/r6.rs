@@ -38,10 +38,12 @@ pub enum PrimSyntax {
     SynIf,
     SynLambda,
     SynQuote,
+    SynQQuote,
+    SynUnquote,
 }
 
 pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do vec::map([SynIf, SynLambda, SynQuote]) |syn| {
+    do vec::map([SynIf, SynLambda, SynQuote, SynQQuote, SynUnquote]) |syn| {
         (syntax_to_str(syn).to_managed(), *syn)
     }
 }
@@ -51,6 +53,8 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> ~str {
         SynIf => ~"if",
         SynLambda => ~"lambda",
         SynQuote => ~"quote",
+        SynQQuote => ~"quasiquote",
+        SynUnquote => ~"unquote",
     }
 }
 

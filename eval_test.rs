@@ -26,7 +26,13 @@ fn eval_test(src: ~str, expected_src: ~str) {
 
     let val = runtime.eval(expr);
 
-    assert_eq!(val, Ok(expected));
+    match val {
+        Ok(v) => if v != expected {
+            fail!(fmt!("expected %s, got %s", expected.to_str(), v.to_str()))
+        },
+        Err(e) => 
+            fail!(e.to_str()),
+    }
 }
 
 #[test]
@@ -72,4 +78,14 @@ fn if_false_test() {
 #[test]
 fn lambda_test() {
     eval_test(~"((lambda (x y) (+ x y)) 1 2)", ~"3");
+}
+
+#[test]
+fn quasiquote_test() {
+    eval_test(~"`(list ,(+ 1 2) 4)", ~"(list 3 4)");
+}
+
+#[test]
+fn nested_quasiquote_test() {
+    eval_test(~"`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)", ~"(a `(b ,(+ 1 2) ,(foo 4 d) e) f)");
 }

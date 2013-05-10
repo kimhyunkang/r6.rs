@@ -17,6 +17,7 @@ struct Runtime {
     stderr: @io::Writer,
     stack: @Stack<Treemap<@str, @LDatum>>,
     syntax: Treemap<@str, PrimSyntax>,
+    qq_lvl: uint,
 }
 
 #[deriving(Eq)]
@@ -177,6 +178,16 @@ priv impl Runtime {
                 } else {
                     Err(BadSyntax(SynQuote, ~"bad number of arguments"))
                 },
+            SynQQuote => if args.len() == 1 {
+                    self.quasiquote(args[0])
+                } else {
+                    Err(BadSyntax(SynQQuote, ~"bad number of arguments"))
+                },
+            SynUnquote => if args.len() == 1 {
+                    self.unquote(args[0])
+                } else {
+                    Err(BadSyntax(SynUnquote, ~"bad number of arguments"))
+                },
         }
     }
 
@@ -250,6 +261,50 @@ priv impl Runtime {
             },
         }
     }
+
+    fn recursive_qq(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+        match *val {
+            LCons(h,t) =>
+                do result::chain(self.recursive_qq(h)) |qh| {
+                    do result::map(&self.recursive_qq(t)) |&qt| {
+                        @LCons(qh, qt)
+                    }
+                },
+            LQQuote(v) =>
+                do result::map(&self.quasiquote(v)) |&qv| {
+                    @LQQuote(qv)
+                },
+            LUnquote(v) =>
+                self.unquote(v),
+            _ => 
+                Ok(val),
+        }
+    }
+
+    fn quasiquote(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+        self.qq_lvl += 1;
+        let res = self.recursive_qq(val);
+        self.qq_lvl -= 1;
+        res
+    }
+
+    fn unquote(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+        if self.qq_lvl == 0 {
+            Err(BadSyntax(SynUnquote, ~"unquote not nested in quasiquote"))
+        } else {
+            self.qq_lvl -= 1;
+            let res =
+            if self.qq_lvl == 0 {
+                self.eval(val)
+            } else {
+                do result::map(&self.recursive_qq(val)) |&qval| {
+                    @LUnquote(qval)
+                }
+            };
+            self.qq_lvl += 1;
+            res
+        }
+    }
 }
 
 pub impl Runtime {
@@ -260,6 +315,7 @@ pub impl Runtime {
             stderr: io::stderr(),
             stack: @Top(load_prelude(), @Bot),
             syntax: load_prelude_macro(),
+            qq_lvl: 0,
         }
     }
 
@@ -302,6 +358,8 @@ pub impl Runtime {
                     },
                 },
             LQuote(val) => Ok(val),
+            LQQuote(val) => self.quasiquote(val),
+            LUnquote(val) => self.unquote(val),
             LNil => Err(NilEval),
             _ => Ok(val),
         }

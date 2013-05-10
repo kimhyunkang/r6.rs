@@ -12,6 +12,8 @@ pub enum LDatum {
     LNil,
     LPrim(PFunc),
     LQuote(@LDatum),
+    LQQuote(@LDatum),
+    LUnquote(@LDatum),
     LProc(~[@str], ~[@LDatum]),
 }
 
@@ -96,6 +98,14 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             wr.write_char('\'');
             write_ldatum(wr, v);
         },
+        LQQuote(v) => {
+            wr.write_char('`');
+            write_ldatum(wr, v);
+        },
+        LUnquote(v) => {
+            wr.write_char(',');
+            write_ldatum(wr, v);
+        },
         LProc(_,_) => {
             wr.write_str(fmt!("<procedure 0x%08x>", addr));
         },
@@ -105,7 +115,7 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
 priv fn write_list(wr: @io::Writer, &v: &LDatum) {
     match v {
         LCons(head, tail) => {
-            wr.write_str(", ");
+            wr.write_char(' ');
             write_ldatum(wr, head);
             write_list(wr, tail);
         },
