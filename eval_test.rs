@@ -101,3 +101,8 @@ fn lexical_scoping_test() {
     let src = ~"((lambda (y f) (f 2)) 'dyn ((lambda (y) (lambda (x) y)) 'lex))";
     eval_test(src, ~"lex");
 }
+
+#[test]
+fn eqv_test() {
+    eval_test(~"(eqv? 3 (+ 1 2))", ~"#t");
+}

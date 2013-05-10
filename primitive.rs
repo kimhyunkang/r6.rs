@@ -7,10 +7,11 @@ pub enum PFunc {
     PDiv,
     PCar,
     PCdr,
+    PEqv,
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
-    do vec::map([PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr]) |prim| {
+    do vec::map([PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv]) |prim| {
         (proc_to_str(prim).to_managed(), *prim)
     }
 }
@@ -24,6 +25,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PDiv => ~"/",
         PCar => ~"car",
         PCdr => ~"cdr",
+        PEqv => ~"eqv?",
     }
 }
 

@@ -18,6 +18,7 @@ pub enum LDatum {
 }
 
 fn eq(&lhs: &LDatum, &rhs: &LDatum) -> bool {
+    ptr::ref_eq(&lhs, &rhs) ||
     match (lhs, rhs) {
         (LIdent(l), LIdent(r)) => l == r,
         (LString(l), LString(r)) => l == r,

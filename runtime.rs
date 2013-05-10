@@ -75,6 +75,17 @@ priv fn call_prim1(args: ~[@LDatum],
     }
 }
 
+priv fn call_prim2(args: ~[@LDatum],
+                op: &fn(@LDatum, @LDatum) -> Result<@LDatum, RuntimeError>)
+    -> Result<@LDatum, RuntimeError>
+{
+    if args.len() == 2 {
+        op(args[0], args[1])
+    } else {
+        Err(ArgNumError)
+    }
+}
+
 priv fn call_num_prim2(args: ~[@LDatum],
                     op: &fn(&LNumeric, &LNumeric) -> Result<@LDatum, RuntimeError>)
     -> Result<@LDatum, RuntimeError>
@@ -246,6 +257,9 @@ priv impl Runtime {
                     _ => Err(TypeError),
                 }
             },
+            PEqv => do call_prim2(args) |arg1, arg2| {
+                Ok(@LBool(arg1 == arg2))
+            }
         }
     }
 
