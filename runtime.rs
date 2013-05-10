@@ -130,13 +130,17 @@ priv impl Runtime {
         }
     }
 
-    fn run_syntax(&self, syn: PrimSyntax, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
+    fn run_syntax(&self,
+                syn: PrimSyntax,
+                args: ~[@LDatum],
+                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    {
         match syn {
             SynIf => if args.len() == 3 {
-                    do result::chain(self.eval(args[0])) |cond| {
+                    do result::chain(self.eval_local(args[0], stack)) |cond| {
                         match *cond {
-                            LBool(true) => self.eval(args[1]),
-                            LBool(false) => self.eval(args[2]),
+                            LBool(true) => self.eval_local(args[1], stack),
+                            LBool(false) => self.eval_local(args[2], stack),
                             _ => Err(TypeError),
                         }
                     }
@@ -146,10 +150,14 @@ priv impl Runtime {
         }
     }
 
-    fn call_prim(&self, f: PFunc, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
+    fn call_prim(&self,
+                f: PFunc,
+                args: ~[@LDatum],
+                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    {
         match f {
             PEval => do call_prim1(args) |arg| {
-                self.eval(arg)
+                self.eval_local(arg, stack)
             },
             PAdd => do call_num_foldl(args, zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
             PSub => do call_num_foldl(args, one()) |&lhs, &rhs| { Ok(lhs - rhs) },
@@ -175,6 +183,53 @@ priv impl Runtime {
             },
         }
     }
+
+    fn eager_eval_prim(&self,
+                f: PFunc,
+                aexprs: &[@LDatum],
+                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    {
+        match result::map_vec(aexprs,
+                            |&expr| self.eval_local(expr, stack))
+        {
+            Ok(args) => self.call_prim(f, args, stack),
+            Err(e) => Err(e),
+        }
+    }
+
+    fn eval_local(&self,
+                val: @LDatum,
+                stack: Treemap<@str, @LDatum>) -> Result<@LDatum, RuntimeError>
+    {
+        match *val {
+            LIdent(name) => 
+                match fun_treemap::find(stack, name) {
+                    Some(datum) => Ok(datum),
+                    None => Err(UnboundVariable(name)),
+                },
+            LCons(fexpr, aexpr) =>
+                match aexpr.to_list() {
+                    None => Err(NotList),
+                    Some(aexprs) => {
+                        match self.get_syntax(fexpr) {
+                            Some(syntax) =>
+                                self.run_syntax(syntax, aexprs, stack),
+                            None =>
+                                match self.eval_local(fexpr, stack) {
+                                    Ok(@LPrim(f)) => {
+                                        self.eager_eval_prim(f, aexprs, stack)
+                                    }
+                                    Ok(_) => Err(NotCallable),
+                                    Err(e) => Err(e),
+                                },
+                        }
+                    },
+                },
+            LQuote(val) => Ok(val),
+            LNil => Err(NilEval),
+            _ => Ok(val),
+        }
+    }
 }
 
 pub impl Runtime {
@@ -189,37 +244,6 @@ pub impl Runtime {
     }
 
     fn eval(&self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
-        match *val {
-            LIdent(name) => 
-                match fun_treemap::find(self.global, name) {
-                    Some(datum) => Ok(datum),
-                    None => Err(UnboundVariable(name)),
-                },
-            LCons(fexpr, aexpr) =>
-                match aexpr.to_list() {
-                    None => Err(NotList),
-                    Some(aexprs) => {
-                        match self.get_syntax(fexpr) {
-                            Some(syntax) =>
-                                self.run_syntax(syntax, aexprs),
-                            None =>
-                                match self.eval(fexpr) {
-                                    Ok(@LPrim(f)) => {
-                                        match result::map_vec(aexprs, |&expr| self.eval(expr)) {
-                                            Ok(args) => self.call_prim(f, args),
-                                            Err(e) => Err(e),
-                                        }
-                                    }
-                                    Ok(_) => Err(NotCallable),
-                                    Err(e) => Err(e),
-                                },
-                        }
-                    },
-                },
-            LQuote(val) => Ok(val),
-            LNil => Err(NilEval),
-            _ => Ok(val),
-        }
+        self.eval_local(val, self.global)
     }
-
 }
