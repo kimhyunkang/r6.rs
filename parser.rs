@@ -204,11 +204,16 @@ pub impl Parser {
                 },
             '+' | '-' => {
                 self.consume();
-                if self.consume_whitespace() {
+                if self.eof() {
                     Ok(LIdent(str::from_char(c).to_managed()))
                 } else {
-                    do result::map(&self.parse_number(str::from_char(c))) |&n| {
-                        LNum(n)
+                    match self.lookahead() {
+                        '0' .. '9' | 'i' | '.' =>
+                            do result::map(&self.parse_number(str::from_char(c))) |&n| {
+                                LNum(n)
+                            },
+                        _ =>
+                            Ok(LIdent(str::from_char(c).to_managed())),
                     }
                 }
             },
@@ -944,5 +949,16 @@ fn test_parse_quotation() {
         let mut parser = Parser(rdr);
         let val = parser.parse();
         assert_eq!(val, Ok(LQuote(@LNil)));
+    }
+}
+
+#[test]
+fn test_parse_plus() {
+    let test_src = ~"+";
+
+    do io::with_str_reader(test_src) |rdr| {
+        let mut parser = Parser(rdr);
+        let val = parser.parse();
+        assert_eq!(val, Ok(LIdent(@"+")));
     }
 }
