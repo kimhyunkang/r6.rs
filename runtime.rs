@@ -132,7 +132,7 @@ priv impl Runtime {
         }
     }
 
-    fn run_syntax(&mut self, syn: PrimSyntax, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
+    fn run_syntax(&self, syn: PrimSyntax, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
         match syn {
             SynIf => if args.len() == 3 {
                     do result::chain(self.eval(args[0])) |cond| {
@@ -148,7 +148,7 @@ priv impl Runtime {
         }
     }
 
-    fn call_prim(&mut self, f: PFunc, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
+    fn call_prim(&self, f: PFunc, args: ~[@LDatum]) -> Result<@LDatum, RuntimeError> {
         match f {
             PEval => do call_prim1(args) |arg| {
                 self.eval(arg)
@@ -190,7 +190,7 @@ pub impl Runtime {
         }
     }
 
-    fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+    fn eval(&self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
         match copy *val {
             LIdent(name) => 
                 match self.global.find(&name) {
