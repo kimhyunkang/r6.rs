@@ -167,7 +167,12 @@ priv impl Runtime {
                             }
                         },
                     }
-                }
+                },
+            SynQuote => if args.len() == 1 {
+                    Ok(args[0])
+                } else {
+                    Err(BadSyntax(SynQuote, ~"bad number of arguments"))
+                },
         }
     }
 

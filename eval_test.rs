@@ -45,6 +45,11 @@ fn quote_test() {
 }
 
 #[test]
+fn quote_macro_test() {
+    eval_test(~"(quote (a b))", ~"(a b)");
+}
+
+#[test]
 fn car_test() {
     eval_test(~"(car '(a b))", ~"a");
 }
