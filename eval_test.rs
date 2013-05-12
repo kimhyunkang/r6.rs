@@ -106,3 +106,8 @@ fn lexical_scoping_test() {
 fn eqv_test() {
     eval_test(~"(eqv? 3 (+ 1 2))", ~"#t");
 }
+
+#[test]
+fn set_test() {
+    eval_test(~"((lambda (x) (set! x 'mut) x) 'immut)", ~"mut");
+}

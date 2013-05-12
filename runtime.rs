@@ -4,12 +4,13 @@ use numeric::LNumeric;
 use core::num::Zero::zero;
 use core::num::One::one;
 use core::hashmap::linear::LinearMap;
+use stack::*;
 
 struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    env: @Stack<LinearMap<@str, @LDatum>>,
+    env: @mut Stack<LinearMap<@str, @LDatum>>,
     syntax: LinearMap<@str, PrimSyntax>,
     qq_lvl: uint,
 }
@@ -181,6 +182,20 @@ priv impl Runtime {
                         },
                     }
                 },
+            SynSet => if args.len() != 2 {
+                    Err(BadSyntax(SynSet, ~"bad number of arguments"))
+                } else {
+                    match *args[0] {
+                        LIdent(name) => do result::chain(self.eval(args[1])) |val| {
+                            if set_var(self.env, &name, val) {
+                                Ok(@LNil)
+                            } else {
+                                Err(BadSyntax(SynSet, ~"unbound variable"))
+                            }
+                        },
+                        _ => Err(BadSyntax(SynSet, ~"cannot set non-variable"))
+                    }
+                },
             SynQuote => if args.len() == 1 {
                     Ok(args[0])
                 } else {
@@ -202,7 +217,7 @@ priv impl Runtime {
     fn call_proc(&mut self,
                 anames: &~[@str],
                 code: &~[@LDatum],
-                &frame: &@Stack<LinearMap<@str, @LDatum>>,
+                &frame: &@mut Stack<LinearMap<@str, @LDatum>>,
                 args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
         if anames.len() != args.len() {
@@ -218,7 +233,7 @@ priv impl Runtime {
             }
 
             // create new local env
-            self.env = @Top(arg_frame, frame);
+            self.env = @mut push(frame, arg_frame);
             let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
             do code.each() |&val| {
                 res = self.eval(val);
@@ -313,14 +328,39 @@ priv impl Runtime {
     }
 }
 
-priv fn find_var(&env: &@Stack<LinearMap<@str, @LDatum>>, var: &@str) -> Option<@LDatum> {
-    match *env {
-        Bot => None,
-        Top(ref frame, ref tail) => match frame.find(var) {
-            None => find_var(tail, var),
-            Some(x) => Some(*x),
-        },
+priv fn find_var(env: @mut Stack<LinearMap<@str, @LDatum>>, name: &@str) -> Option<@LDatum> {
+    let mut val: Option<@LDatum> = None;
+
+    do env.each |frame| {
+        match frame.find(name) {
+            None => true,
+            Some(v) => {
+                val = Some(*v);
+                false
+            }
+        }
     }
+
+    val
+}
+
+priv fn set_var(env: @mut Stack<LinearMap<@str, @LDatum>>,
+                name: &@str,
+                val: @LDatum) -> bool {
+    let mut success = false;
+
+    do env.each_mut |frame| {
+        match frame.find_mut(name) {
+            None => (),
+            Some(v) => {
+                success = true;
+                *v = val;
+            }
+        }
+        !success
+    }
+
+    success
 }
 
 pub impl Runtime {
@@ -329,7 +369,7 @@ pub impl Runtime {
             stdin: io::stdin(),
             stdout: io::stdout(),
             stderr: io::stderr(),
-            env: @Top(load_prelude(), @Bot),
+            env: @mut push(&Stack::new(), load_prelude()),
             syntax: load_prelude_macro(),
             qq_lvl: 0,
         }
@@ -339,7 +379,7 @@ pub impl Runtime {
     {
         match *val {
             LIdent(name) => 
-                match find_var(&self.env, &name) {
+                match find_var(self.env, &name) {
                     Some(datum) => Ok(datum),
                     None => Err(UnboundVariable(name)),
                 },

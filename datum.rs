@@ -1,11 +1,7 @@
 use numeric::LNumeric;
 use primitive::PFunc;
 use core::hashmap::linear::LinearMap;
-
-pub enum Stack<T> {
-    Top(T, @Stack<T>),
-    Bot,
-}
+use stack::Stack;
 
 pub enum LDatum {
     LIdent(@str),
@@ -19,7 +15,7 @@ pub enum LDatum {
     LQuote(@LDatum),
     LQQuote(@LDatum),
     LUnquote(@LDatum),
-    LProc(~[@str], ~[@LDatum], @Stack<LinearMap<@str, @LDatum>>),
+    LProc(~[@str], ~[@LDatum], @mut Stack<LinearMap<@str, @LDatum>>),
 }
 
 fn eq(&lhs: &LDatum, &rhs: &LDatum) -> bool {
