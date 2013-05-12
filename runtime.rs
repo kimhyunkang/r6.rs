@@ -1,17 +1,16 @@
 use datum::*;
 use primitive::*;
 use numeric::LNumeric;
-use std::fun_treemap;
-use std::fun_treemap::Treemap;
 use core::num::Zero::zero;
 use core::num::One::one;
+use core::hashmap::linear::LinearMap;
 
 struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    env: Treemap<@str, @LDatum>,
-    syntax: Treemap<@str, PrimSyntax>,
+    env: @Stack<LinearMap<@str, @LDatum>>,
+    syntax: LinearMap<@str, PrimSyntax>,
     qq_lvl: uint,
 }
 
@@ -46,20 +45,20 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
     }
 }
 
-fn load_prelude() -> Treemap<@str, @LDatum> {
-    let mut map = fun_treemap::init();
+fn load_prelude() -> LinearMap<@str, @LDatum> {
+    let mut map = LinearMap::new();
     for vec::each(prelude()) |&pair| {
         let (key, func) = pair;
-        map = fun_treemap::insert(map, key, @LPrim(func));
+        map.insert(key, @LPrim(func));
     }
     map
 }
 
-fn load_prelude_macro() -> Treemap<@str, PrimSyntax> {
-    let mut map = fun_treemap::init();
+fn load_prelude_macro() -> LinearMap<@str, PrimSyntax> {
+    let mut map = LinearMap::new();
     for vec::each(syntax_prelude()) |&pair| {
         let (key, syntax) = pair;
-        map = fun_treemap::insert(map, key, syntax);
+        map.insert(key, syntax);
     }
     map
 }
@@ -139,7 +138,10 @@ priv fn call_num_foldl(args: ~[@LDatum],
 priv impl Runtime {
     fn get_syntax(&self, val: @LDatum) -> Option<PrimSyntax> {
         match *val {
-            LIdent(name) => fun_treemap::find(self.syntax, name),
+            LIdent(name) => match self.syntax.find(&name) {
+                Some(&syn) => Some(syn),
+                None => None,
+            },
             _ => None,
         }
     }
@@ -200,7 +202,7 @@ priv impl Runtime {
     fn call_proc(&mut self,
                 anames: &~[@str],
                 code: &~[@LDatum],
-                &frame: &Treemap<@str, @LDatum>,
+                &frame: &@Stack<LinearMap<@str, @LDatum>>,
                 args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
         if anames.len() != args.len() {
@@ -208,12 +210,15 @@ priv impl Runtime {
         } else {
             // store current env
             let old_env = self.env;
-            self.env = frame;
+            // create new frame to store args
+            let mut arg_frame = LinearMap::new();
 
             for uint::range(0, anames.len()) |i| {
-                self.env = fun_treemap::insert(self.env, anames[i], args[i]);
+                arg_frame.insert(anames[i], args[i]);
             }
 
+            // create new local env
+            self.env = @Top(arg_frame, frame);
             let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
             do code.each() |&val| {
                 res = self.eval(val);
@@ -308,13 +313,23 @@ priv impl Runtime {
     }
 }
 
+priv fn find_var(&env: &@Stack<LinearMap<@str, @LDatum>>, var: &@str) -> Option<@LDatum> {
+    match *env {
+        Bot => None,
+        Top(ref frame, ref tail) => match frame.find(var) {
+            None => find_var(tail, var),
+            Some(x) => Some(*x),
+        },
+    }
+}
+
 pub impl Runtime {
     fn new_std() -> Runtime {
         Runtime {
             stdin: io::stdin(),
             stdout: io::stdout(),
             stderr: io::stderr(),
-            env: load_prelude(),
+            env: @Top(load_prelude(), @Bot),
             syntax: load_prelude_macro(),
             qq_lvl: 0,
         }
@@ -324,7 +339,7 @@ pub impl Runtime {
     {
         match *val {
             LIdent(name) => 
-                match fun_treemap::find(self.env, name) {
+                match find_var(&self.env, &name) {
                     Some(datum) => Ok(datum),
                     None => Err(UnboundVariable(name)),
                 },

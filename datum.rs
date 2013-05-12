@@ -1,6 +1,11 @@
 use numeric::LNumeric;
 use primitive::PFunc;
-use std::fun_treemap::Treemap;
+use core::hashmap::linear::LinearMap;
+
+pub enum Stack<T> {
+    Top(T, @Stack<T>),
+    Bot,
+}
 
 pub enum LDatum {
     LIdent(@str),
@@ -14,7 +19,7 @@ pub enum LDatum {
     LQuote(@LDatum),
     LQQuote(@LDatum),
     LUnquote(@LDatum),
-    LProc(~[@str], ~[@LDatum], Treemap<@str, @LDatum>),
+    LProc(~[@str], ~[@LDatum], @Stack<LinearMap<@str, @LDatum>>),
 }
 
 fn eq(&lhs: &LDatum, &rhs: &LDatum) -> bool {
