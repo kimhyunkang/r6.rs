@@ -111,3 +111,8 @@ fn eqv_test() {
 fn set_test() {
     eval_test(~"((lambda (x) (set! x 'mut) x) 'immut)", ~"mut");
 }
+
+#[test]
+fn varargs_test() {
+    eval_test(~"((lambda (a b . c) `(,(+ a b) . ,c)) 1 2 3 4)", ~"(3 3 4)");
+}

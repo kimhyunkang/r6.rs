@@ -15,7 +15,7 @@ pub enum LDatum {
     LQuote(@LDatum),
     LQQuote(@LDatum),
     LUnquote(@LDatum),
-    LProc(~[@str], ~[@LDatum], @mut Stack<LinearMap<@str, @LDatum>>),
+    LProc(~[@str], Option<@str>, ~[@LDatum], @mut Stack<LinearMap<@str, @LDatum>>),
 }
 
 fn eq(&lhs: &LDatum, &rhs: &LDatum) -> bool {
@@ -135,7 +135,7 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             wr.write_char(',');
             write_ldatum(wr, v);
         },
-        LProc(_,_,_) => {
+        LProc(_,_,_,_) => {
             wr.write_str(fmt!("<procedure 0x%08x>", addr));
         },
     }

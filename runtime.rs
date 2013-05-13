@@ -20,7 +20,7 @@ enum RuntimeError {
     UnboundVariable(@str),
     NotCallable,
     NotList,
-    ArgNumError,
+    ArgNumError(uint, bool, uint),
     TypeError,
     DivideByZeroError,
     NilEval,
@@ -38,7 +38,12 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
         UnboundVariable(name) => ~"unbound variable: " + name,
         NotCallable => ~"not callable",
         NotList => ~"not list",
-        ArgNumError => ~"bad number of arguments",
+        ArgNumError(expected, false, argnum) => {
+            fmt!("expected %u arguments, but found %u arguments", expected, argnum)
+        },
+        ArgNumError(expected, true, argnum) => {
+            fmt!("expected %u or more arguments, but found %u arguments", expected, argnum)
+        },
         TypeError => ~"type error",
         DivideByZeroError => ~"divide by zero",
         NilEval => ~"() cannot be evaluated",
@@ -71,7 +76,7 @@ priv fn call_prim1(args: ~[@LDatum],
     if args.len() == 1 {
         op(args[0])
     } else {
-        Err(ArgNumError)
+        Err(ArgNumError(1, false, args.len()))
     }
 }
 
@@ -82,7 +87,7 @@ priv fn call_prim2(args: ~[@LDatum],
     if args.len() == 2 {
         op(args[0], args[1])
     } else {
-        Err(ArgNumError)
+        Err(ArgNumError(2, false, args.len()))
     }
 }
 
@@ -99,7 +104,7 @@ priv fn call_num_prim2(args: ~[@LDatum],
             _ => Err(TypeError),
         }
     } else {
-        Err(ArgNumError)
+        Err(ArgNumError(2, false, args.len()))
     }
 }
 
@@ -136,6 +141,38 @@ priv fn call_num_foldl(args: ~[@LDatum],
     }
 }
 
+priv fn get_syms(&arg: &@LDatum) -> Result<(~[@str], Option<@str>), ~str> {
+    let mut iter = arg;
+    let mut args : ~[@str] = ~[];
+    let mut varargs : Option<@str> = None;
+
+    loop {
+        match *iter {
+            LCons(h, t) => match *h {
+                LIdent(name) => {
+                    args.push(name);
+                    iter = t;
+                },
+                _ => {
+                    return Err(~"non-symbol argument");
+                }
+            },
+            LIdent(name) => {
+                varargs = Some(name);
+                break;
+            },
+            LNil => {
+                break;
+            },
+            _ => {
+                return Err(~"non-list argument");
+            },
+        }
+    }
+
+    Ok((args, varargs))
+}
+
 priv impl Runtime {
     fn get_syntax(&self, val: @LDatum) -> Option<PrimSyntax> {
         match *val {
@@ -164,21 +201,13 @@ priv impl Runtime {
                     Err(BadSyntax(SynIf, ~"bad number of arguments"))
                 },
             SynLambda => if args.len() < 2 {
-                    Err(BadSyntax(SynLambda, ~"no procedure given"))
+                    Err(BadSyntax(SynLambda, ~"no body given"))
                 } else {
-                    match args[0].to_list() {
-                        None => Err(BadSyntax(SynLambda, ~"non-list arguments")),
-                        Some(largs) => {
-                            let names = do result::map_vec(largs) |&arg| {
-                                match *arg {
-                                    LIdent(name) => Ok(name),
-                                    _ => Err(BadSyntax(SynLambda, ~"non-symbol arguments")),
-                                }
-                            };
-                            do result::map(&names) |&anames| {
-                                let seq = vec::from_slice(vec::slice(args, 1, args.len()));
-                                @LProc(anames, seq, self.env)
-                            }
+                    match get_syms(&args[0]) {
+                        Err(e) => Err(BadSyntax(SynLambda, e)),
+                        Ok((anames, varargs)) => {
+                            let seq = vec::from_slice(vec::slice(args, 1, args.len()));
+                            Ok(@LProc(anames, varargs, seq, self.env))
                         },
                     }
                 },
@@ -216,35 +245,48 @@ priv impl Runtime {
 
     fn call_proc(&mut self,
                 anames: &~[@str],
+                vargs: &Option<@str>,
                 code: &~[@LDatum],
                 &frame: &@mut Stack<LinearMap<@str, @LDatum>>,
                 args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
     {
-        if anames.len() != args.len() {
-            Err(ArgNumError)
-        } else {
-            // store current env
-            let old_env = self.env;
-            // create new frame to store args
-            let mut arg_frame = LinearMap::new();
+        // create new frame to store args
+        let mut arg_frame = LinearMap::new();
 
-            for uint::range(0, anames.len()) |i| {
-                arg_frame.insert(anames[i], args[i]);
-            }
-
-            // create new local env
-            self.env = @mut push(frame, arg_frame);
-            let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
-            do code.each() |&val| {
-                res = self.eval(val);
-                res.is_ok()
-            }
-
-            // restore env
-            self.env = old_env;
-
-            res
+        match *vargs {
+            None => if args.len() != anames.len() {
+                    return Err(ArgNumError(anames.len(), false, args.len()));
+                },
+            Some(vname) => if args.len() < anames.len() {
+                    return Err(ArgNumError(anames.len(), true, args.len()));
+                } else {
+                    let vslice = vec::slice(args, anames.len(), args.len());
+                    let va = do vec::foldr(vslice, @LNil) |&a, l| {
+                        @LCons(a, l)
+                    };
+                    arg_frame.insert(vname, va);
+                },
         }
+
+        for uint::range(0, anames.len()) |i| {
+            arg_frame.insert(anames[i], args[i]);
+        }
+
+        // store current env
+        let old_env = self.env;
+
+        // create new local env
+        self.env = @mut push(frame, arg_frame);
+        let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
+        do code.each() |&val| {
+            res = self.eval(val);
+            res.is_ok()
+        }
+
+        // restore env
+        self.env = old_env;
+
+        res
     }
 
     fn call_prim(&mut self,
@@ -398,11 +440,13 @@ pub impl Runtime {
                                             Ok(args) => self.call_prim(f, args),
                                             Err(e) => Err(e),
                                         },
-                                    Ok(@LProc(ref anames, ref code, ref env)) =>
+                                    Ok(@LProc(ref anames, ref vargs, ref code, ref env)) =>
                                         match result::map_vec(aexprs, |&expr| self.eval(expr))
                                         {
-                                            Ok(args) => self.call_proc(anames, code, env, args),
-                                            Err(e) => Err(e),
+                                            Ok(args) =>
+                                                self.call_proc(anames, vargs, code, env, args),
+                                            Err(e) =>
+                                                Err(e),
                                         },
                                     Ok(_) => Err(NotCallable),
                                     Err(e) => Err(e),
