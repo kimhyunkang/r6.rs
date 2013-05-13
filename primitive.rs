@@ -39,6 +39,7 @@ impl to_str::ToStr for PFunc {
 pub enum PrimSyntax {
     SynIf,
     SynLambda,
+    SynDefine,
     SynSet,
     SynQuote,
     SynQQuote,
@@ -46,7 +47,7 @@ pub enum PrimSyntax {
 }
 
 pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do vec::map([SynIf, SynLambda, SynSet, SynQuote, SynQQuote, SynUnquote]) |syn| {
+    do vec::map([SynIf, SynLambda, SynDefine, SynSet, SynQuote, SynQQuote, SynUnquote]) |syn| {
         (syntax_to_str(syn).to_managed(), *syn)
     }
 }
@@ -55,6 +56,7 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> ~str {
     match prim {
         SynIf => ~"if",
         SynLambda => ~"lambda",
+        SynDefine => ~"define",
         SynSet => ~"set!",
         SynQuote => ~"quote",
         SynQQuote => ~"quasiquote",

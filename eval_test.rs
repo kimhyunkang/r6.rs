@@ -116,3 +116,13 @@ fn set_test() {
 fn varargs_test() {
     eval_test(~"((lambda (a b . c) `(,(+ a b) . ,c)) 1 2 3 4)", ~"(3 3 4)");
 }
+
+#[test]
+fn define_val_test() {
+    eval_test(~"((lambda () (define a 2) (+ a 1)))", ~"3");
+}
+
+#[test]
+fn define_fun_test() {
+    eval_test(~"((lambda () (define (list . a) a) (list 1 2)))", ~"(1 2)");
+}

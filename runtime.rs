@@ -211,6 +211,38 @@ priv impl Runtime {
                         },
                     }
                 },
+            SynDefine => if args.len() < 2 {
+                    Err(BadSyntax(SynDefine, ~"no body given"))
+                } else {
+                    match get_syms(&args[0]) {
+                        Err(e) => Err(BadSyntax(SynDefine, e)),
+                        Ok((anames, varargs)) =>
+                            if anames.is_empty() {
+                                match varargs {
+                                    None => Err(BadSyntax(SynDefine, ~"name not given")),
+                                    Some(name) => if args.len() != 2 {
+                                            Err(BadSyntax(SynDefine, ~"multiple expressions"))
+                                        } else {
+                                            do result::map(&self.eval(args[1])) |&val| {
+                                                let mut frame = LinearMap::new();
+                                                frame.insert(name, val);
+                                                self.env = @mut push(self.env, frame);
+                                                @LNil
+                                            }
+                                        }
+                                }
+                            } else {
+                                let name = anames[0];
+                                let anames = vec::from_slice(vec::slice(anames, 1, anames.len()));
+                                let seq = vec::from_slice(vec::slice(args, 1, args.len()));
+                                let proc = @LProc(anames, varargs, seq, self.env);
+                                let mut frame = LinearMap::new();
+                                frame.insert(name, proc);
+                                self.env = @mut push(self.env, frame);
+                                Ok(@LNil)
+                            }
+                    }
+                },
             SynSet => if args.len() != 2 {
                     Err(BadSyntax(SynSet, ~"bad number of arguments"))
                 } else {
