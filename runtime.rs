@@ -204,6 +204,31 @@ priv impl Runtime {
         }
     }
 
+    fn define(&mut self, args: ~[@LDatum]) -> Result<(@str, @LDatum), RuntimeError> {
+        match get_syms(&args[0]) {
+            Err(e) => Err(BadSyntax(SynDefine, e)),
+            Ok((anames, varargs)) =>
+                if anames.is_empty() {
+                    match varargs {
+                        None => Err(BadSyntax(SynDefine, ~"name not given")),
+                        Some(name) => if args.len() != 2 {
+                                Err(BadSyntax(SynDefine, ~"multiple expressions"))
+                            } else {
+                                do result::map(&self.eval(args[1])) |&val| {
+                                    (name, val)
+                                }
+                            }
+                    }
+                } else {
+                    let name = anames[0];
+                    let anames = vec::from_slice(vec::slice(anames, 1, anames.len()));
+                    let seq = vec::from_slice(vec::slice(args, 1, args.len()));
+                    let proc = @LProc(anames, varargs, seq, self.env);
+                    Ok((name, proc))
+                }
+        }
+    }
+
     fn run_syntax(&mut self,
                 syn: PrimSyntax,
                 args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
@@ -234,29 +259,23 @@ priv impl Runtime {
             SynDefine => if args.len() < 2 {
                     Err(BadSyntax(SynDefine, ~"no body given"))
                 } else {
-                    match get_syms(&args[0]) {
-                        Err(e) => Err(BadSyntax(SynDefine, e)),
-                        Ok((anames, varargs)) =>
-                            if anames.is_empty() {
-                                match varargs {
-                                    None => Err(BadSyntax(SynDefine, ~"name not given")),
-                                    Some(name) => if args.len() != 2 {
-                                            Err(BadSyntax(SynDefine, ~"multiple expressions"))
-                                        } else {
-                                            do result::map(&self.eval(args[1])) |&val| {
-                                                self.global.insert(name, Left(val));
-                                                @LNil
-                                            }
-                                        }
-                                }
+                    let definition = self.define(args);
+                    match definition {
+                        Err(e) => Err(e),
+                        Ok((name, val)) => {
+                            if self.env.size_hint() == Some(0) {
+                                // this is the top-level context
+                                // just bind the definition in global
+                                self.global.insert(name, Left(val));
                             } else {
-                                let name = anames[0];
-                                let anames = vec::from_slice(vec::slice(anames, 1, anames.len()));
-                                let seq = vec::from_slice(vec::slice(args, 1, args.len()));
-                                let proc = @LProc(anames, varargs, seq, self.env);
-                                self.global.insert(name, Left(proc));
-                                Ok(@LNil)
-                            }
+                                // this is not the top-level context
+                                // create a new frame
+                                let mut frame = LinearMap::new();
+                                frame.insert(name, val);
+                                self.env = @mut push(self.env, frame);
+                            };
+                            Ok(@LNil)
+                        },
                     }
                 },
             SynSet => if args.len() != 2 {
