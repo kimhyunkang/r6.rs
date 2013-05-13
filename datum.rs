@@ -33,6 +33,12 @@ pub impl<T> LDatum<T> {
     }
 }
 
+pub impl<T: ToStr> LDatum<T> {
+    fn write(&self, wr: @io::Writer) {
+        write_ldatum(wr, self)
+    }
+}
+
 priv fn datum_to_list<T>(head: @LDatum<T>, tail: @LDatum<T>) -> Option<~[@LDatum<T>]> {
     let mut x: @LDatum<T> = tail;
     let mut list_flag = false;
