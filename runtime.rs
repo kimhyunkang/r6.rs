@@ -11,13 +11,14 @@ struct Runtime {
     stdout: @io::Writer,
     stderr: @io::Writer,
     env: @mut Stack<LinearMap<@str, @LDatum>>,
-    syntax: LinearMap<@str, PrimSyntax>,
+    global: LinearMap<@str, Either<@LDatum, PrimSyntax>>,
     qq_lvl: uint,
 }
 
 #[deriving(Eq)]
 enum RuntimeError {
     UnboundVariable(@str),
+    RefMacro(@str),
     NotCallable,
     NotList,
     ArgNumError(uint, bool, uint),
@@ -36,6 +37,7 @@ impl ToStr for RuntimeError {
 priv fn err_to_str(&err: &RuntimeError) -> ~str {
     match err {
         UnboundVariable(name) => ~"unbound variable: " + name,
+        RefMacro(name) => ~"cannot reference macro name: " + name,
         NotCallable => ~"not callable",
         NotList => ~"not list",
         ArgNumError(expected, false, argnum) => {
@@ -51,20 +53,15 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
     }
 }
 
-fn load_prelude() -> LinearMap<@str, @LDatum> {
+fn load_prelude() -> LinearMap<@str, Either<@LDatum, PrimSyntax>> {
     let mut map = LinearMap::new();
     for vec::each(prelude()) |&pair| {
         let (key, func) = pair;
-        map.insert(key, @LPrim(func));
+        map.insert(key, Left(@LPrim(func)));
     }
-    map
-}
-
-fn load_prelude_macro() -> LinearMap<@str, PrimSyntax> {
-    let mut map = LinearMap::new();
     for vec::each(syntax_prelude()) |&pair| {
         let (key, syntax) = pair;
-        map.insert(key, syntax);
+        map.insert(key, Right(syntax));
     }
     map
 }
@@ -176,11 +173,34 @@ priv fn get_syms(&arg: &@LDatum) -> Result<(~[@str], Option<@str>), ~str> {
 priv impl Runtime {
     fn get_syntax(&self, val: @LDatum) -> Option<PrimSyntax> {
         match *val {
-            LIdent(name) => match self.syntax.find(&name) {
-                Some(&syn) => Some(syn),
-                None => None,
+            LIdent(name) => match self.global.find(&name) {
+                Some(&Right(syn)) => Some(syn),
+                _ => None,
             },
             _ => None,
+        }
+    }
+
+    fn find_var(&self, name: &@str) -> Result<@LDatum, RuntimeError> {
+        let mut val: Option<@LDatum> = None;
+
+        do self.env.each |frame| {
+            match frame.find(name) {
+                None => true,
+                Some(v) => {
+                    val = Some(*v);
+                    false
+                }
+            }
+        }
+
+        match val {
+            None => match self.global.find(name) {
+                Some(&Left(v)) => Ok(v),
+                Some(&Right(_)) => Err(RefMacro(*name)),
+                None => Err(UnboundVariable(*name)),
+            },
+            Some(v) => Ok(v),
         }
     }
 
@@ -224,9 +244,7 @@ priv impl Runtime {
                                             Err(BadSyntax(SynDefine, ~"multiple expressions"))
                                         } else {
                                             do result::map(&self.eval(args[1])) |&val| {
-                                                let mut frame = LinearMap::new();
-                                                frame.insert(name, val);
-                                                self.env = @mut push(self.env, frame);
+                                                self.global.insert(name, Left(val));
                                                 @LNil
                                             }
                                         }
@@ -236,9 +254,7 @@ priv impl Runtime {
                                 let anames = vec::from_slice(vec::slice(anames, 1, anames.len()));
                                 let seq = vec::from_slice(vec::slice(args, 1, args.len()));
                                 let proc = @LProc(anames, varargs, seq, self.env);
-                                let mut frame = LinearMap::new();
-                                frame.insert(name, proc);
-                                self.env = @mut push(self.env, frame);
+                                self.global.insert(name, Left(proc));
                                 Ok(@LNil)
                             }
                     }
@@ -402,22 +418,6 @@ priv impl Runtime {
     }
 }
 
-priv fn find_var(env: @mut Stack<LinearMap<@str, @LDatum>>, name: &@str) -> Option<@LDatum> {
-    let mut val: Option<@LDatum> = None;
-
-    do env.each |frame| {
-        match frame.find(name) {
-            None => true,
-            Some(v) => {
-                val = Some(*v);
-                false
-            }
-        }
-    }
-
-    val
-}
-
 priv fn set_var(env: @mut Stack<LinearMap<@str, @LDatum>>,
                 name: &@str,
                 val: @LDatum) -> bool {
@@ -443,8 +443,8 @@ pub impl Runtime {
             stdin: io::stdin(),
             stdout: io::stdout(),
             stderr: io::stderr(),
-            env: @mut push(&Stack::new(), load_prelude()),
-            syntax: load_prelude_macro(),
+            env: @mut Stack::new(),
+            global: load_prelude(),
             qq_lvl: 0,
         }
     }
@@ -452,11 +452,7 @@ pub impl Runtime {
     fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError>
     {
         match *val {
-            LIdent(name) => 
-                match find_var(self.env, &name) {
-                    Some(datum) => Ok(datum),
-                    None => Err(UnboundVariable(name)),
-                },
+            LIdent(name) => self.find_var(&name),
             LCons(fexpr, aexpr) =>
                 match aexpr.to_list() {
                     None => Err(NotList),
