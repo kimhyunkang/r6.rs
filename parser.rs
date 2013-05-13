@@ -17,9 +17,9 @@ priv enum NilRes<T, E> {
     NSome(T),
 }
 
-priv enum DResult {
+priv enum DResult<T> {
     DSingle,
-    DDatum(LDatum),
+    DDatum(LDatum<T>),
     DErr(~str),
 }
 
@@ -95,14 +95,14 @@ priv fn build_complex(exactness: Option<bool>,
     if exactness == Some(true) || 
             (exactness == None && !is_pfloat(rpart) && !is_pfloat(ipart)) {
         do result::chain(build_exact(rsign, radix, rpart)) |re| {
-            do result::map(&build_exact(isign, radix, ipart)) |&im| {
-                NExact(re, im)
+            do result::chain(build_exact(isign, radix, ipart)) |im| {
+                Ok(NExact(re, im))
             }
         }
     } else {
         do result::chain(build_inexact(rsign, radix, rpart)) |re| {
-            do result::map(&build_inexact(isign, radix, ipart)) |&im| {
-                NInexact(re, im)
+            do result::chain(build_inexact(isign, radix, ipart)) |im| {
+                Ok(NInexact(re, im))
             }
         }
     }
@@ -156,7 +156,7 @@ pub impl Parser {
         (self.line, self.col)
     }
 
-    fn parse(&mut self) -> Result<LDatum, ~str> {
+    fn parse<T>(&mut self) -> Result<LDatum<T>, ~str> {
         do result::chain(self.parse_datum()) |v| {
             self.consume_whitespace();
 
@@ -168,7 +168,7 @@ pub impl Parser {
         }
     }
 
-    fn parse_datum(&mut self) -> Result<LDatum, ~str> {
+    fn parse_datum<T>(&mut self) -> Result<LDatum<T>, ~str> {
         self.consume_whitespace();
 
         if(self.eof()) {
@@ -180,16 +180,16 @@ pub impl Parser {
             _ if id_init(c) =>
                 Ok(LIdent(self.parse_ident())),
             '"' =>
-                do result::map(&self.parse_string()) |&s| {
-                    LString(s)
+                do result::chain(self.parse_string()) |s| {
+                    Ok(LString(s))
                 },
             '#' => {
                     self.consume();
                     self.parse_sharp()
                 },
             '0'..'9' =>
-                do result::map(&self.parse_number(~"")) |&n| {
-                    LNum(n)
+                do result::chain(self.parse_number(~"")) |n| {
+                    Ok(LNum(n))
                 },
             '(' => {
                     self.consume();
@@ -209,8 +209,8 @@ pub impl Parser {
                 } else {
                     match self.lookahead() {
                         '0' .. '9' | 'i' | '.' =>
-                            do result::map(&self.parse_number(str::from_char(c))) |&n| {
-                                LNum(n)
+                            do result::chain(self.parse_number(str::from_char(c))) |n| {
+                                Ok(LNum(n))
                             },
                         _ =>
                             Ok(LIdent(str::from_char(c).to_managed())),
@@ -227,20 +227,20 @@ pub impl Parser {
             },
             '\'' => {
                 self.consume();
-                do result::map(&self.parse_datum()) |&v| {
-                    LQuote(@v)
+                do result::chain(self.parse_datum()) |v| {
+                    Ok(LQuote(@v))
                 }
             },
             '`' => {
                 self.consume();
-                do result::map(&self.parse_datum()) |&v| {
-                    LQQuote(@v)
+                do result::chain(self.parse_datum()) |v| {
+                    Ok(LQQuote(@v))
                 }
             },
             ',' => {
                 self.consume();
-                do result::map(&self.parse_datum()) |&v| {
-                    LUnquote(@v)
+                do result::chain(self.parse_datum()) |v| {
+                    Ok(LUnquote(@v))
                 }
             },
             _ =>
@@ -321,7 +321,7 @@ priv impl Parser {
         consumed
     }
 
-    fn parse_sharp(&mut self) -> Result<LDatum, ~str> {
+    fn parse_sharp<T>(&mut self) -> Result<LDatum<T>, ~str> {
         if(self.eof()) {
             return Err(~"unexpected EOF");
         }
@@ -338,15 +338,15 @@ priv impl Parser {
             'f' =>
                 Ok(LBool(false)),
             'e' | 'i' | 'b' | 'o' | 'd' | 'x' => 
-                do result::map(&self.parse_number(~"#" + str::from_char(c))) |&n| {
-                    LNum(n)
+                do result::chain(self.parse_number(~"#" + str::from_char(c))) |n| {
+                    Ok(LNum(n))
                 },
             _ =>
                 Err(~"unexpected character: " + str::from_char(c)),
         }
     }
 
-    fn parse_list(&mut self, head: @LDatum) -> Result<LDatum, ~str> {
+    fn parse_list<T>(&mut self, head: @LDatum<T>) -> Result<LDatum<T>, ~str> {
         self.consume_whitespace();
         if(self.eof()) {
             Err(~"parenthesis not closed")
@@ -392,7 +392,7 @@ priv impl Parser {
         }
     }
 
-    fn parse_dot(&mut self) -> DResult {
+    fn parse_dot<T>(&mut self) -> DResult<T> {
         if self.eof() {
             DSingle
         } else {
@@ -475,10 +475,10 @@ priv impl Parser {
                                 };
                                 match self.parse_real(r, false) {
                                     NSome(apart) =>
-                                        do result::map(&build_inexact(asign, r, &apart)) |&arg| {
+                                        do result::chain(build_inexact(asign, r, &apart)) |arg| {
                                             let re = abs * f64::cos(arg);
                                             let im = abs * f64::sin(arg);
-                                            NInexact(re, im)
+                                            Ok(NInexact(re, im))
                                         },
                                     _ => Err(~"invalid polar literal"),
                                 }
@@ -720,59 +720,44 @@ priv impl Parser {
     }
 }
 
+#[cfg(test)]
+fn test_expect(src: ~str, &expected: &LDatum<()>) {
+    do io::with_str_reader(src) |rdr| {
+        let mut parser = Parser(rdr);
+        let expr = expected.to_str();
+        match parser.parse() {
+            Ok(val) => if val != expected {
+                fail!(fmt!("expected %s, received %?", expr, val))
+            },
+            Err(e) =>
+                fail!(fmt!("parse failure: %s", e)),
+        }
+    }
+}
+
 #[test]
 fn test_parse_ident() {
-    let test_src = ~"a3!";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LIdent(@"a3!")));
-    }
+    test_expect(~"a3!", &LIdent(@"a3!"));
 }
 
 #[test]
 fn test_parse_string() {
-    let test_src = ~"\"ab\\\"c\"";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LString(~"ab\"c")));
-    }
+    test_expect(~"\"ab\\\"c\"", &LString(~"ab\"c"));
 }
 
 #[test]
 fn test_parse_char() {
-    let test_src = ~"#\\h";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LChar('h')));
-    }
+    test_expect(~"#\\h", &LChar('h'));
 }
 
 #[test]
 fn test_parse_space() {
-    let test_src = ~"#\\space";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LChar(' ')));
-    }
+    test_expect(~"#\\space", &LChar(' '));
 }
 
 #[test]
 fn test_parse_bool() {
-    let test_src = ~"#t";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LBool(true)));
-    }
+    test_expect(~"#t", &LBool(true));
 }
 
 #[cfg(test)]
@@ -780,7 +765,8 @@ fn expect_int(src: ~str, n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LNum(from_int(n))));
+        let expected: LDatum<()> = LNum(from_int(n));
+        assert_eq!(val, Ok(expected));
     }
 }
 
@@ -789,7 +775,8 @@ fn expect_rational(src: ~str, d:int, n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LNum(from_rational(Rational::new(d, n)))));
+        let expected: LDatum<()> = LNum(from_rational(Rational::new(d, n)));
+        assert_eq!(val, Ok(expected));
     }
 }
 
@@ -798,7 +785,8 @@ fn expect_f64(src: ~str, f: f64) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LNum(from_f64(f))));
+        let expected: LDatum<()> = LNum(from_f64(f));
+        assert_eq!(val, Ok(expected));
     }
 }
 
@@ -807,7 +795,9 @@ fn expect_ecmplx(src: ~str, re_d: int, re_n: int, im_d: int, im_n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LNum(NExact(Rational::new(re_d, re_n), Rational::new(im_d, im_n)))));
+        let expected: LDatum<()> = LNum(NExact(Rational::new(re_d, re_n),
+                                                Rational::new(im_d, im_n)));
+        assert_eq!(val, Ok(expected));
     }
 }
 
@@ -816,7 +806,8 @@ fn expect_icmplx(src: ~str, re: f64, im: f64) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        assert_eq!(val, Ok(LNum(NInexact(re, im))));
+        let expected: LDatum<()> = LNum(NInexact(re, im));
+        assert_eq!(val, Ok(expected));
     }
 }
 
@@ -875,65 +866,51 @@ fn test_parse_polar_complex() {
     expect_icmplx(~"1@0", 1f64, 0f64);
 }
 
+#[cfg(test)]
+fn test_expect_list(src: ~str, list: ~[@LDatum<int>]) {
+    do io::with_str_reader(src) |rdr| {
+        let mut parser = Parser(rdr);
+        let expr = fmt!("%?", list);
+        match parser.parse() {
+            Err(e) => fail!(fmt!("parse failure: %s", e)),
+            Ok(val) => {
+                let val_expr = val.to_str();
+                match val.to_list() {
+                    Some(vs) => if vs != list {
+                        fail!(fmt!("expected %s, received %?", expr, vs))
+                    },
+                    None =>
+                        fail!(fmt!("expected %s, received %s", expr, val_expr)),
+                }
+            }
+       }
+    }
+}
+
 #[test]
 fn test_parse_list() {
-    let test_src = ~"(a b 1)";
-    let n = @LNum(from_int(1));
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        match parser.parse() {
-            Err(e) => fail!(e),
-            Ok(val) => assert_eq!(val.to_list(), Some(~[@LIdent(@"a"), @LIdent(@"b"), n])),
-        };
-    }
+    test_expect_list(~"(a b 1)", ~[@LIdent(@"a"), @LIdent(@"b"), @LNum(from_int(1))]);
 }
 
 #[test]
 fn test_parse_cons() {
-    let test_src = ~"(a b . 1)";
     let n = @LNum(from_int(1));
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(@"a"), @LCons(@LIdent(@"b"), n))));
-    }
+    test_expect(~"(a b . 1)", &LCons(@LIdent(@"a"), @LCons(@LIdent(@"b"), n)));
 }
 
 #[test]
 fn test_plus_ident() {
-    let test_src = ~"(+ 1)";
-    let n = @LNum(from_int(1));
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(@"+"), @LCons(n, @LNil))));
-    }
+    test_expect_list(~"(+ 1)", ~[@LIdent(@"+"), @LNum(from_int(1))]);
 }
 
 #[test]
 fn test_minus_ident() {
-    let test_src = ~"(- 2)";
-    let n = @LNum(from_int(2));
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(@"-"), @LCons(n, @LNil))));
-    }
+    test_expect_list(~"(- 2)", ~[@LIdent(@"-"), @LNum(from_int(2))]);
 }
 
 #[test]
 fn test_dots_ident() {
-    let test_src = ~"(... a)";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LCons(@LIdent(@"..."), @LCons(@LIdent(@"a"), @LNil))));
-    }
+    test_expect_list(~"(... a)", ~[@LIdent(@"..."), @LIdent(@"a")]);
 }
 
 #[test]
@@ -943,22 +920,10 @@ fn test_parse_dotted_number() {
 
 #[test]
 fn test_parse_quotation() {
-    let test_src = ~"'()";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LQuote(@LNil)));
-    }
+    test_expect(~"'()", &LQuote(@LNil));
 }
 
 #[test]
 fn test_parse_plus() {
-    let test_src = ~"+";
-
-    do io::with_str_reader(test_src) |rdr| {
-        let mut parser = Parser(rdr);
-        let val = parser.parse();
-        assert_eq!(val, Ok(LIdent(@"+")));
-    }
+    test_expect(~"+", &LIdent(@"+"));
 }

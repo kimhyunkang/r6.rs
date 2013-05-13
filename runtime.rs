@@ -6,12 +6,53 @@ use core::num::One::one;
 use core::hashmap::linear::LinearMap;
 use stack::*;
 
+enum RuntimeData {
+    RPrim(PFunc),
+    RProc(~[@str],
+        Option<@str>,
+        ~[@LDatum<RuntimeData>],
+        @mut Stack<LinearMap<@str, @LDatum<RuntimeData>>>),
+}
+
+fn eq(lhs: &RuntimeData, rhs: &RuntimeData) -> bool {
+    match (lhs, rhs) {
+        (&RPrim(l), &RPrim(r)) => l == r,
+        (&RProc(_,_,_,_), &RProc(_,_,_,_)) => lhs == rhs,
+        _ => false,
+    }
+}
+
+impl Eq for RuntimeData {
+    fn eq(&self, other: &RuntimeData) -> bool {
+        eq(self, other)
+    }
+
+    fn ne(&self, other: &RuntimeData) -> bool {
+        !eq(self, other)
+    }
+}
+
+fn data_to_str(data: &RuntimeData) -> ~str {
+    match *data {
+        RPrim(f) => f.to_str(),
+        RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", ptr::to_uint(data)),
+    }
+}
+
+impl ToStr for RuntimeData {
+    fn to_str(&self) -> ~str {
+        data_to_str(self)
+    }
+}
+
+type RDatum = LDatum<RuntimeData>;
+
 struct Runtime {
     stdin: @io::Reader,
     stdout: @io::Writer,
     stderr: @io::Writer,
-    env: @mut Stack<LinearMap<@str, @LDatum>>,
-    global: LinearMap<@str, Either<@LDatum, PrimSyntax>>,
+    env: @mut Stack<LinearMap<@str, @RDatum>>,
+    global: LinearMap<@str, Either<@RDatum, PrimSyntax>>,
     qq_lvl: uint,
 }
 
@@ -53,11 +94,11 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
     }
 }
 
-fn load_prelude() -> LinearMap<@str, Either<@LDatum, PrimSyntax>> {
+fn load_prelude() -> LinearMap<@str, Either<@RDatum, PrimSyntax>> {
     let mut map = LinearMap::new();
     for vec::each(prelude()) |&pair| {
         let (key, func) = pair;
-        map.insert(key, Left(@LPrim(func)));
+        map.insert(key, Left(@LExt(RPrim(func))));
     }
     for vec::each(syntax_prelude()) |&pair| {
         let (key, syntax) = pair;
@@ -66,9 +107,9 @@ fn load_prelude() -> LinearMap<@str, Either<@LDatum, PrimSyntax>> {
     map
 }
 
-priv fn call_prim1(args: ~[@LDatum],
-                op: &fn(@LDatum) -> Result<@LDatum, RuntimeError>)
-    -> Result<@LDatum, RuntimeError>
+priv fn call_prim1(args: ~[@RDatum],
+                op: &fn(@RDatum) -> Result<@RDatum, RuntimeError>)
+    -> Result<@RDatum, RuntimeError>
 {
     if args.len() == 1 {
         op(args[0])
@@ -77,9 +118,9 @@ priv fn call_prim1(args: ~[@LDatum],
     }
 }
 
-priv fn call_prim2(args: ~[@LDatum],
-                op: &fn(@LDatum, @LDatum) -> Result<@LDatum, RuntimeError>)
-    -> Result<@LDatum, RuntimeError>
+priv fn call_prim2(args: ~[@RDatum],
+                op: &fn(@RDatum, @RDatum) -> Result<@RDatum, RuntimeError>)
+    -> Result<@RDatum, RuntimeError>
 {
     if args.len() == 2 {
         op(args[0], args[1])
@@ -88,9 +129,9 @@ priv fn call_prim2(args: ~[@LDatum],
     }
 }
 
-priv fn call_num_prim2(args: ~[@LDatum],
-                    op: &fn(&LNumeric, &LNumeric) -> Result<@LDatum, RuntimeError>)
-    -> Result<@LDatum, RuntimeError>
+priv fn call_num_prim2(args: ~[@RDatum],
+                    op: &fn(&LNumeric, &LNumeric) -> Result<@RDatum, RuntimeError>)
+    -> Result<@RDatum, RuntimeError>
 {
     if args.len() == 2 {
         match *args[0] {
@@ -105,10 +146,10 @@ priv fn call_num_prim2(args: ~[@LDatum],
     }
 }
 
-priv fn call_num_foldl(args: ~[@LDatum],
+priv fn call_num_foldl(args: ~[@RDatum],
                     a0: LNumeric,
                     op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
-    -> Result<@LDatum, RuntimeError>
+    -> Result<@RDatum, RuntimeError>
 {
     let mut res = a0;
     let mut err = false;
@@ -138,7 +179,7 @@ priv fn call_num_foldl(args: ~[@LDatum],
     }
 }
 
-priv fn get_syms(&arg: &@LDatum) -> Result<(~[@str], Option<@str>), ~str> {
+priv fn get_syms(&arg: &@RDatum) -> Result<(~[@str], Option<@str>), ~str> {
     let mut iter = arg;
     let mut args : ~[@str] = ~[];
     let mut varargs : Option<@str> = None;
@@ -171,7 +212,7 @@ priv fn get_syms(&arg: &@LDatum) -> Result<(~[@str], Option<@str>), ~str> {
 }
 
 priv impl Runtime {
-    fn get_syntax(&self, val: @LDatum) -> Option<PrimSyntax> {
+    fn get_syntax(&self, val: @RDatum) -> Option<PrimSyntax> {
         match *val {
             LIdent(name) => match self.global.find(&name) {
                 Some(&Right(syn)) => Some(syn),
@@ -181,8 +222,8 @@ priv impl Runtime {
         }
     }
 
-    fn find_var(&self, name: &@str) -> Result<@LDatum, RuntimeError> {
-        let mut val: Option<@LDatum> = None;
+    fn find_var(&self, name: &@str) -> Result<@RDatum, RuntimeError> {
+        let mut val: Option<@RDatum> = None;
 
         do self.env.each |frame| {
             match frame.find(name) {
@@ -204,7 +245,7 @@ priv impl Runtime {
         }
     }
 
-    fn define(&mut self, args: ~[@LDatum]) -> Result<(@str, @LDatum), RuntimeError> {
+    fn define(&mut self, args: ~[@RDatum]) -> Result<(@str, @RDatum), RuntimeError> {
         match get_syms(&args[0]) {
             Err(e) => Err(BadSyntax(SynDefine, e)),
             Ok((anames, varargs)) =>
@@ -223,7 +264,7 @@ priv impl Runtime {
                     let name = anames[0];
                     let anames = vec::from_slice(vec::slice(anames, 1, anames.len()));
                     let seq = vec::from_slice(vec::slice(args, 1, args.len()));
-                    let proc = @LProc(anames, varargs, seq, self.env);
+                    let proc = @LExt(RProc(anames, varargs, seq, self.env));
                     Ok((name, proc))
                 }
         }
@@ -231,7 +272,7 @@ priv impl Runtime {
 
     fn run_syntax(&mut self,
                 syn: PrimSyntax,
-                args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
+                args: ~[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         match syn {
             SynIf => if args.len() == 3 {
@@ -252,7 +293,7 @@ priv impl Runtime {
                         Err(e) => Err(BadSyntax(SynLambda, e)),
                         Ok((anames, varargs)) => {
                             let seq = vec::from_slice(vec::slice(args, 1, args.len()));
-                            Ok(@LProc(anames, varargs, seq, self.env))
+                            Ok(@LExt(RProc(anames, varargs, seq, self.env)))
                         },
                     }
                 },
@@ -313,9 +354,9 @@ priv impl Runtime {
     fn call_proc(&mut self,
                 anames: &~[@str],
                 vargs: &Option<@str>,
-                code: &~[@LDatum],
-                &frame: &@mut Stack<LinearMap<@str, @LDatum>>,
-                args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
+                code: &~[@RDatum],
+                &frame: &@mut Stack<LinearMap<@str, @RDatum>>,
+                args: ~[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         // create new frame to store args
         let mut arg_frame = LinearMap::new();
@@ -344,7 +385,7 @@ priv impl Runtime {
 
         // create new local env
         self.env = @mut push(frame, arg_frame);
-        let mut res:Result<@LDatum, RuntimeError> = Err(NilEval);
+        let mut res:Result<@RDatum, RuntimeError> = Err(NilEval);
         do code.each() |&val| {
             res = self.eval(val);
             res.is_ok()
@@ -358,7 +399,7 @@ priv impl Runtime {
 
     fn call_prim(&mut self,
                 f: PFunc,
-                args: ~[@LDatum]) -> Result<@LDatum, RuntimeError>
+                args: ~[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         match f {
             PEval => do call_prim1(args) |arg| {
@@ -392,7 +433,7 @@ priv impl Runtime {
         }
     }
 
-    fn recursive_qq(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+    fn recursive_qq(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError> {
         match *val {
             LCons(h,t) =>
                 do result::chain(self.recursive_qq(h)) |qh| {
@@ -411,14 +452,14 @@ priv impl Runtime {
         }
     }
 
-    fn quasiquote(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+    fn quasiquote(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError> {
         self.qq_lvl += 1;
         let res = self.recursive_qq(val);
         self.qq_lvl -= 1;
         res
     }
 
-    fn unquote(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError> {
+    fn unquote(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError> {
         if self.qq_lvl == 0 {
             Err(BadSyntax(SynUnquote, ~"unquote not nested in quasiquote"))
         } else {
@@ -435,11 +476,24 @@ priv impl Runtime {
             res
         }
     }
+
+    fn call(&mut self, proc: &RuntimeData, aexprs: ~[@RDatum]) -> Result<@RDatum, RuntimeError> {
+        match result::map_vec(aexprs, |&expr| self.eval(expr))
+        {
+            Ok(args) => match proc {
+                &RPrim(f) =>
+                    self.call_prim(f, args),
+                &RProc(ref anames, ref vargs, ref code, ref env) =>
+                    self.call_proc(anames, vargs, code, env, args),
+            },
+            Err(e) => Err(e),
+        }
+    }
 }
 
-priv fn set_var(env: @mut Stack<LinearMap<@str, @LDatum>>,
+priv fn set_var(env: @mut Stack<LinearMap<@str, @RDatum>>,
                 name: &@str,
-                val: @LDatum) -> bool {
+                val: @RDatum) -> bool {
     let mut success = false;
 
     do env.each_mut |frame| {
@@ -468,7 +522,7 @@ pub impl Runtime {
         }
     }
 
-    fn eval(&mut self, val: @LDatum) -> Result<@LDatum, RuntimeError>
+    fn eval(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError>
     {
         match *val {
             LIdent(name) => self.find_var(&name),
@@ -481,20 +535,7 @@ pub impl Runtime {
                                 self.run_syntax(syntax, aexprs),
                             None =>
                                 match self.eval(fexpr) {
-                                    Ok(@LPrim(f)) =>
-                                        match result::map_vec(aexprs, |&expr| self.eval(expr))
-                                        {
-                                            Ok(args) => self.call_prim(f, args),
-                                            Err(e) => Err(e),
-                                        },
-                                    Ok(@LProc(ref anames, ref vargs, ref code, ref env)) =>
-                                        match result::map_vec(aexprs, |&expr| self.eval(expr))
-                                        {
-                                            Ok(args) =>
-                                                self.call_proc(anames, vargs, code, env, args),
-                                            Err(e) =>
-                                                Err(e),
-                                        },
+                                    Ok(@LExt(ref proc)) => self.call(proc, aexprs),
                                     Ok(_) => Err(NotCallable),
                                     Err(e) => Err(e),
                                 },

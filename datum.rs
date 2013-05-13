@@ -1,76 +1,40 @@
 use numeric::LNumeric;
-use primitive::PFunc;
-use core::hashmap::linear::LinearMap;
-use stack::Stack;
 
-pub enum LDatum {
+#[deriving(Eq)]
+pub enum LDatum<T> {
     LIdent(@str),
     LString(~str),
     LChar(char),
     LBool(bool),
     LNum(LNumeric),
-    LCons(@LDatum, @LDatum),
+    LCons(@LDatum<T>, @LDatum<T>),
     LNil,
-    LPrim(PFunc),
-    LQuote(@LDatum),
-    LQQuote(@LDatum),
-    LUnquote(@LDatum),
-    LProc(~[@str], Option<@str>, ~[@LDatum], @mut Stack<LinearMap<@str, @LDatum>>),
+    LQuote(@LDatum<T>),
+    LQQuote(@LDatum<T>),
+    LUnquote(@LDatum<T>),
+    LExt(T),
 }
 
-fn eq(&lhs: &LDatum, &rhs: &LDatum) -> bool {
-    ptr::ref_eq(&lhs, &rhs) ||
-    match (lhs, rhs) {
-        (LIdent(l), LIdent(r)) => l == r,
-        (LString(l), LString(r)) => l == r,
-        (LChar(l), LChar(r)) => l == r,
-        (LBool(l), LBool(r)) => l == r,
-        (LNum(l), LNum(r)) => l == r,
-        (LCons(lh, lt), LCons(rh, rt)) => lh == rh && lt == rt,
-        (LNil, LNil) => true,
-        (LPrim(l), LPrim(r)) => l == r,
-        (LQuote(l), LQuote(r)) => l == r,
-        (LQQuote(l), LQQuote(r)) => l == r,
-        (LUnquote(l), LUnquote(r)) => l == r,
-        _ => false,
-    }
-}
-
-impl Eq for LDatum {
-    fn eq(&self, other: &LDatum) -> bool {
-        eq(self, other)
-    }
-
-    fn ne(&self, other: &LDatum) -> bool {
-        !eq(self, other)
-    }
-}
-
-impl ToStr for LDatum {
+impl<T: ToStr> ToStr for LDatum<T> {
     fn to_str(&self) -> ~str {
         do io::with_str_writer |wr| {
-            self.write(wr)
+            write_ldatum(wr, self)
         }
     }
-
 }
 
-pub impl LDatum {
-    fn to_list(&self) -> Option<~[@LDatum]> {
+pub impl<T> LDatum<T> {
+    fn to_list(&self) -> Option<~[@LDatum<T>]> {
         match *self {
             LCons(h, t) => datum_to_list(h, t),
             LNil => Some(~[]),
             _ => None,
         }
     }
-
-    fn write(&self, writer: @io::Writer) {
-        write_ldatum(writer, self)
-    }
 }
 
-priv fn datum_to_list(head: @LDatum, tail: @LDatum) -> Option<~[@LDatum]> {
-    let mut x: @LDatum = tail;
+priv fn datum_to_list<T>(head: @LDatum<T>, tail: @LDatum<T>) -> Option<~[@LDatum<T>]> {
+    let mut x: @LDatum<T> = tail;
     let mut list_flag = false;
 
     let list =
@@ -98,8 +62,7 @@ priv fn datum_to_list(head: @LDatum, tail: @LDatum) -> Option<~[@LDatum]> {
     }
 }
 
-priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
-    let addr = ptr::to_uint(&v);
+priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
     match v {
         LIdent(s) => wr.write_str(s),
         LString(s) => wr.write_str(fmt!("%?", copy s)),
@@ -118,11 +81,6 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             write_list(wr, tail);
         },
         LNil => wr.write_str("()"),
-        LPrim(f) => {
-            wr.write_str("<primitive function ");
-            wr.write_str(f.to_str());
-            wr.write_char('>');
-        },
         LQuote(v) => {
             wr.write_char('\'');
             write_ldatum(wr, v);
@@ -135,13 +93,13 @@ priv fn write_ldatum(wr: @io::Writer, &v: &LDatum) {
             wr.write_char(',');
             write_ldatum(wr, v);
         },
-        LProc(_,_,_,_) => {
-            wr.write_str(fmt!("<procedure 0x%08x>", addr));
+        LExt(v) => {
+            wr.write_str(v.to_str());
         },
     }
 }
 
-priv fn write_list(wr: @io::Writer, &v: &LDatum) {
+priv fn write_list<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
     match v {
         LCons(head, tail) => {
             wr.write_char(' ');
