@@ -212,7 +212,7 @@ priv fn get_syms(&arg: &@RDatum) -> Result<(~[@str], Option<@str>), ~str> {
 }
 
 priv impl Runtime {
-    fn get_syntax(&self, val: @RDatum) -> Option<PrimSyntax> {
+    fn get_syntax(&self, val: &RDatum) -> Option<PrimSyntax> {
         match *val {
             LIdent(name) => match self.global.find(&name) {
                 Some(&Right(syn)) => Some(syn),
