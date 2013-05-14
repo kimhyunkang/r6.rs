@@ -76,7 +76,11 @@ priv fn datum_to_list<T>(head: @LDatum<T>, tail: @LDatum<T>) -> Option<~[@LDatum
 priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
     match v {
         LIdent(s) => wr.write_str(s),
-        LString(s) => wr.write_str(fmt!("%?", copy s)),
+        LString(s) => {
+            wr.write_char('"');
+            wr.write_str(s);
+            wr.write_char('"');
+        },
         LChar(' ') => wr.write_str("#\\space"),
         LChar('\n') => wr.write_str("#\\newline"),
         LChar(c) => {
