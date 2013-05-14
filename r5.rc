@@ -12,4 +12,5 @@ pub mod datum;
 pub mod rational;
 pub mod numeric;
 pub mod parser;
+pub mod macro;
 pub mod runtime;
