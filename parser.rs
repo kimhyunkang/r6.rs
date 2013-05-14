@@ -228,19 +228,19 @@ pub impl Parser {
             '\'' => {
                 self.consume();
                 do result::chain(self.parse_datum()) |v| {
-                    Ok(LQuote(@v))
+                    Ok(LCons(@LIdent(@"quote"), @LCons(@v, @LNil)))
                 }
             },
             '`' => {
                 self.consume();
                 do result::chain(self.parse_datum()) |v| {
-                    Ok(LQQuote(@v))
+                    Ok(LCons(@LIdent(@"quasiquote"), @LCons(@v, @LNil)))
                 }
             },
             ',' => {
                 self.consume();
                 do result::chain(self.parse_datum()) |v| {
-                    Ok(LUnquote(@v))
+                    Ok(LCons(@LIdent(@"unquote"), @LCons(@v, @LNil)))
                 }
             },
             _ =>
@@ -920,7 +920,7 @@ fn test_parse_dotted_number() {
 
 #[test]
 fn test_parse_quotation() {
-    test_expect(~"'()", &LQuote(@LNil));
+    test_expect(~"'()", &LCons(@LIdent(@"quote"), @LCons(@LNil, @LNil)));
 }
 
 #[test]

@@ -9,10 +9,15 @@ pub enum LDatum<T> {
     LNum(LNumeric),
     LCons(@LDatum<T>, @LDatum<T>),
     LNil,
-    LQuote(@LDatum<T>),
-    LQQuote(@LDatum<T>),
-    LUnquote(@LDatum<T>),
     LExt(T),
+}
+
+#[deriving(Eq)]
+pub enum Quotation
+{
+    Quote,
+    QuasiQuote,
+    Unquote,
 }
 
 impl<T: ToStr> ToStr for LDatum<T> {
@@ -81,27 +86,48 @@ priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
         LBool(true) => wr.write_str("#t"),
         LBool(false) => wr.write_str("#f"),
         LNum(f) => wr.write_str(f.to_str()),
-        LCons(head, tail) => {
-            wr.write_char('(');
-            write_ldatum(wr, head);
-            write_list(wr, tail);
+        LCons(ref head, ref tail) => {
+            match is_quote(head, tail) {
+                Some((name, v)) => {
+                    let ch = match name {
+                        Quote => '\'',
+                        Unquote => ',',
+                        QuasiQuote => '`',
+                    };
+                    wr.write_char(ch);
+                    write_ldatum(wr, v);
+                },
+                None => {
+                    wr.write_char('(');
+                    write_ldatum(wr, *head);
+                    write_list(wr, *tail);
+                },
+            }
         },
         LNil => wr.write_str("()"),
-        LQuote(v) => {
-            wr.write_char('\'');
-            write_ldatum(wr, v);
-        },
-        LQQuote(v) => {
-            wr.write_char('`');
-            write_ldatum(wr, v);
-        },
-        LUnquote(v) => {
-            wr.write_char(',');
-            write_ldatum(wr, v);
-        },
         LExt(v) => {
             wr.write_str(v.to_str());
         },
+    }
+}
+
+pub fn is_quote<T>(&head: &@LDatum<T>, &tail: &@LDatum<T>) -> Option<(Quotation, @LDatum<T>)> {
+    match *head {
+        LIdent(name) =>
+            match *tail {
+                LCons(v, @LNil) => if name == @"quote" {
+                        Some((Quote, v))
+                    } else if name == @"quasiquote" {
+                        Some((QuasiQuote, v))
+                    } else if name == @"unquote" {
+                        Some((Unquote, v))
+                    } else {
+                        None
+                    },
+                _ => None
+            },
+        _ =>
+            None,
     }
 }
 

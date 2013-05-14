@@ -339,12 +339,12 @@ priv impl Runtime {
                     Err(BadSyntax(SynQuote, ~"bad number of arguments"))
                 },
             SynQQuote => if args.len() == 1 {
-                    self.quasiquote(args[0])
+                    self.quasiquote(&args[0])
                 } else {
                     Err(BadSyntax(SynQQuote, ~"bad number of arguments"))
                 },
             SynUnquote => if args.len() == 1 {
-                    self.unquote(args[0])
+                    self.unquote(&args[0])
                 } else {
                     Err(BadSyntax(SynUnquote, ~"bad number of arguments"))
                 },
@@ -433,43 +433,46 @@ priv impl Runtime {
         }
     }
 
-    fn recursive_qq(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError> {
+    fn recursive_qq(&mut self, val: &@RDatum) -> Result<@RDatum, RuntimeError> {
         match *val {
-            LCons(h,t) =>
-                do result::chain(self.recursive_qq(h)) |qh| {
-                    do result::map(&self.recursive_qq(t)) |&qt| {
-                        @LCons(qh, qt)
-                    }
+            @LCons(ref h, ref t) =>
+                match is_quote(h,t) {
+                    Some((QuasiQuote, ref v)) => 
+                        do result::map(&self.quasiquote(v)) |&qv| {
+                            @LCons(@LIdent(@"quasiquote"), @LCons(qv, @LNil))
+                        },
+                    Some((Unquote, ref v)) => 
+                        self.unquote(v),
+                    _ =>
+                        do result::chain(self.recursive_qq(h)) |qh| {
+                            do result::map(&self.recursive_qq(t)) |&qt| {
+                                @LCons(qh, qt)
+                            }
+                        },
                 },
-            LQQuote(v) =>
-                do result::map(&self.quasiquote(v)) |&qv| {
-                    @LQQuote(qv)
-                },
-            LUnquote(v) =>
-                self.unquote(v),
             _ => 
-                Ok(val),
+                Ok(*val),
         }
     }
 
-    fn quasiquote(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError> {
+    fn quasiquote(&mut self, val: &@RDatum) -> Result<@RDatum, RuntimeError> {
         self.qq_lvl += 1;
         let res = self.recursive_qq(val);
         self.qq_lvl -= 1;
         res
     }
 
-    fn unquote(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError> {
+    fn unquote(&mut self, val: &@RDatum) -> Result<@RDatum, RuntimeError> {
         if self.qq_lvl == 0 {
             Err(BadSyntax(SynUnquote, ~"unquote not nested in quasiquote"))
         } else {
             self.qq_lvl -= 1;
             let res =
             if self.qq_lvl == 0 {
-                self.eval(val)
+                self.eval(*val)
             } else {
                 do result::map(&self.recursive_qq(val)) |&qval| {
-                    @LUnquote(qval)
+                    @LCons(@LIdent(@"unquote"), @LCons(qval, @LNil))
                 }
             };
             self.qq_lvl += 1;
@@ -542,9 +545,6 @@ pub impl Runtime {
                         }
                     },
                 },
-            LQuote(val) => Ok(val),
-            LQQuote(val) => self.quasiquote(val),
-            LUnquote(val) => self.unquote(val),
             LNil => Err(NilEval),
             _ => Ok(val),
         }
