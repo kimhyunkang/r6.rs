@@ -1,4 +1,6 @@
 use numeric::LNumeric;
+use std::io;
+use std::vec;
 
 #[deriving(Eq)]
 pub enum LDatum<T> {
@@ -28,8 +30,8 @@ impl<T: ToStr> ToStr for LDatum<T> {
     }
 }
 
-pub impl<T> LDatum<T> {
-    fn to_list(&self) -> Option<~[@LDatum<T>]> {
+impl<T> LDatum<T> {
+    pub fn to_list(&self) -> Option<~[@LDatum<T>]> {
         match *self {
             LCons(h, t) => datum_to_list(h, t),
             LNil => Some(~[]),
@@ -38,8 +40,8 @@ pub impl<T> LDatum<T> {
     }
 }
 
-pub impl<T: ToStr> LDatum<T> {
-    fn write(&self, wr: @io::Writer) {
+impl<T: ToStr> LDatum<T> {
+    pub fn write(&self, wr: @io::Writer) {
         write_ldatum(wr, self)
     }
 }

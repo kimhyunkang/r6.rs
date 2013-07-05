@@ -1,9 +1,4 @@
-use core::num::{One, Zero};
-use core::num::One::one;
-use core::num::Zero::zero;
-use core::cmp::{Eq};
-use core::ops::{Neg, Add, Sub, Mul, Div};
-use core::to_str::ToStr;
+use std::num::{One, Zero};
 
 use rational::Rational;
 
@@ -13,22 +8,22 @@ pub enum LNumeric {
     NInexact(f64, f64),
 }
 
-pub impl LNumeric {
-    fn is_inexact(&self) -> bool {
+impl LNumeric {
+    pub fn is_inexact(&self) -> bool {
         match *self {
             NExact(_,_) => false,
             NInexact(_,_) => true,
         }
     }
 
-    fn is_exact(&self) -> bool {
+    pub fn is_exact(&self) -> bool {
         match *self {
             NExact(_,_) => true,
             NInexact(_,_) => false,
         }
     }
 
-    fn is_zero(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         is_zero(self)
     }
 }
@@ -68,13 +63,20 @@ impl ToStr for LNumeric {
 
 impl One for LNumeric {
     fn one() -> LNumeric {
-        NExact(one(), zero())
+        NExact(One::one(), Zero::zero())
     }
 }
 
 impl Zero for LNumeric {
     fn zero() -> LNumeric {
-        NExact(zero(), zero())
+        NExact(Zero::zero(), Zero::zero())
+    }
+
+    fn is_zero(&self) -> bool {
+        match *self {
+            NExact(ref re, ref im) => re.is_zero() && im.is_zero(),
+            NInexact(ref re, ref im) => re.is_zero() && im.is_zero(),
+        }
     }
 }
 
@@ -188,11 +190,11 @@ impl Div<LNumeric, LNumeric> for LNumeric {
 }
 
 pub fn from_int(n: int) -> LNumeric {
-    NExact(Rational::new(n, 1), zero())
+    NExact(Rational::new(n, 1), Zero::zero())
 }
 
 pub fn from_rational(re: Rational) -> LNumeric {
-    NExact(re, zero())
+    NExact(re, Zero::zero())
 }
 
 pub fn from_f64(re: f64) -> LNumeric {

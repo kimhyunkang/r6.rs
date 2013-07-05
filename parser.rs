@@ -1,3 +1,9 @@
+use std::io;
+use std::num;
+use std::f64;
+use std::str;
+use std::vec;
+use std::num::FromStrRadix;
 use rational::Rational;
 use numeric::*;
 use datum::*;
@@ -94,14 +100,14 @@ priv fn build_complex(exactness: Option<bool>,
                     ipart: &PResult) -> Result<LNumeric, ~str> {
     if exactness == Some(true) || 
             (exactness == None && !is_pfloat(rpart) && !is_pfloat(ipart)) {
-        do result::chain(build_exact(rsign, radix, rpart)) |re| {
-            do result::chain(build_exact(isign, radix, ipart)) |im| {
+        do build_exact(rsign, radix, rpart).chain |re| {
+            do build_exact(isign, radix, ipart).chain |im| {
                 Ok(NExact(re, im))
             }
         }
     } else {
-        do result::chain(build_inexact(rsign, radix, rpart)) |re| {
-            do result::chain(build_inexact(isign, radix, ipart)) |im| {
+        do build_inexact(rsign, radix, rpart).chain |re| {
+            do build_inexact(isign, radix, ipart).chain |im| {
                 Ok(NInexact(re, im))
             }
         }
@@ -109,28 +115,30 @@ priv fn build_complex(exactness: Option<bool>,
 }
 
 priv fn s_to_f64(s: &str, sign: bool) -> f64 {
-    match f64::from_str(s) {
+    let maybe_f64:Option<f64> = FromStr::from_str(s);
+    match maybe_f64 {
         Some(f) => if sign { f } else { -f },
         None => fail!(~"failed to convert float literal: " + s),
     }
 }
 
 priv fn s_to_int(s: &str, sign: bool, r: uint) -> int {
-    match int::from_str_radix(s, r) {
+    let maybe_int:Option<int> = FromStrRadix::from_str_radix(s, r);
+    match maybe_int {
         Some(z) => if sign { z } else { -z },
         None => fail!(~"failed to convert int literal " + s + " with radix " + r.to_str()),
     }
 }
 
 struct Parser {
-    priv reader: @io::Reader,
+    priv reader: @Reader,
     priv buf: char,
     priv has_buf: bool,
     line: uint,
     col: uint,
 }
 
-pub fn Parser(reader: @io::Reader) -> Parser {
+pub fn Parser(reader: @Reader) -> Parser {
     Parser {
         reader: reader,
         has_buf: false,
@@ -149,15 +157,15 @@ priv fn id_init(c: char) -> bool {
     }
 }
 
-pub impl Parser {
+impl Parser {
 
     #[inline(always)]
-    fn pos(&self) -> (uint, uint) {
+    pub fn pos(&self) -> (uint, uint) {
         (self.line, self.col)
     }
 
-    fn parse<T>(&mut self) -> Result<LDatum<T>, ~str> {
-        do result::chain(self.parse_datum()) |v| {
+    pub fn parse<T>(&mut self) -> Result<LDatum<T>, ~str> {
+        do self.parse_datum().chain |v| {
             self.consume_whitespace();
 
             if(self.eof()) {
@@ -168,7 +176,7 @@ pub impl Parser {
         }
     }
 
-    fn parse_datum<T>(&mut self) -> Result<LDatum<T>, ~str> {
+    pub fn parse_datum<T>(&mut self) -> Result<LDatum<T>, ~str> {
         self.consume_whitespace();
 
         if(self.eof()) {
@@ -180,7 +188,7 @@ pub impl Parser {
             _ if id_init(c) =>
                 Ok(LIdent(self.parse_ident())),
             '"' =>
-                do result::chain(self.parse_string()) |s| {
+                do self.parse_string().chain |s| {
                     Ok(LString(s))
                 },
             '#' => {
@@ -188,7 +196,7 @@ pub impl Parser {
                     self.parse_sharp()
                 },
             '0'..'9' =>
-                do result::chain(self.parse_number(~"")) |n| {
+                do self.parse_number("").chain |n| {
                     Ok(LNum(n))
                 },
             '(' => {
@@ -209,7 +217,7 @@ pub impl Parser {
                 } else {
                     match self.lookahead() {
                         '0' .. '9' | 'i' | '.' =>
-                            do result::chain(self.parse_number(str::from_char(c))) |n| {
+                            do self.parse_number(str::from_char(c)).chain |n| {
                                 Ok(LNum(n))
                             },
                         _ =>
@@ -227,19 +235,19 @@ pub impl Parser {
             },
             '\'' => {
                 self.consume();
-                do result::chain(self.parse_datum()) |v| {
+                do self.parse_datum().chain |v| {
                     Ok(LCons(@LIdent(@"quote"), @LCons(@v, @LNil)))
                 }
             },
             '`' => {
                 self.consume();
-                do result::chain(self.parse_datum()) |v| {
+                do self.parse_datum().chain |v| {
                     Ok(LCons(@LIdent(@"quasiquote"), @LCons(@v, @LNil)))
                 }
             },
             ',' => {
                 self.consume();
-                do result::chain(self.parse_datum()) |v| {
+                do self.parse_datum().chain |v| {
                     Ok(LCons(@LIdent(@"unquote"), @LCons(@v, @LNil)))
                 }
             },
@@ -247,9 +255,7 @@ pub impl Parser {
                 Err(~"unexpected character: " + str::from_char(c)),
         }
     }
-}
 
-priv impl Parser {
     fn eof(&mut self) -> bool {
         !self.has_buf && self.reader.eof()
     }
@@ -289,7 +295,7 @@ priv impl Parser {
             }
         }
 
-        if v.contains(&self.buf) {
+        if vec::contains(v, &self.buf) {
             self.has_buf = false;
             if(self.buf == '\n') {
                 self.line += 1;
@@ -338,7 +344,7 @@ priv impl Parser {
             'f' =>
                 Ok(LBool(false)),
             'e' | 'i' | 'b' | 'o' | 'd' | 'x' => 
-                do result::chain(self.parse_number(~"#" + str::from_char(c))) |n| {
+                do self.parse_number(~"#" + str::from_char(c)).chain |n| {
                     Ok(LNum(n))
                 },
             _ =>
@@ -397,7 +403,7 @@ priv impl Parser {
             DSingle
         } else {
             match self.lookahead() {
-                '0'..'9' => match self.parse_number(~".") {
+                '0'..'9' => match self.parse_number(".") {
                     Ok(x) => DDatum(LNum(x)),
                     Err(e) => DErr(e),
                 },
@@ -440,7 +446,7 @@ priv impl Parser {
     }
 
     fn parse_number(&mut self, init: &str) -> Result<LNumeric, ~str> {
-        do result::chain(self.parse_num_prefix(init)) |pref| {
+        do self.parse_num_prefix(init).chain |pref| {
             let (exactness, radix) = pref;
             let r = match radix { None => 10, Some(d) => d };
 
@@ -468,14 +474,14 @@ priv impl Parser {
                         Some('i') => 
                             build_complex(exactness, r, true, &PInt(~"0"), rsign, &rpart),
                         Some('@') => {
-                            do result::chain(build_inexact(rsign, r, &rpart)) |abs| {
+                            do build_inexact(rsign, r, &rpart).chain |abs| {
                                 let asign = match self.try_consume(['+', '-']) {
                                     Some('-') => false,
                                     _ => true,
                                 };
                                 match self.parse_real(r, false) {
                                     NSome(apart) =>
-                                        do result::chain(build_inexact(asign, r, &apart)) |arg| {
+                                        do build_inexact(asign, r, &apart).chain |arg| {
                                             let re = abs * f64::cos(arg);
                                             let im = abs * f64::sin(arg);
                                             Ok(NInexact(re, im))
@@ -553,7 +559,7 @@ priv impl Parser {
 
     fn parse_decimal(&mut self) -> NilRes<PResult, ~str> {
         let (x, xr) = self.parse_radix(10);
-        let int_part = x + str::repeat("0", xr);
+        let int_part = x + "0".repeat(xr);
 
         match self.try_consume(['.', 'e', 's', 'f', 'd', 'l', '/']) {
             Some('.') => {
@@ -580,7 +586,7 @@ priv impl Parser {
                 if(y.is_empty()) {
                     NErr(~"invalid rational literal")
                 } else {
-                    NSome(PRational(int_part, y + str::repeat("0", yr)))
+                    NSome(PRational(int_part, y + "0".repeat(yr)))
                 }
             },
             Some(_) => {
@@ -604,10 +610,10 @@ priv impl Parser {
             if(y.is_empty()) {
                 NErr(~"invalid rational number")
             } else {
-                NSome(PRational(x + str::repeat("0", xr), y + str::repeat("0", yr)))
+                NSome(PRational(x + "0".repeat(xr), y + "0".repeat(yr)))
             }
         } else {
-            NSome(PInt(x + str::repeat("0", xr)))
+            NSome(PInt(x + "0".repeat(xr)))
         }
     }
 
@@ -624,7 +630,7 @@ priv impl Parser {
                     sharps += 1u;
                 }
                 break;
-            } else if(char::is_digit_radix(c, radix)) {
+            } else if(c.is_digit_radix(radix)) {
                 consumed = true;
                 self.consume();
                 sum += str::from_char(c);
@@ -637,14 +643,14 @@ priv impl Parser {
     }
 
     fn parse_num_prefix(&mut self, init: &str) -> Result<(Option<bool>, Option<uint>), ~str> {
-        let mut exactness =
+        let exactness =
         match(init) {
             "#i" => Some(false),
             "#e" => Some(true),
             _ => None,
         };
 
-        let mut radix =
+        let radix =
         match(init) {
             "#b" => Some(2u),
             "#o" => Some(8u),

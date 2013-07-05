@@ -1,3 +1,7 @@
+#[cfg(test)]
+use std::io;
+
+use std::vec;
 use datum::*;
 
 #[cfg(test)]
@@ -16,7 +20,7 @@ pub enum Pattern<T> {
     PDatum(@LDatum<T>),
 }
 
-priv impl PatternCompiler {
+impl PatternCompiler {
     fn compile_before<T>(&mut self,
                         last_pat: ~Pattern<T>,
                         sum: ~[~Pattern<T>],
@@ -74,7 +78,7 @@ priv impl PatternCompiler {
     fn compile_val<T>(&mut self, code: &@LDatum<T>) -> Result<~Pattern<T>, ~str> {
         match **code {
             LCons(h, t) => {
-                do result::chain(self.compile_val(&h)) |last_pat| {
+                do self.compile_val(&h).chain |last_pat| {
                     self.compile_before(last_pat, ~[], &t)
                 }
             },
@@ -85,9 +89,9 @@ priv impl PatternCompiler {
                     Err(~"identifier ... is only valid in list context")
                 } else if name == @"_" {
                     Ok(~PAny)
-                } else if self.keywords.contains(&name) {
+                } else if vec::contains(self.keywords, &name) {
                     Ok(~PDatum(*code))
-                } else if self.vars.contains(&name) {
+                } else if vec::contains(self.vars, &name) {
                     Err(~"duplicate pattern variable")
                 } else {
                     self.vars.push(name);
@@ -96,17 +100,15 @@ priv impl PatternCompiler {
             _ => Ok(~PDatum(*code)),
         }
     }
-}
 
-pub impl PatternCompiler {
-    fn new(keywords: ~[@str]) -> PatternCompiler {
+    pub fn new(keywords: ~[@str]) -> PatternCompiler {
         PatternCompiler {
             keywords: keywords,
             vars: ~[],
         }
     }
 
-    fn compile<T>(&mut self, code: &@LDatum<T>) -> Result<~Pattern<T>, ~str> {
+    pub fn compile<T>(&mut self, code: &@LDatum<T>) -> Result<~Pattern<T>, ~str> {
         self.vars = ~[];
         self.compile_val(code)
     }

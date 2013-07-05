@@ -9,16 +9,17 @@ struct Stack<T> {
 }
 
 impl<T> BaseIter<T> for Stack<T> {
-    fn each(&self, op: &fn(v: &T) -> bool) {
+    fn each(&self, op: &fn(v: &T) -> bool) -> bool {
         let mut iter = self.head;
         while iter.is_some() {
             let node = iter.get();
             let frozen_node = &*node;
             if !op(&frozen_node.elem) {
-                break;
+                return false;
             }
             iter = node.next;
         }
+        return true;
     }
 
     fn size_hint(&self) -> Option<uint> {
@@ -26,26 +27,25 @@ impl<T> BaseIter<T> for Stack<T> {
     }
 }
 
-impl<T> MutableIter<T> for Stack<T> {
-    fn each_mut(&mut self, op: &fn(&mut T) -> bool) {
-        let mut iter = self.head;
-        while iter.is_some() {
-            let node = iter.get();
-            if !op(&mut node.elem) {
-                break;
-            }
-            iter = node.next;
-        }
-    }
-}
-
 pub fn push<T>(st: &Stack<T>, x: T) -> Stack<T> {
     Stack { size: st.size + 1, head: Some(@mut Node { elem: x, next: st.head }) }
 }
 
-pub impl<T> Stack<T> {
-    fn new() -> Stack<T> {
+impl<T> Stack<T> {
+    pub fn new() -> Stack<T> {
         Stack { size: 0, head: None }
+    }
+
+    pub fn each_mut(&mut self, op: &fn(&mut T) -> bool) -> bool {
+        let mut iter = self.head;
+        while iter.is_some() {
+            let node = iter.get();
+            if !op(&mut node.elem) {
+                return false;
+            }
+            iter = node.next;
+        }
+        return true;
     }
 }
 

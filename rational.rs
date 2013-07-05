@@ -1,6 +1,4 @@
-use core::num::{One, Zero};
-use core::cmp::{Eq, Ord};
-use core::ops::{Neg, Add, Sub, Mul, Div};
+use std::num::{One, Zero};
 
 pub struct Rational {
     priv d: int,
@@ -31,8 +29,8 @@ priv fn gcd(mut u: int, mut v: int) -> int {
     }
 }
 
-pub impl Rational {
-    fn new(d: int, n: int) -> Rational {
+impl Rational {
+    pub fn new(d: int, n: int) -> Rational {
         if(n == 0) {
             fail!(~"divide by zero");
         }
@@ -46,36 +44,36 @@ pub impl Rational {
         }
     }
 
-    fn denominator(&self) -> int {
+    pub fn denominator(&self) -> int {
         self.d
     }
 
-    fn numerator(&self) -> int {
+    pub fn numerator(&self) -> int {
         self.n
     }
 
-    fn to_f64(&self) -> f64 {
+    pub fn to_f64(&self) -> f64 {
         (self.d as f64) / (self.n as f64)
     }
 
-    fn is_zero(&self) -> bool {
+    pub fn is_zero(&self) -> bool {
         self.d == 0
     }
 
-    fn is_nonnegative(&self) -> bool {
-        int::is_nonnegative(self.d)
+    pub fn is_nonnegative(&self) -> bool {
+        self.d >= 0
     }
 
-    fn is_negative(&self) -> bool {
-        int::is_negative(self.d)
+    pub fn is_negative(&self) -> bool {
+        self.d < 0
     }
 
-    fn is_nonpositive(&self) -> bool {
-        int::is_nonpositive(self.d)
+    pub fn is_nonpositive(&self) -> bool {
+        self.d <= 0
     }
 
-    fn is_positive(&self) -> bool {
-        int::is_positive(self.d)
+    pub fn is_positive(&self) -> bool {
+        self.d > 0
     }
 }
 
@@ -94,6 +92,10 @@ impl Zero for Rational {
             d: 0,
             n: 1,
         }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.d == 0
     }
 }
 
@@ -178,7 +180,7 @@ impl Div<Rational, Rational> for Rational {
     }
 }
 
-impl to_str::ToStr for Rational {
+impl ToStr for Rational {
     fn to_str(&self) -> ~str {
         if(self.n == 1) {
             self.d.to_str()

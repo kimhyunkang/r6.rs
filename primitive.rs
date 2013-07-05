@@ -11,7 +11,7 @@ pub enum PFunc {
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
-    do vec::map([PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv]) |prim| {
+    do [PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
     }
 }
@@ -29,7 +29,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
     }
 }
 
-impl to_str::ToStr for PFunc {
+impl ToStr for PFunc {
     fn to_str(&self) -> ~str {
         proc_to_str(self)
     }
@@ -47,7 +47,7 @@ pub enum PrimSyntax {
 }
 
 pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do vec::map([SynIf, SynLambda, SynDefine, SynSet, SynQuote, SynQQuote, SynUnquote]) |syn| {
+    do [SynIf, SynLambda, SynDefine, SynSet, SynQuote, SynQQuote, SynUnquote].map |syn| {
         (syntax_to_str(syn).to_managed(), *syn)
     }
 }
@@ -64,7 +64,7 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> ~str {
     }
 }
 
-impl to_str::ToStr for PrimSyntax {
+impl ToStr for PrimSyntax {
     fn to_str(&self) -> ~str {
         syntax_to_str(self)
     }

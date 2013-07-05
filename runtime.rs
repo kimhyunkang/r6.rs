@@ -1,9 +1,12 @@
+use std::io;
+use std::borrow;
+use std::uint;
+use std::result;
+use std::num::{One, Zero};
+use std::hashmap::HashMap;
 use datum::*;
 use primitive::*;
 use numeric::LNumeric;
-use core::num::Zero::zero;
-use core::num::One::one;
-use core::hashmap::linear::LinearMap;
 use stack::*;
 
 enum RuntimeData {
@@ -11,7 +14,7 @@ enum RuntimeData {
     RProc(~[@str],
         Option<@str>,
         ~[@LDatum<RuntimeData>],
-        @mut Stack<LinearMap<@str, @LDatum<RuntimeData>>>),
+        @mut Stack<HashMap<@str, @LDatum<RuntimeData>>>),
 }
 
 fn eq(lhs: &RuntimeData, rhs: &RuntimeData) -> bool {
@@ -35,7 +38,7 @@ impl Eq for RuntimeData {
 fn data_to_str(data: &RuntimeData) -> ~str {
     match *data {
         RPrim(f) => f.to_str(),
-        RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", ptr::to_uint(data)),
+        RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", borrow::to_uint(data)),
     }
 }
 
@@ -48,11 +51,11 @@ impl ToStr for RuntimeData {
 type RDatum = LDatum<RuntimeData>;
 
 struct Runtime {
-    stdin: @io::Reader,
-    stdout: @io::Writer,
-    stderr: @io::Writer,
-    env: @mut Stack<LinearMap<@str, @RDatum>>,
-    global: LinearMap<@str, Either<@RDatum, PrimSyntax>>,
+    stdin: @Reader,
+    stdout: @Writer,
+    stderr: @Writer,
+    env: @mut Stack<HashMap<@str, @RDatum>>,
+    global: HashMap<@str, Either<@RDatum, PrimSyntax>>,
     qq_lvl: uint,
 }
 
@@ -94,13 +97,13 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
     }
 }
 
-fn load_prelude() -> LinearMap<@str, Either<@RDatum, PrimSyntax>> {
-    let mut map = LinearMap::new();
-    for vec::each(prelude()) |&pair| {
+fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
+    let mut map = HashMap::new();
+    for prelude().each |&pair| {
         let (key, func) = pair;
         map.insert(key, Left(@LExt(RPrim(func))));
     }
-    for vec::each(syntax_prelude()) |&pair| {
+    for syntax_prelude().each |&pair| {
         let (key, syntax) = pair;
         map.insert(key, Right(syntax));
     }
@@ -171,7 +174,8 @@ priv fn call_num_foldl(args: ~[@RDatum],
             }
         }
         !err
-    }
+    };
+
     if err {
         Err(TypeError)
     } else {
@@ -211,7 +215,7 @@ priv fn get_syms(&arg: &@RDatum) -> Result<(~[@str], Option<@str>), ~str> {
     Ok((args, varargs))
 }
 
-priv impl Runtime {
+impl Runtime {
     fn get_syntax(&self, val: &RDatum) -> Option<PrimSyntax> {
         match *val {
             LIdent(name) => match self.global.find(&name) {
@@ -233,7 +237,7 @@ priv impl Runtime {
                     false
                 }
             }
-        }
+        };
 
         match val {
             None => match self.global.find(name) {
@@ -255,15 +259,15 @@ priv impl Runtime {
                         Some(name) => if args.len() != 2 {
                                 Err(BadSyntax(SynDefine, ~"multiple expressions"))
                             } else {
-                                do result::map(&self.eval(args[1])) |&val| {
+                                do self.eval(args[1]).map |&val| {
                                     (name, val)
                                 }
                             }
                     }
                 } else {
                     let name = anames[0];
-                    let anames = vec::from_slice(vec::slice(anames, 1, anames.len()));
-                    let seq = vec::from_slice(vec::slice(args, 1, args.len()));
+                    let anames = anames.slice(1, anames.len()).to_owned();
+                    let seq = args.slice(1, args.len()).to_owned();
                     let proc = @LExt(RProc(anames, varargs, seq, self.env));
                     Ok((name, proc))
                 }
@@ -276,7 +280,7 @@ priv impl Runtime {
     {
         match syn {
             SynIf => if args.len() == 3 {
-                    do result::chain(self.eval(args[0])) |cond| {
+                    do self.eval(args[0]).chain |cond| {
                         match *cond {
                             LBool(true) => self.eval(args[1]),
                             LBool(false) => self.eval(args[2]),
@@ -292,7 +296,7 @@ priv impl Runtime {
                     match get_syms(&args[0]) {
                         Err(e) => Err(BadSyntax(SynLambda, e)),
                         Ok((anames, varargs)) => {
-                            let seq = vec::from_slice(vec::slice(args, 1, args.len()));
+                            let seq = args.slice(1, args.len()).to_owned();
                             Ok(@LExt(RProc(anames, varargs, seq, self.env)))
                         },
                     }
@@ -311,7 +315,7 @@ priv impl Runtime {
                             } else {
                                 // this is not the top-level context
                                 // create a new frame
-                                let mut frame = LinearMap::new();
+                                let mut frame = HashMap::new();
                                 frame.insert(name, val);
                                 self.env = @mut push(self.env, frame);
                             };
@@ -323,7 +327,7 @@ priv impl Runtime {
                     Err(BadSyntax(SynSet, ~"bad number of arguments"))
                 } else {
                     match *args[0] {
-                        LIdent(name) => do result::chain(self.eval(args[1])) |val| {
+                        LIdent(name) => do self.eval(args[1]).chain |val| {
                             if set_var(self.env, &name, val) {
                                 Ok(@LNil)
                             } else {
@@ -355,11 +359,11 @@ priv impl Runtime {
                 anames: &~[@str],
                 vargs: &Option<@str>,
                 code: &~[@RDatum],
-                &frame: &@mut Stack<LinearMap<@str, @RDatum>>,
+                &frame: &@mut Stack<HashMap<@str, @RDatum>>,
                 args: ~[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         // create new frame to store args
-        let mut arg_frame = LinearMap::new();
+        let mut arg_frame = HashMap::new();
 
         match *vargs {
             None => if args.len() != anames.len() {
@@ -368,9 +372,9 @@ priv impl Runtime {
             Some(vname) => if args.len() < anames.len() {
                     return Err(ArgNumError(anames.len(), true, args.len()));
                 } else {
-                    let vslice = vec::slice(args, anames.len(), args.len());
-                    let va = do vec::foldr(vslice, @LNil) |&a, l| {
-                        @LCons(a, l)
+                    let vslice = args.slice(anames.len(), args.len());
+                    let va = do vslice.rev_iter().fold(@LNil) |a, &l| {
+                        @LCons(l, a)
                     };
                     arg_frame.insert(vname, va);
                 },
@@ -389,7 +393,7 @@ priv impl Runtime {
         do code.each() |&val| {
             res = self.eval(val);
             res.is_ok()
-        }
+        };
 
         // restore env
         self.env = old_env;
@@ -405,10 +409,10 @@ priv impl Runtime {
             PEval => do call_prim1(args) |arg| {
                 self.eval(arg)
             },
-            PAdd => do call_num_foldl(args, zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
-            PSub => do call_num_foldl(args, one()) |&lhs, &rhs| { Ok(lhs - rhs) },
-            PMul => do call_num_foldl(args, one()) |&lhs, &rhs| { Ok(lhs * rhs) },
-            PDiv => do call_num_foldl(args, one()) |&lhs, &rhs| {
+            PAdd => do call_num_foldl(args, Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
+            PSub => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs - rhs) },
+            PMul => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
+            PDiv => do call_num_foldl(args, One::one()) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
@@ -438,14 +442,14 @@ priv impl Runtime {
             @LCons(ref h, ref t) =>
                 match is_quote(h,t) {
                     Some((QuasiQuote, ref v)) => 
-                        do result::map(&self.quasiquote(v)) |&qv| {
+                        do self.quasiquote(v).map |&qv| {
                             @LCons(@LIdent(@"quasiquote"), @LCons(qv, @LNil))
                         },
                     Some((Unquote, ref v)) => 
                         self.unquote(v),
                     _ =>
-                        do result::chain(self.recursive_qq(h)) |qh| {
-                            do result::map(&self.recursive_qq(t)) |&qt| {
+                        do self.recursive_qq(h).chain |qh| {
+                            do self.recursive_qq(t).map |&qt| {
                                 @LCons(qh, qt)
                             }
                         },
@@ -471,7 +475,7 @@ priv impl Runtime {
             if self.qq_lvl == 0 {
                 self.eval(*val)
             } else {
-                do result::map(&self.recursive_qq(val)) |&qval| {
+                do self.recursive_qq(val).map |&qval| {
                     @LCons(@LIdent(@"unquote"), @LCons(qval, @LNil))
                 }
             };
@@ -492,29 +496,8 @@ priv impl Runtime {
             Err(e) => Err(e),
         }
     }
-}
 
-priv fn set_var(env: @mut Stack<LinearMap<@str, @RDatum>>,
-                name: &@str,
-                val: @RDatum) -> bool {
-    let mut success = false;
-
-    do env.each_mut |frame| {
-        match frame.find_mut(name) {
-            None => (),
-            Some(v) => {
-                success = true;
-                *v = val;
-            }
-        }
-        !success
-    }
-
-    success
-}
-
-pub impl Runtime {
-    fn new_std() -> Runtime {
+    pub fn new_std() -> Runtime {
         Runtime {
             stdin: io::stdin(),
             stdout: io::stdout(),
@@ -525,7 +508,7 @@ pub impl Runtime {
         }
     }
 
-    fn eval(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError>
+    pub fn eval(&mut self, val: @RDatum) -> Result<@RDatum, RuntimeError>
     {
         match *val {
             LIdent(name) => self.find_var(&name),
@@ -549,4 +532,23 @@ pub impl Runtime {
             _ => Ok(val),
         }
     }
+}
+
+priv fn set_var(env: @mut Stack<HashMap<@str, @RDatum>>,
+                name: &@str,
+                val: @RDatum) -> bool {
+    let mut success = false;
+
+    do env.each_mut |frame| {
+        match frame.find_mut(name) {
+            None => (),
+            Some(v) => {
+                success = true;
+                *v = val;
+            }
+        }
+        !success
+    };
+
+    success
 }
