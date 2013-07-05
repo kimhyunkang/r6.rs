@@ -102,13 +102,13 @@ priv fn build_complex(exactness: Option<bool>,
             (exactness == None && !is_pfloat(rpart) && !is_pfloat(ipart)) {
         do build_exact(rsign, radix, rpart).chain |re| {
             do build_exact(isign, radix, ipart).chain |im| {
-                Ok(NExact(re, im))
+                Ok(exact(re, im))
             }
         }
     } else {
         do build_inexact(rsign, radix, rpart).chain |re| {
             do build_inexact(isign, radix, ipart).chain |im| {
-                Ok(NInexact(re, im))
+                Ok(inexact(re, im))
             }
         }
     }
@@ -484,7 +484,7 @@ impl Parser {
                                         do build_inexact(asign, r, &apart).chain |arg| {
                                             let re = abs * f64::cos(arg);
                                             let im = abs * f64::sin(arg);
-                                            Ok(NInexact(re, im))
+                                            Ok(inexact(re, im))
                                         },
                                     _ => Err(~"invalid polar literal"),
                                 }
@@ -801,7 +801,7 @@ fn expect_ecmplx(src: ~str, re_d: int, re_n: int, im_d: int, im_n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        let expected: LDatum<()> = LNum(NExact(Rational::new(re_d, re_n),
+        let expected: LDatum<()> = LNum(exact(Rational::new(re_d, re_n),
                                                 Rational::new(im_d, im_n)));
         assert_eq!(val, Ok(expected));
     }
@@ -812,7 +812,7 @@ fn expect_icmplx(src: ~str, re: f64, im: f64) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        let expected: LDatum<()> = LNum(NInexact(re, im));
+        let expected: LDatum<()> = LNum(inexact(re, im));
         assert_eq!(val, Ok(expected));
     }
 }

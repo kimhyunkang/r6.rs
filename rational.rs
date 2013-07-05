@@ -99,6 +99,15 @@ impl Zero for Rational {
     }
 }
 
+impl Clone for Rational {
+    fn clone(&self) -> Rational {
+        Rational {
+            d: self.d,
+            n: self.n,
+        }
+    }
+}
+
 impl Neg<Rational> for Rational {
     fn neg(&self) -> Rational {
         Rational {
@@ -179,6 +188,16 @@ impl Div<Rational, Rational> for Rational {
         }
     }
 }
+
+impl Rem<Rational, Rational> for Rational {
+    fn rem(&self, rhs: &Rational) -> Rational {
+        let q = self / *rhs;
+        let int_q = q.d / q.n;
+        self - rhs * Rational { d: int_q, n: 1 }
+    }
+}
+
+impl Num for Rational;
 
 impl ToStr for Rational {
     fn to_str(&self) -> ~str {

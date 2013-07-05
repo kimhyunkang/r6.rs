@@ -1,36 +1,33 @@
 use std::num::{One, Zero};
+use extra::complex::Cmplx;
 
 use rational::Rational;
 
 #[deriving(Eq)]
 pub enum LNumeric {
-    NExact(Rational, Rational),
-    NInexact(f64, f64),
+    NExact(Cmplx<Rational>),
+    NInexact(Cmplx<f64>)
 }
 
 impl LNumeric {
     pub fn is_inexact(&self) -> bool {
         match *self {
-            NExact(_,_) => false,
-            NInexact(_,_) => true,
+            NExact(_) => false,
+            NInexact(_) => true,
         }
     }
 
     pub fn is_exact(&self) -> bool {
         match *self {
-            NExact(_,_) => true,
-            NInexact(_,_) => false,
+            NExact(_) => true,
+            NInexact(_) => false,
         }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        is_zero(self)
     }
 }
 
 pub fn to_str(&n: &LNumeric) -> ~str {
     match n {
-        NExact(re, im) => {
+        NExact(Cmplx{ re: re, im: im }) => {
             if im.is_zero() {
                 re.to_str()
             } else if re.is_zero() {
@@ -41,7 +38,7 @@ pub fn to_str(&n: &LNumeric) -> ~str {
                 re.to_str() + "+" + im.to_str() + "i"
             }
         },
-        NInexact(re, im) => {
+        NInexact(Cmplx{ re: re, im: im }) => {
             if im == 0f64 {
                 re.to_str()
             } else if re == 0f64 {
@@ -63,41 +60,34 @@ impl ToStr for LNumeric {
 
 impl One for LNumeric {
     fn one() -> LNumeric {
-        NExact(One::one(), Zero::zero())
+        NExact(Cmplx { re: One::one(), im: Zero::zero() })
     }
 }
 
 impl Zero for LNumeric {
     fn zero() -> LNumeric {
-        NExact(Zero::zero(), Zero::zero())
+        NExact(Zero::zero())
     }
 
     fn is_zero(&self) -> bool {
         match *self {
-            NExact(ref re, ref im) => re.is_zero() && im.is_zero(),
-            NInexact(ref re, ref im) => re.is_zero() && im.is_zero(),
+            NExact(cmplx) => cmplx.is_zero(),
+            NInexact(cmplx) => cmplx.is_zero(),
         }
     }
 }
 
-pub fn to_inexact(&n: &LNumeric) -> (f64, f64) {
+pub fn to_inexact(&n: &LNumeric) -> Cmplx<f64> {
     match n {
-        NExact(re, im) => (re.to_f64(), im.to_f64()),
-        NInexact(re, im) => (re, im),
-    }
-}
-
-pub fn is_zero(&n: &LNumeric) -> bool {
-    match n {
-        NExact(re, im) => re.is_zero() && im.is_zero(),
-        NInexact(re, im) => re == 0f64 && im == 0f64,
+        NExact(Cmplx { re: re, im: im }) => Cmplx {re: re.to_f64(), im: im.to_f64()},
+        NInexact(cmplx) => cmplx
     }
 }
 
 pub fn neg(&n: &LNumeric) -> LNumeric {
     match n {
-        NExact(re, im) => NExact(-re, -im),
-        NInexact(re, im) => NInexact(-re, -im),
+        NExact(cmplx) => NExact(-cmplx),
+        NInexact(cmplx) => NInexact(-cmplx),
     }
 }
 
@@ -109,11 +99,11 @@ impl Neg<LNumeric> for LNumeric {
 
 pub fn add(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
     match (lhs, rhs) {
-        (NExact(re0, im0), NExact(re1, im1)) => NExact(re0 + re1, im0 + im1),
+        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 + cmplx1),
         _ => {
-            let (re0, im0) = to_inexact(&lhs);
-            let (re1, im1) = to_inexact(&rhs);
-            NInexact(re0 + re1, im0 + im1)
+            let cmplx0 = to_inexact(&lhs);
+            let cmplx1 = to_inexact(&rhs);
+            NInexact(cmplx0 + cmplx1)
         },
     }
 }
@@ -126,11 +116,11 @@ impl Add<LNumeric, LNumeric> for LNumeric {
 
 pub fn sub(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
     match (lhs, rhs) {
-        (NExact(re0, im0), NExact(re1, im1)) => NExact(re0 - re1, im0 - im1),
+        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 - cmplx1),
         _ => {
-            let (re0, im0) = to_inexact(&lhs);
-            let (re1, im1) = to_inexact(&rhs);
-            NInexact(re0 - re1, im0 - im1)
+            let cmplx0 = to_inexact(&lhs);
+            let cmplx1 = to_inexact(&rhs);
+            NInexact(cmplx0 - cmplx1)
         },
     }
 }
@@ -143,17 +133,11 @@ impl Sub<LNumeric, LNumeric> for LNumeric {
 
 pub fn mul(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
     match (lhs, rhs) {
-        (NExact(re0, im0), NExact(re1, im1)) => {
-            let re = re0 * re1 - im0 * im1;
-            let im = im0 * re1 + re0 * im1;
-            NExact(re, im)
-        }
+        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 * cmplx1),
         _ => {
-            let (re0, im0) = to_inexact(&lhs);
-            let (re1, im1) = to_inexact(&rhs);
-            let re = re0 * re1 - im0 * im1;
-            let im = im0 * re1 + re0 * im1;
-            NInexact(re, im)
+            let cmplx0 = to_inexact(&lhs);
+            let cmplx1 = to_inexact(&rhs);
+            NInexact(cmplx0 * cmplx1)
         },
     }
 }
@@ -166,19 +150,11 @@ impl Mul<LNumeric, LNumeric> for LNumeric {
 
 pub fn div(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
     match (lhs, rhs) {
-        (NExact(re0, im0), NExact(re1, im1)) => {
-            let n = re1 * re1 + im1 * im1;
-            let re = (re0 * re1 + im0 * im1) / n;
-            let im = (im0 * re1 - re0 * im1) / n;
-            NExact(re, im)
-        }
+        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 / cmplx1),
         _ => {
-            let (re0, im0) = to_inexact(&lhs);
-            let (re1, im1) = to_inexact(&rhs);
-            let n = re1 * re1 + im1 * im1;
-            let re = (re0 * re1 + im0 * im1) / n;
-            let im = (im0 * re1 - re0 * im1) / n;
-            NInexact(re, im)
+            let cmplx0 = to_inexact(&lhs);
+            let cmplx1 = to_inexact(&rhs);
+            NInexact(cmplx0 / cmplx1)
         },
     }
 }
@@ -190,13 +166,21 @@ impl Div<LNumeric, LNumeric> for LNumeric {
 }
 
 pub fn from_int(n: int) -> LNumeric {
-    NExact(Rational::new(n, 1), Zero::zero())
+    NExact( Cmplx{ re: Rational::new(n, 1), im: Zero::zero() } )
 }
 
 pub fn from_rational(re: Rational) -> LNumeric {
-    NExact(re, Zero::zero())
+    NExact( Cmplx{ re: re, im: Zero::zero() } )
 }
 
 pub fn from_f64(re: f64) -> LNumeric {
-    NInexact(re, 0f64)
+    NInexact( Cmplx{ re: re, im: 0f64 } )
+}
+
+pub fn exact(re: Rational, im: Rational) -> LNumeric {
+    NExact( Cmplx { re: re, im: im } )
+}
+
+pub fn inexact(re: f64, im: f64) -> LNumeric {
+    NInexact( Cmplx { re: re, im: im } )
 }
