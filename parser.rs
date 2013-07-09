@@ -526,7 +526,7 @@ impl Parser {
         match self.try_consume(['+', '-']) {
             Some('+') => ~"+",
             Some('-') => ~"-",
-            _ => return None,
+            _ => ~"+",
         };
 
         let mut exp = ~"";
@@ -932,4 +932,9 @@ fn test_parse_quotation() {
 #[test]
 fn test_parse_plus() {
     test_expect(~"+", &LIdent(@"+"));
+}
+
+#[test]
+fn test_parse_exponent() {
+    test_expect(~"#e1e10", &LNum(from_int(10000000000)));
 }
