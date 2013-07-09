@@ -23,6 +23,13 @@ impl LNumeric {
             NInexact(_) => false,
         }
     }
+
+    pub fn is_real(&self) -> bool {
+        match *self {
+            NExact(c) => c.im.is_zero(),
+            NInexact(c) => c.im.is_zero(),
+        }
+    }
 }
 
 pub fn to_str(&n: &LNumeric) -> ~str {

@@ -127,3 +127,15 @@ fn define_val_test() {
 fn define_fun_test() {
     eval_test(~"((lambda () (define (list . a) a) (list 1 2)))", ~"(1 2)");
 }
+
+#[test]
+fn num_fun_test() {
+    eval_test(~"(number? 3)", ~"#t");
+    eval_test(~"(number? 3+4i)", ~"#t");
+    eval_test(~"(real? 3)", ~"#t");
+    eval_test(~"(real? -2.5+0.0i)", ~"#t");
+    eval_test(~"(real? #e1e10)", ~"#t");
+    eval_test(~"(integer? 3+0i)", ~"#t");
+    eval_test(~"(integer? 3.0)", ~"#t");
+    eval_test(~"(integer? 8/4)", ~"#t");
+}

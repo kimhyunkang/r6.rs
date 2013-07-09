@@ -8,10 +8,14 @@ pub enum PFunc {
     PCar,
     PCdr,
     PEqv,
+    PNumber,
+    PReal,
+    PInteger,
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
-    do [PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv].map |prim| {
+    do [PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv,
+        PNumber, PReal, PInteger].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
     }
 }
@@ -26,6 +30,9 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PCar => ~"car",
         PCdr => ~"cdr",
         PEqv => ~"eqv?",
+        PNumber => ~"number?",
+        PReal => ~"real?",
+        PInteger => ~"integer?",
     }
 }
 

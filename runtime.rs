@@ -4,9 +4,10 @@ use std::uint;
 use std::result;
 use std::num::{One, Zero};
 use std::hashmap::HashMap;
+use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
-use numeric::LNumeric;
+use numeric::{LNumeric, NExact, NInexact};
 use stack::*;
 
 enum RuntimeData {
@@ -433,7 +434,28 @@ impl Runtime {
             },
             PEqv => do call_prim2(args) |arg1, arg2| {
                 Ok(@LBool(arg1 == arg2))
-            }
+            },
+            PNumber => do call_prim1(args) |arg| {
+                match *arg {
+                    LNum(_) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
+            PReal => do call_prim1(args) |arg| {
+                match *arg {
+                    LNum(c) => Ok(@LBool(c.is_real())),
+                    _ => Ok(@LBool(false)),
+                }
+            },
+            PInteger => do call_prim1(args) |arg| {
+                match *arg {
+                    LNum(NExact(Cmplx { re: re, im: im })) =>
+                        Ok(@LBool(re.numerator() == 1 && im.numerator() == 1)),
+                    LNum(NInexact(Cmplx { re: re, im: im })) =>
+                        Ok(@LBool(re.round() == re && im.round() == im)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
         }
     }
 
