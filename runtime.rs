@@ -456,6 +456,18 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
+            PExact => do call_prim1(args) |arg| {
+                match *arg {
+                    LNum(NExact(_)) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
+            PInexact => do call_prim1(args) |arg| {
+                match *arg {
+                    LNum(NInexact(_)) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
         }
     }
 
