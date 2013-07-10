@@ -139,3 +139,13 @@ fn num_fun_test() {
     eval_test(~"(integer? 3.0)", ~"#t");
     eval_test(~"(integer? 8/4)", ~"#t");
 }
+
+#[test]
+fn num_cmp_test() {
+    eval_test(~"(< 1 2 3)", ~"#t");
+    eval_test(~"(< 1 2 2)", ~"#f");
+    eval_test(~"(<= 1.0 2.0 3.0)", ~"#t");
+    eval_test(~"(<= 1.0 2.0 2.0)", ~"#t");
+    eval_test(~"(= #e2 #e4/2 #e2.0)", ~"#t");
+    eval_test(~"(> 1 2 3)", ~"#f");
+}

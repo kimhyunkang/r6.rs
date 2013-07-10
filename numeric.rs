@@ -191,3 +191,71 @@ pub fn exact(re: Rational, im: Rational) -> LNumeric {
 pub fn inexact(re: f64, im: f64) -> LNumeric {
     NInexact( Cmplx { re: re, im: im } )
 }
+
+pub enum LReal {
+    NRational(Rational),
+    NFloat(f64)
+}
+
+priv fn coerce<T>(a: &LReal, b: &LReal,
+                    op_r: &fn(&Rational, &Rational) -> T,
+                    op_f: &fn(f64, f64) -> T) -> T
+{
+    match (a, b) {
+        (&NRational(ref x), &NRational(ref y)) => op_r(x, y),
+        (&NRational(ref x), &NFloat(y)) => op_f(x.to_f64(), y),
+        (&NFloat(x), &NRational(ref y)) => op_f(x, y.to_f64()),
+        (&NFloat(x), &NFloat(y)) => op_f(x, y),
+    }
+}
+
+impl Eq for LReal {
+    fn eq(&self, other: &LReal) -> bool {
+        coerce(self, other, |x,y| {x == y}, |x,y| {x == y})
+    }
+
+    fn ne(&self, other: &LReal) -> bool {
+        coerce(self, other, |x,y| {x != y}, |x,y| {x != y})
+    }
+}
+
+impl Ord for LReal {
+    fn lt(&self, other: &LReal) -> bool {
+        coerce(self, other, |x,y| {x < y}, |x,y| {x < y})
+    }
+
+    fn le(&self, other: &LReal) -> bool {
+        coerce(self, other, |x,y| {x <= y}, |x,y| {x <= y})
+    }
+
+    fn gt(&self, other: &LReal) -> bool {
+        coerce(self, other, |x,y| {x > y}, |x,y| {x > y})
+    }
+
+    fn ge(&self, other: &LReal) -> bool {
+        coerce(self, other, |x,y| {x >= y}, |x,y| {x >= y})
+    }
+}
+
+pub fn get_real(n: &LNumeric) -> Option<LReal>
+{
+    match *n {
+        NExact( Cmplx{ re: re, im: im } ) => if im.is_zero() {
+                Some( NRational ( re ) )
+            } else {
+                None
+            },
+        NInexact( Cmplx{ re: re, im: im } ) => if im.is_zero() {
+                Some( NFloat ( re ) )
+            } else {
+                None
+            },
+    }
+}
+
+#[test]
+fn test_eq() {
+    assert_eq!(NRational(Rational::new(2,1)) == NRational(Rational::new(2,1)), true);
+    assert_eq!(NRational(Rational::new(2,1)) < NFloat(3.0), true);
+    assert_eq!(NFloat(3.0) > NRational(Rational::new(2,1)), true);
+}

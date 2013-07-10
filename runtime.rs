@@ -7,7 +7,7 @@ use std::hashmap::HashMap;
 use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
-use numeric::{LNumeric, NExact, NInexact};
+use numeric::*;
 use stack::*;
 
 enum RuntimeData {
@@ -182,6 +182,45 @@ priv fn call_num_foldl(args: ~[@RDatum],
     } else {
         Ok(@LNum(res))
     }
+}
+
+priv fn call_real_bfoldl(args: ~[@RDatum], op: &fn(&LReal, &LReal) -> bool)
+    -> Result<@RDatum, RuntimeError>
+{
+    let n = args.len();
+    if n < 2 {
+        return Err(ArgNumError(2, true, n));
+    }
+
+    let mut a = match args[0] {
+        @LNum(ref n) => match get_real(n) {
+            None => return Err(TypeError),
+            Some(r) => r,
+        },
+        _ => return Err(TypeError),
+    };
+
+    let mut idx = 1;
+
+    while idx < n {
+        let b = match args[idx] {
+            @LNum(ref n) => match get_real(n) {
+                None => return Err(TypeError),
+                Some(r) => r,
+            },
+            _ => return Err(TypeError),
+        };
+
+        if !op(&a, &b) {
+            return Ok(@LBool(false));
+        }
+
+        a = b;
+
+        idx += 1;
+    }
+
+    return Ok(@LBool(true));
 }
 
 priv fn get_syms(&arg: &@RDatum) -> Result<(~[@str], Option<@str>), ~str> {
@@ -468,6 +507,11 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
+            PEQ => do call_real_bfoldl(args) |&lhs, &rhs| { lhs == rhs },
+            PGT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs > rhs },
+            PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
+            PGE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs >= rhs },
+            PLE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs <= rhs },
         }
     }
 

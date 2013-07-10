@@ -13,12 +13,18 @@ pub enum PFunc {
     PInteger,
     PExact,
     PInexact,
+    PEQ,
+    PGT,
+    PLT,
+    PGE,
+    PLE,
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
     do [PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv,
         PNumber, PReal, PInteger,
-        PExact, PInexact].map |prim| {
+        PExact, PInexact,
+        PEQ, PGT, PLT, PGE, PLE].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
     }
 }
@@ -38,6 +44,11 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PInteger => ~"integer?",
         PExact => ~"exact?",
         PInexact => ~"inexact?",
+        PEQ => ~"=",
+        PGT => ~">",
+        PLT => ~"<",
+        PGE => ~">=",
+        PLE => ~"<=",
     }
 }
 
