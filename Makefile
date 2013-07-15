@@ -12,7 +12,7 @@ eval-test: eval-tests
 	./eval-tests
 
 ${LIB}: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs
-	rustc $< --lib
+	rustc $< --lib -Z debug-info
 
 parser-tests: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs
 	rustc $< --test -o $@
