@@ -435,8 +435,8 @@ impl Parser {
         do io::with_str_writer |wr| {
             while(!self.eof()) {
                 match(self.lookahead()) {
-                    ' ' | '\t' | '\r' | '\n' => break,
-                    _ => wr.write_char(self.consume()),
+                    'a' .. 'z' => wr.write_char(self.consume()),
+                    _ => break,
                 }
             }
         };
@@ -944,4 +944,9 @@ fn test_parse_plus() {
 #[test]
 fn test_parse_exponent() {
     test_expect(~"#e1e10", &LNum(from_int(10000000000)));
+}
+
+#[test]
+fn test_parse_char_list() {
+    test_expect(~"(#\\a)", &LCons(@LChar('a'), @LNil));
 }
