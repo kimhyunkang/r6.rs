@@ -8,4 +8,8 @@
         (and (pair? x) (list? (cdr x)))
     )
   )
+
+  (define (apply f args) 
+    (eval (cons f args))
+  )
 )
