@@ -184,6 +184,22 @@ fn pair_test() {
 }
 
 #[test]
+fn and_test() {
+    eval_test(~"(and #t #t)", ~"#t");
+    eval_test(~"(and #t #f #t)", ~"#f");
+    eval_test(~"(and #t #f a)", ~"#f");
+    eval_test(~"(and)", ~"#t");
+}
+
+#[test]
+fn or_test() {
+    eval_test(~"(or #f #f)", ~"#f");
+    eval_test(~"(or #f #t #f)", ~"#t");
+    eval_test(~"(or #f #t a)", ~"#t");
+    eval_test(~"(or)", ~"#f");
+}
+
+#[test]
 fn recursive_test() {
     eval_test(~"(begin (define (f n) (if (> n 0) (* n (f (- n 1))) 1)) (f 4))", ~"24");
 }

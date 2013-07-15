@@ -415,6 +415,36 @@ impl Runtime {
                 } else {
                     Err(BadSyntax(SynUnquote, ~"bad number of arguments"))
                 },
+            SynAnd => do self.syn_bool_foldl(args, true) |b0, b1| { b0 && b1 },
+            SynOr => do self.syn_bool_foldl(args, false) |b0, b1| { b0 || b1 },
+        }
+    }
+
+    priv fn syn_bool_foldl(&mut self, args: &[@RDatum], a0: bool, op: &fn(bool, bool) -> bool)
+        -> Result<@RDatum, RuntimeError>
+    {
+        let mut res = a0;
+        let mut err:Option<RuntimeError> = None;
+
+        do args.each |arg| {
+            match self.eval(*arg) {
+                Ok(@LBool(a)) => {
+                    res = op(res, a);
+                },
+                Ok(_) => {
+                    err = Some(TypeError);
+                },
+                Err(e) => {
+                    err = Some(e);
+                }
+            }
+
+            res == a0 && err.is_none()
+        };
+
+        match err {
+            Some(e) => Err(e),
+            None => Ok(@LBool(res)),
         }
     }
 

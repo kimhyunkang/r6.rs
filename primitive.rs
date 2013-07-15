@@ -77,10 +77,14 @@ pub enum PrimSyntax {
     SynQuote,
     SynQQuote,
     SynUnquote,
+    SynAnd,
+    SynOr,
 }
 
 pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do [SynIf, SynLambda, SynDefine, SynSet, SynQuote, SynQQuote, SynUnquote].map |syn| {
+    do [SynIf, SynLambda, SynDefine, SynSet,
+        SynQuote, SynQQuote, SynUnquote,
+        SynAnd, SynOr].map |syn| {
         (syntax_to_str(syn).to_managed(), *syn)
     }
 }
@@ -94,6 +98,8 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> ~str {
         SynQuote => ~"quote",
         SynQQuote => ~"quasiquote",
         SynUnquote => ~"unquote",
+        SynAnd => ~"and",
+        SynOr => ~"or",
     }
 }
 
