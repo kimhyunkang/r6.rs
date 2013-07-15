@@ -132,8 +132,7 @@ priv fn s_to_int(s: &str, sign: bool, r: uint) -> int {
 
 struct Parser {
     priv reader: @Reader,
-    priv buf: char,
-    priv has_buf: bool,
+    priv buf: Option<char>,
     line: uint,
     col: uint,
 }
@@ -141,8 +140,7 @@ struct Parser {
 pub fn Parser(reader: @Reader) -> Parser {
     Parser {
         reader: reader,
-        has_buf: false,
-        buf: 0 as char,
+        buf: None,
         line: 1,
         col: 1,
     }
@@ -257,53 +255,62 @@ impl Parser {
     }
 
     fn eof(&mut self) -> bool {
-        !self.has_buf && self.reader.eof()
+        self.buf.is_none() && self.reader.eof()
     }
 
     fn consume(&mut self) -> char {
-        if(self.has_buf) {
-            self.has_buf = false;
-        } else {
-            self.buf = self.reader.read_char();
-        }
+        let c =
+        match self.buf {
+            None => self.reader.read_char(),
+            Some(x) => {
+                self.buf = None;
+                x
+            },
+        };
 
-        if(self.buf == '\n') {
+        if c == '\n' {
             self.line += 1;
             self.col = 1;
         } else {
             self.col += 1;
         }
 
-        self.buf
+        c
     }
 
     fn lookahead(&mut self) -> char {
-        if(!self.has_buf) {
-            self.has_buf = true;
-            self.buf = self.reader.read_char();
+        match self.buf {
+            None => {
+                let c = self.reader.read_char();
+                self.buf = Some(c);
+                c
+            },
+            Some(c) => c,
         }
-        self.buf
     }
 
     fn try_consume(&mut self, v: &[char]) -> Option<char> {
-        if !self.has_buf {
-            if self.reader.eof() {
-                return None;
-            } else {
-                self.has_buf = true;
-                self.buf = self.reader.read_char();
-            }
-        }
+        let c =
+        match self.buf {
+            None => if self.reader.eof() {
+                    return None
+                } else {
+                    let x = self.reader.read_char();
+                    self.buf = Some(x);
+                    x
+                },
+            Some(x) => x,
+        };
 
-        if vec::contains(v, &self.buf) {
-            self.has_buf = false;
-            if(self.buf == '\n') {
+        if vec::contains(v, &c) {
+            self.buf = None;
+            if(c == '\n') {
                 self.line += 1;
                 self.col = 1;
             } else {
                 self.col += 1;
             }
-            Some(self.buf)
+            Some(c)
         } else {
             None
         }
