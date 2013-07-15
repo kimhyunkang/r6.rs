@@ -452,6 +452,11 @@ impl Runtime {
             PEval => do call_prim1(args) |arg| {
                 self.eval(arg)
             },
+            PBegin => if args.len() == 0 {
+                    Ok(@LNil)
+                } else {
+                    Ok(*args.last())
+                },
             PAdd => do call_num_foldl(args, Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
             PSub => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs - rhs) },
             PMul => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },

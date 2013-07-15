@@ -1,6 +1,7 @@
 #[deriving(Eq)]
 pub enum PFunc {
     PEval,
+    PBegin,
     PAdd,
     PSub,
     PMul,
@@ -21,7 +22,7 @@ pub enum PFunc {
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
-    do [PEval, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv,
+    do [PEval, PBegin, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv,
         PNumber, PReal, PInteger,
         PExact, PInexact,
         PEQ, PGT, PLT, PGE, PLE].map |prim| {
@@ -32,6 +33,7 @@ pub fn prelude() -> ~[(@str, PFunc)] {
 pub fn proc_to_str(&prim: &PFunc) -> ~str {
     match prim {
         PEval => ~"eval",
+        PBegin => ~"begin",
         PAdd => ~"+",
         PSub => ~"-",
         PMul => ~"*",

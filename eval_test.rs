@@ -129,6 +129,11 @@ fn define_fun_test() {
 }
 
 #[test]
+fn begin_test() {
+    eval_test(~"(begin (+ 1 2) (+ 2 3))", ~"5");
+}
+
+#[test]
 fn num_fun_test() {
     eval_test(~"(number? 3)", ~"#t");
     eval_test(~"(number? 3+4i)", ~"#t");
