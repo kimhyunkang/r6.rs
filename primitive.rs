@@ -9,6 +9,7 @@ pub enum PFunc {
     PCar,
     PCdr,
     PEqv,
+    PEqual,
     PNumber,
     PReal,
     PInteger,
@@ -22,7 +23,8 @@ pub enum PFunc {
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
-    do [PEval, PBegin, PAdd, PSub, PMul, PDiv, PCar, PCdr, PEqv,
+    do [PEval, PBegin, PAdd, PSub, PMul, PDiv, PCar, PCdr,
+        PEqv, PEqual,
         PNumber, PReal, PInteger,
         PExact, PInexact,
         PEQ, PGT, PLT, PGE, PLE].map |prim| {
@@ -41,6 +43,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PCar => ~"car",
         PCdr => ~"cdr",
         PEqv => ~"eqv?",
+        PEqual => ~"equal?",
         PNumber => ~"number?",
         PReal => ~"real?",
         PInteger => ~"integer?",

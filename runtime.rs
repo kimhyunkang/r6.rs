@@ -490,6 +490,9 @@ impl Runtime {
                 };
                 Ok(@LBool(b))
             },
+            PEqual => do call_prim2(args) |arg1, arg2| {
+                Ok(@LBool(arg1 == arg2))
+            },
             PNumber => do call_prim1(args) |arg| {
                 match *arg {
                     LNum(_) => Ok(@LBool(true)),
