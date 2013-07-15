@@ -449,16 +449,16 @@ impl Runtime {
     }
 
     fn call_proc(&mut self,
-                anames: &~[@str],
-                vargs: &Option<@str>,
-                code: &~[@RDatum],
-                &frame: &@mut Stack<HashMap<@str, @RDatum>>,
-                args: ~[@RDatum]) -> Result<@RDatum, RuntimeError>
+                anames: &[@str],
+                vargs: Option<@str>,
+                code: &[@RDatum],
+                frame: @mut Stack<HashMap<@str, @RDatum>>,
+                args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         // create new frame to store args
         let mut arg_frame = HashMap::new();
 
-        match *vargs {
+        match vargs {
             None => if args.len() != anames.len() {
                     return Err(ArgNumError(anames.len(), false, args.len()));
                 },
@@ -649,7 +649,7 @@ impl Runtime {
                 &RPrim(f) =>
                     self.call_prim(f, args),
                 &RProc(ref anames, ref vargs, ref code, ref env) =>
-                    self.call_proc(anames, vargs, code, env, args),
+                    self.call_proc(*anames, *vargs, *code, *env, args),
             },
             Err(e) => Err(e),
         }
