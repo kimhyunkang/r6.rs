@@ -162,3 +162,17 @@ fn num_cmp_test() {
     eval_test(~"(= #e2 #e4/2 #e2.0)", ~"#t");
     eval_test(~"(> 1 2 3)", ~"#f");
 }
+
+#[test]
+fn null_test() {
+    eval_test(~"(null? '())", ~"#t");
+    eval_test(~"(null? '(a b c))", ~"#f");
+    eval_test(~"(null? '(a . c))", ~"#f");
+}
+
+#[test]
+fn pair_test() {
+    eval_test(~"(pair? '())", ~"#f");
+    eval_test(~"(pair? '(a b c))", ~"#t");
+    eval_test(~"(pair? '(a . c))", ~"#t");
+}

@@ -531,6 +531,18 @@ impl Runtime {
             PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
             PGE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs >= rhs },
             PLE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs <= rhs },
+            PNull => do call_prim1(args) |arg| {
+                match arg {
+                    @LNil => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
+            PPair => do call_prim1(args) |arg| {
+                match arg {
+                    @LCons(_, _) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
         }
     }
 
