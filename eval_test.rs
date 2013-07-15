@@ -106,6 +106,14 @@ fn lexical_scoping_test() {
 #[test]
 fn eqv_test() {
     eval_test(~"(eqv? 3 (+ 1 2))", ~"#t");
+    eval_test(~"(eqv? #f #f)", ~"#t");
+    eval_test(~"(eqv? #\\a #\\a)", ~"#t");
+    eval_test(~"(eqv? 'ident 'ident)", ~"#t");
+    eval_test(~"(eqv? 3.0 3)", ~"#f");
+    eval_test(~"(eqv? '() '())", ~"#t");
+    eval_test(~"(eqv? '(1 2) '(1 2))", ~"#f");
+    eval_test(~"(eqv? \"abc\" \"abc\")", ~"#f");
+    eval_test(~"((lambda (x) (eqv? x x)) '(1 2))", ~"#t");
 }
 
 #[test]

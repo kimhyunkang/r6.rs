@@ -4,6 +4,7 @@ use std::uint;
 use std::result;
 use std::num::{One, Zero};
 use std::hashmap::HashMap;
+use std::managed;
 use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
@@ -480,7 +481,14 @@ impl Runtime {
                 }
             },
             PEqv => do call_prim2(args) |arg1, arg2| {
-                Ok(@LBool(arg1 == arg2))
+                let b =
+                match (arg1, arg2) {
+                    (@LCons(_, _), @LCons(_, _)) => managed::ptr_eq(arg1, arg2),
+                    (@LString(_), @LString(_)) => managed::ptr_eq(arg1, arg2),
+                    (@LExt(_), @LExt(_)) => managed::ptr_eq(arg1, arg2),
+                    _ => arg1 == arg2,
+                };
+                Ok(@LBool(b))
             },
             PNumber => do call_prim1(args) |arg| {
                 match *arg {
