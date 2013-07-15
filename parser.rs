@@ -166,7 +166,7 @@ impl Parser {
         do self.parse_datum().chain |v| {
             self.consume_whitespace();
 
-            if(self.eof()) {
+            if self.eof() || self.lookahead() == -1 as char {
                 Ok(v)
             } else {
                 Err(~"trailing input")
