@@ -182,3 +182,8 @@ fn pair_test() {
     eval_test(~"(pair? '(a b c))", ~"#t");
     eval_test(~"(pair? '(a . c))", ~"#t");
 }
+
+#[test]
+fn recursive_test() {
+    eval_test(~"(begin (define (f n) (if (> n 0) (* n (f (- n 1))) 1)) (f 4))", ~"24");
+}
