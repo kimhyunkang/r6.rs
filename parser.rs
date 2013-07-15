@@ -950,3 +950,8 @@ fn test_parse_exponent() {
 fn test_parse_char_list() {
     test_expect(~"(#\\a)", &LCons(@LChar('a'), @LNil));
 }
+
+#[test]
+fn test_minus_num() {
+    test_expect(~"-2", &LNum(from_int(-2)));
+}

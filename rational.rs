@@ -5,7 +5,7 @@ pub struct Rational {
     priv n: int,
 }
 
-priv fn gcd(mut u: int, mut v: int) -> int {
+priv fn gcd(mut u: uint, mut v: uint) -> uint {
     let mut g = 1;
     if(u == 0) {
         v
@@ -29,13 +29,21 @@ priv fn gcd(mut u: int, mut v: int) -> int {
     }
 }
 
+priv fn abs(x: int) -> uint {
+    if x < 0 {
+        -x as uint
+    } else {
+        x as uint
+    }
+}
+
 impl Rational {
     pub fn new(d: int, n: int) -> Rational {
         if(n == 0) {
             fail!(~"divide by zero");
         }
 
-        let g = gcd(d, n);
+        let g = gcd(abs(d), abs(n)) as int;
 
         if(n < 0) {
             Rational { d: -d/g, n: -n/g }
@@ -143,7 +151,7 @@ impl Ord for Rational {
 
 impl Add<Rational, Rational> for Rational {
     fn add(&self, rhs: &Rational) -> Rational {
-        let g = gcd(self.n, rhs.n);
+        let g = gcd(self.n as uint, rhs.n as uint) as int;
         let ln = self.n / g;
         let rn = rhs.n / g;
         Rational {
@@ -155,7 +163,7 @@ impl Add<Rational, Rational> for Rational {
 
 impl Sub<Rational, Rational> for Rational {
     fn sub(&self, rhs: &Rational) -> Rational {
-        let g = gcd(self.n, rhs.n);
+        let g = gcd(self.n as uint, rhs.n as uint) as int;
         let ln = self.n / g;
         let rn = rhs.n / g;
         Rational {
@@ -169,7 +177,7 @@ impl Mul<Rational, Rational> for Rational {
     fn mul(&self, rhs: &Rational) -> Rational {
         let d = self.d * rhs.d;
         let n = self.n * rhs.n;
-        let g = gcd(d, n);
+        let g = gcd(abs(d), abs(n)) as int;
         Rational {
             d: d / g,
             n: n / g,
@@ -181,7 +189,7 @@ impl Div<Rational, Rational> for Rational {
     fn div(&self, rhs: &Rational) -> Rational {
         let d = self.d * rhs.n;
         let n = self.n * rhs.d;
-        let g = gcd(d, n);
+        let g = gcd(abs(d), abs(n)) as int;
         Rational {
             d: d / g,
             n: n / g,
@@ -207,4 +215,9 @@ impl ToStr for Rational {
             self.d.to_str() + "/" + self.n.to_str()
         }
     }
+}
+
+#[test]
+fn gcd_test() {
+    assert_eq!(gcd(-2, 1), 1);
 }
