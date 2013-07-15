@@ -154,7 +154,7 @@ priv fn call_num_prim2(args: ~[@RDatum],
     }
 }
 
-priv fn call_num_foldl(args: ~[@RDatum],
+priv fn call_num_foldl(args: &[@RDatum],
                     a0: LNumeric,
                     op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
     -> Result<@RDatum, RuntimeError>
@@ -186,6 +186,25 @@ priv fn call_num_foldl(args: ~[@RDatum],
     } else {
         Ok(@LNum(res))
     }
+}
+
+priv fn call_num_foldl1(args: &[@RDatum],
+                    op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
+    -> Result<@RDatum, RuntimeError>
+{
+    if args.len() == 0 {
+        return Err(ArgNumError(1, true, 0))
+    };
+
+    match *args[0] {
+        LNum(a) => {
+            call_num_foldl(args.slice(1, args.len()), a, op)
+        },
+        _ => {
+            Err(TypeError)
+        }
+    }
+
 }
 
 priv fn call_real_bfoldl(args: ~[@RDatum], op: &fn(&LReal, &LReal) -> bool)
@@ -459,9 +478,9 @@ impl Runtime {
                     Ok(*args.last())
                 },
             PAdd => do call_num_foldl(args, Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
-            PSub => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs - rhs) },
+            PSub => do call_num_foldl1(args) |&lhs, &rhs| { Ok(lhs - rhs) },
             PMul => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
-            PDiv => do call_num_foldl(args, One::one()) |&lhs, &rhs| {
+            PDiv => do call_num_foldl1(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {

@@ -42,6 +42,12 @@ fn add_test() {
 }
 
 #[test]
+fn sub_test() {
+    eval_test(~"(- 3 1)", ~"2");
+    eval_test(~"(- 5 2 1)", ~"2");
+}
+
+#[test]
 fn mul_test() {
     eval_test(~"(* 1 2 3)", ~"6");
 }
