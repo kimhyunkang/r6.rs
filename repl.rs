@@ -2,7 +2,6 @@ extern mod r5;
 
 use std::io;
 use r5::runtime::{Runtime};
-use r5::parser::Parser;
 
 fn prompt() {
     print("repl > ")
@@ -10,25 +9,24 @@ fn prompt() {
 
 fn main() {
     let mut runtime = Runtime::new_std();
+    print("load prelude... ");
+    match io::file_reader(&Path("prelude.scm")) {
+        Ok(rdr) => match runtime.load(rdr) {
+            Ok(_) => println("ok\n"),
+            Err(e) => fail!("Error: %s", e.to_str()),
+        },
+        Err(e) => fail!("failed to open prelude: %s", e)
+    };
 
     prompt();
     for io::stdin().each_line |line| {
         do io::with_str_reader(line) |rdr| {
-            let mut parser = Parser(rdr);
-            match parser.parse() {
-                Ok(datum) => {
-                    match runtime.eval(@datum) {
-                        Ok(result) => {
-                            result.write(io::stdout());
-                            print("\n");
-                        },
-                        Err(e) => println(fmt!("Error: %s", e.to_str())),
-                    }
-                }
-                Err(e) => {
-                    let (line, col) = parser.pos();
-                    println(fmt!("Parse Error: %u:%u:%s", line, col, e))
+            match runtime.load(rdr) {
+                Ok(result) => {
+                    result.write(io::stdout());
+                    print("\n");
                 },
+                Err(e) => println(fmt!("Error: %s", e.to_str())),
             }
         }
         prompt();

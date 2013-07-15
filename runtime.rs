@@ -9,6 +9,7 @@ use datum::*;
 use primitive::*;
 use numeric::*;
 use stack::*;
+use parser::Parser;
 
 enum RuntimeData {
     RPrim(PFunc),
@@ -71,6 +72,7 @@ enum RuntimeError {
     DivideByZeroError,
     NilEval,
     BadSyntax(PrimSyntax, ~str),
+    ParseError(uint, uint, ~str),
 }
 
 impl ToStr for RuntimeError {
@@ -95,6 +97,7 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
         DivideByZeroError => ~"divide by zero",
         NilEval => ~"() cannot be evaluated",
         BadSyntax(syn, reason) => ~"bad syntax for " + syn.to_str() + ": " + reason,
+        ParseError(line, col, reason) => fmt!("failed to parse: %u:%u: %s", line, col, reason),
     }
 }
 
@@ -608,6 +611,18 @@ impl Runtime {
                 },
             LNil => Err(NilEval),
             _ => Ok(val),
+        }
+    }
+
+    pub fn load(&mut self, rdr: @io::Reader) -> Result<@RDatum, RuntimeError>
+    {
+        let mut parser = Parser(rdr);
+        match parser.parse() {
+            Ok(datum) => self.eval(@datum),
+            Err(e) => {
+                let (line, col) = parser.pos();
+                Err(ParseError(line, col, e))
+            },
         }
     }
 }
