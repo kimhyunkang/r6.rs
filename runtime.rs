@@ -123,7 +123,7 @@ fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
     map
 }
 
-priv fn call_prim1(args: ~[@RDatum],
+priv fn call_prim1(args: &[@RDatum],
                 op: &fn(@RDatum) -> Result<@RDatum, RuntimeError>)
     -> Result<@RDatum, RuntimeError>
 {
@@ -134,7 +134,7 @@ priv fn call_prim1(args: ~[@RDatum],
     }
 }
 
-priv fn call_prim2(args: ~[@RDatum],
+priv fn call_prim2(args: &[@RDatum],
                 op: &fn(@RDatum, @RDatum) -> Result<@RDatum, RuntimeError>)
     -> Result<@RDatum, RuntimeError>
 {
@@ -215,7 +215,7 @@ priv fn call_num_foldl1(args: &[@RDatum],
 
 }
 
-priv fn call_real_bfoldl(args: ~[@RDatum], op: &fn(&LReal, &LReal) -> bool)
+priv fn call_real_bfoldl(args: &[@RDatum], op: &fn(&LReal, &LReal) -> bool)
     -> Result<@RDatum, RuntimeError>
 {
     let n = args.len();
@@ -534,11 +534,19 @@ impl Runtime {
 
     fn call_prim(&mut self,
                 f: PFunc,
-                args: ~[@RDatum]) -> Result<@RDatum, RuntimeError>
+                args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         match f {
             PEval => do call_prim1(args) |arg| {
                 self.eval(arg)
+            },
+            PApply => match args {
+                [@LExt(ref f), arg] => match arg.to_list() {
+                    Some(alist) => self.apply(f, alist),
+                    None => Err(NotList),
+                },
+                [_, _arg] => Err(NotCallable),
+                _ => Err(ArgNumError(2, Some(2), 0)),
             },
             PBegin => if args.len() == 0 {
                     Ok(@LNil)
@@ -777,15 +785,19 @@ impl Runtime {
         }
     }
 
+    fn apply(&mut self, proc: &RuntimeData, args: &[@RDatum]) -> Result<@RDatum, RuntimeError> {
+        match proc {
+            &RPrim(f) =>
+                self.call_prim(f, args),
+            &RProc(ref anames, ref vargs, ref code, ref env) =>
+                self.call_proc(*anames, *vargs, *code, *env, args),
+        }
+    }
+
     fn call(&mut self, proc: &RuntimeData, aexprs: ~[@RDatum]) -> Result<@RDatum, RuntimeError> {
         match result::map_vec(aexprs, |&expr| self.eval(expr))
         {
-            Ok(args) => match proc {
-                &RPrim(f) =>
-                    self.call_prim(f, args),
-                &RProc(ref anames, ref vargs, ref code, ref env) =>
-                    self.call_proc(*anames, *vargs, *code, *env, args),
-            },
+            Ok(args) => self.apply(proc, args),
             Err(e) => Err(e),
         }
     }

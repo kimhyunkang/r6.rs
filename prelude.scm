@@ -7,10 +7,6 @@
     )
   )
 
-  (define (apply f args) 
-    (eval (cons f args))
-  )
-
   (define (length lst)
     (if (null? lst)
         0
