@@ -70,7 +70,7 @@ enum RuntimeError {
     RefMacro(@str),
     NotCallable,
     NotList,
-    ArgNumError(uint, bool, uint),
+    ArgNumError(uint, Option<uint>, uint),
     TypeError,
     DivideByZeroError,
     NilEval,
@@ -90,10 +90,14 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
         RefMacro(name) => ~"cannot reference macro name: " + name,
         NotCallable => ~"not callable",
         NotList => ~"not list",
-        ArgNumError(expected, false, argnum) => {
-            fmt!("expected %u arguments, but found %u arguments", expected, argnum)
+        ArgNumError(min, Some(max), argnum) => {
+            if min == max {
+                fmt!("expected %u arguments, but found %u arguments", min, argnum)
+            } else {
+                fmt!("expected %u-%u arguments, but found %u arguments", min, max, argnum)
+            }
         },
-        ArgNumError(expected, true, argnum) => {
+        ArgNumError(expected, None, argnum) => {
             fmt!("expected %u or more arguments, but found %u arguments", expected, argnum)
         },
         TypeError => ~"type error",
@@ -124,7 +128,7 @@ priv fn call_prim1(args: ~[@RDatum],
     if args.len() == 1 {
         op(args[0])
     } else {
-        Err(ArgNumError(1, false, args.len()))
+        Err(ArgNumError(1, Some(1), args.len()))
     }
 }
 
@@ -135,7 +139,7 @@ priv fn call_prim2(args: ~[@RDatum],
     if args.len() == 2 {
         op(args[0], args[1])
     } else {
-        Err(ArgNumError(2, false, args.len()))
+        Err(ArgNumError(2, Some(2), args.len()))
     }
 }
 
@@ -152,7 +156,7 @@ priv fn call_num_prim2(args: ~[@RDatum],
             _ => Err(TypeError),
         }
     } else {
-        Err(ArgNumError(2, false, args.len()))
+        Err(ArgNumError(2, Some(2), args.len()))
     }
 }
 
@@ -195,7 +199,7 @@ priv fn call_num_foldl1(args: &[@RDatum],
     -> Result<@RDatum, RuntimeError>
 {
     if args.len() == 0 {
-        return Err(ArgNumError(1, true, 0))
+        return Err(ArgNumError(1, None, 0))
     };
 
     match *args[0] {
@@ -214,7 +218,7 @@ priv fn call_real_bfoldl(args: ~[@RDatum], op: &fn(&LReal, &LReal) -> bool)
 {
     let n = args.len();
     if n < 2 {
-        return Err(ArgNumError(2, true, n));
+        return Err(ArgNumError(2, None, n));
     }
 
     let mut a = match args[0] {
@@ -492,10 +496,10 @@ impl Runtime {
 
         match vargs {
             None => if args.len() != anames.len() {
-                    return Err(ArgNumError(anames.len(), false, args.len()));
+                    return Err(ArgNumError(anames.len(), Some(anames.len()), args.len()));
                 },
             Some(vname) => if args.len() < anames.len() {
-                    return Err(ArgNumError(anames.len(), true, args.len()));
+                    return Err(ArgNumError(anames.len(), None, args.len()));
                 } else {
                     let vslice = args.slice(anames.len(), args.len());
                     let va = do vslice.rev_iter().fold(@LNil) |a, &l| {
