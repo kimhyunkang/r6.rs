@@ -241,3 +241,8 @@ fn string_length_test() {
 fn string_ref_test() {
     eval_test(~"(string-ref \"hello\" 4)", ~"#\\o");
 }
+
+#[test]
+fn substring_test() {
+    eval_test(~"(substring \"hello\" 0 4)", ~"\"hell\"");
+}

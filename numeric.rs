@@ -265,6 +265,19 @@ pub fn get_int(n: &LNumeric) -> Option<int>
     }
 }
 
+pub fn get_uint(n: &LNumeric) -> Option<uint>
+{
+    match *n {
+        NExact( Cmplx{ re: re, im: im } ) =>
+            if im.is_zero() && re.numerator() == 1 && re.denominator() >= 0 {
+                Some(re.denominator() as uint)
+            } else {
+                None
+            },
+        NInexact(_) => None,
+    }
+}
+
 pub fn modulo(l: int, r: int) -> int
 {
     let q = l % r;

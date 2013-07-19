@@ -76,6 +76,7 @@ enum RuntimeError {
     NilEval,
     BadSyntax(PrimSyntax, ~str),
     ParseError(uint, uint, ~str),
+    StringRangeError,
 }
 
 impl ToStr for RuntimeError {
@@ -105,6 +106,7 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
         NilEval => ~"() cannot be evaluated",
         BadSyntax(syn, reason) => ~"bad syntax for " + syn.to_str() + ": " + reason,
         ParseError(line, col, reason) => fmt!("failed to parse: %u:%u: %s", line, col, reason),
+        StringRangeError => ~"string index out of range", 
     }
 }
 
@@ -691,17 +693,40 @@ impl Runtime {
             },
             PStringRef => do call_prim2(args) |arg, idx| {
                 match (arg, idx) {
-                    (@LString(ref s), @LNum(ref n)) => match get_int(n) {
-                        Some(i) => if i < 0 {
-                                Err(TypeError)
+                    (@LString(ref s), @LNum(ref n)) => match get_uint(n) {
+                        Some(i) => if i < s.len() {
+                                Ok(@LChar(s.char_at(i)))
                             } else {
-                                Ok(@LChar(s.char_at(i as uint)))
+                                Err(StringRangeError)
                             },
                         None => Err(TypeError),
                     },
                     _ => Err(TypeError),
                 }
             },
+            PSubstring => match args {
+                [@LString(ref s), @LNum(ref n)] =>
+                    match get_uint(n) {
+                        Some(i) => if i <= s.len() {
+                                Ok(@LString(s.slice(i, s.len()).to_owned()))
+                            } else {
+                                Err(StringRangeError)
+                            },
+                        _ => Err(TypeError),
+                    },
+                [@LString(ref s), @LNum(ref from), @LNum(ref to)] =>
+                    match (get_uint(from), get_uint(to)) {
+                        (Some(start), Some(end)) =>
+                            if start <= end && end <= s.len() {
+                                Ok(@LString(s.slice(start, end).to_owned()))
+                            } else {
+                                Err(StringRangeError)
+                            },
+                        _ => Err(TypeError),
+                    },
+                [_, _] | [_, _, _] => Err(TypeError),
+                _ => Err(ArgNumError(2, Some(3), args.len())),
+            }
         }
     }
 
