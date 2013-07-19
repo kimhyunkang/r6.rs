@@ -660,6 +660,12 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
+            PString => do call_prim1(args) |arg| {
+                match arg {
+                    @LString(_) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            }
         }
     }
 
