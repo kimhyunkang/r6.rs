@@ -203,3 +203,8 @@ fn or_test() {
 fn recursive_test() {
     eval_test(~"(begin (define (f n) (if (> n 0) (* n (f (- n 1))) 1)) (f 4))", ~"24");
 }
+
+#[test]
+fn let_test() {
+    eval_test(~"(let ((x 1) (y 2)) (+ x y))", ~"3");
+}

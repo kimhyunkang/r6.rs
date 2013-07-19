@@ -2,6 +2,7 @@ use std::io;
 use std::borrow;
 use std::uint;
 use std::result;
+use std::vec;
 use std::num::{One, Zero};
 use std::hashmap::HashMap;
 use std::managed;
@@ -246,6 +247,18 @@ priv fn call_real_bfoldl(args: ~[@RDatum], op: &fn(&LReal, &LReal) -> bool)
     return Ok(@LBool(true));
 }
 
+priv fn get_bindings(arg: &RDatum) -> Result<~[(@str, @RDatum)], ~str> {
+    match arg.to_list() {
+        None => Err(~"non-list bindings"),
+        Some(bindings) => do result::map_vec(bindings) |datum| {
+            match datum.to_list() {
+                Some([@LIdent(name), expr]) => Ok((name, expr)),
+                Some(_) | None => Err(~"invalid binding")
+            }
+        }
+    }
+}
+
 priv fn get_syms(&arg: &@RDatum) -> Result<(~[@str], Option<@str>), ~str> {
     let mut iter = arg;
     let mut args : ~[@str] = ~[];
@@ -312,6 +325,19 @@ impl Runtime {
         }
     }
 
+    fn syn_let(&mut self, bindings: &RDatum, body: &[@RDatum]) -> Result<@RDatum, RuntimeError> {
+        match get_bindings(bindings) {
+            Err(e) => Err(BadSyntax(SynLet, e)),
+            Ok(b) => {
+                let (names, exprs) = vec::unzip(b);
+                match result::map_vec(exprs, |e| { self.eval(*e) }) {
+                    Ok(args) => self.call_proc(names, None, body, self.env, args),
+                    Err(e) => Err(e),
+                }
+            }
+        }
+    }
+
     fn define(&mut self, args: ~[@RDatum]) -> Result<(@str, @RDatum), RuntimeError> {
         match get_syms(&args[0]) {
             Err(e) => Err(BadSyntax(SynDefine, e)),
@@ -363,6 +389,11 @@ impl Runtime {
                             Ok(@LExt(RProc(anames, varargs, seq, self.env)))
                         },
                     }
+                },
+            SynLet => if args.len() < 2 {
+                    Err(BadSyntax(SynLet, ~"no body given"))
+                } else {
+                    self.syn_let(args[0], args.slice(1, args.len()))
                 },
             SynDefine => if args.len() < 2 {
                     Err(BadSyntax(SynDefine, ~"no body given"))
