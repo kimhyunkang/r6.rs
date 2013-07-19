@@ -10,4 +10,11 @@
   (define (apply f args) 
     (eval (cons f args))
   )
+
+  (define (length lst)
+    (if (null? lst)
+        0
+        (+ 1 (length (cdr lst)))
+    )
+  )
 )
