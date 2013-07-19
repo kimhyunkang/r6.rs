@@ -40,4 +40,14 @@
   (define (cadr x) (car (cdr x)))
   (define (cdar x) (cdr (car x)))
   (define (cddr x) (cdr (cdr x)))
+
+  (define (append . lss)
+    (if (null? lss)
+        null
+        (if (null? (car lss))
+            (apply append (cdr lss))
+            (cons (caar lss) (apply append (cons (cdar lss) (cdr lss))))
+        )
+    )
+  )
 )
