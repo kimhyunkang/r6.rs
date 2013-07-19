@@ -8,6 +8,7 @@ pub enum PFunc {
     PDiv,
     PCar,
     PCdr,
+    PCons,
     PEqv,
     PEqual,
     PNumber,
@@ -25,7 +26,8 @@ pub enum PFunc {
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
-    do [PEval, PBegin, PAdd, PSub, PMul, PDiv, PCar, PCdr,
+    do [PEval, PBegin, PAdd, PSub, PMul, PDiv,
+        PCar, PCdr, PCons,
         PEqv, PEqual,
         PNumber, PReal, PInteger,
         PExact, PInexact,
@@ -45,6 +47,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PDiv => ~"/",
         PCar => ~"car",
         PCdr => ~"cdr",
+        PCons => ~"cons",
         PEqv => ~"eqv?",
         PEqual => ~"equal?",
         PNumber => ~"number?",

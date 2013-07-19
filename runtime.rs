@@ -560,6 +560,7 @@ impl Runtime {
                     _ => Err(TypeError),
                 }
             },
+            PCons => do call_prim2(args) |arg1, arg2| { Ok(@LCons(arg1, arg2)) },
             PEqv => do call_prim2(args) |arg1, arg2| {
                 let b =
                 match (arg1, arg2) {
