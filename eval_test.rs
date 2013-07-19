@@ -208,3 +208,9 @@ fn recursive_test() {
 fn let_test() {
     eval_test(~"(let ((x 1) (y 2)) (+ x y))", ~"3");
 }
+
+#[test]
+fn not_test() {
+    eval_test(~"(not #t)", ~"#f");
+    eval_test(~"(not #f)", ~"#t");
+}

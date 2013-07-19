@@ -612,6 +612,12 @@ impl Runtime {
             PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
             PGE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs >= rhs },
             PLE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs <= rhs },
+            PNot => do call_prim1(args) |arg| {
+                match arg {
+                    @LBool(b) => Ok(@LBool(!b)),
+                    _ => Err(TypeError),
+                }
+            },
             PNull => do call_prim1(args) |arg| {
                 match arg {
                     @LNil => Ok(@LBool(true)),
