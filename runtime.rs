@@ -3,6 +3,7 @@ use std::borrow;
 use std::uint;
 use std::result;
 use std::vec;
+use std::str;
 use std::num::{One, Zero};
 use std::hashmap::HashMap;
 use std::managed;
@@ -660,12 +661,24 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
-            PString => do call_prim1(args) |arg| {
+            PIsString => do call_prim1(args) |arg| {
                 match arg {
                     @LString(_) => Ok(@LBool(true)),
                     _ => Ok(@LBool(false)),
                 }
-            }
+            },
+            PString => {
+                let char_list = do result::map_vec(args) |arg| {
+                    match *arg {
+                        @LChar(c) => Ok(c),
+                        _ => Err(TypeError),
+                    }
+                };
+                match char_list {
+                    Ok(chars) => Ok(@LString(str::from_chars(chars))),
+                    Err(e) => Err(e)
+                }
+            },
         }
     }
 

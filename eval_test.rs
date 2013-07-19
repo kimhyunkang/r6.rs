@@ -226,3 +226,8 @@ fn modrem_test() {
     eval_test(~"(modulo -13 -4)", ~"-1");
     eval_test(~"(remainder -13 -4)", ~"-1");
 }
+
+#[test]
+fn string_test() {
+    eval_test(~"(string #\\h #\\e #\\l #\\l #\\o)", ~"\"hello\"");
+}
