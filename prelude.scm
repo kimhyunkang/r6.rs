@@ -17,4 +17,12 @@
         (+ 1 (length (cdr lst)))
     )
   )
+
+  (define (odd? n)
+    (= (modulo n 2) 1)
+  )
+
+  (define (even? n)
+    (= (remainder n 2) 0)
+  )
 )
