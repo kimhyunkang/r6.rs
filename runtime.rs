@@ -685,6 +685,19 @@ impl Runtime {
                     _ => Err(TypeError),
                 }
             },
+            PStringRef => do call_prim2(args) |arg, idx| {
+                match (arg, idx) {
+                    (@LString(ref s), @LNum(ref n)) => match get_int(n) {
+                        Some(i) => if i < 0 {
+                                Err(TypeError)
+                            } else {
+                                Ok(@LChar(s.char_at(i as uint)))
+                            },
+                        None => Err(TypeError),
+                    },
+                    _ => Err(TypeError),
+                }
+            },
         }
     }
 

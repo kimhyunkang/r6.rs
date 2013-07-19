@@ -236,3 +236,8 @@ fn string_test() {
 fn string_length_test() {
     eval_test(~"(string-length \"hello\")", ~"5");
 }
+
+#[test]
+fn string_ref_test() {
+    eval_test(~"(string-ref \"hello\" 4)", ~"#\\o");
+}
