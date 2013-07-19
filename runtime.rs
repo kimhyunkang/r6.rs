@@ -14,6 +14,7 @@ use stack::*;
 use parser::Parser;
 
 enum RuntimeData {
+    RUndef,
     RPrim(PFunc),
     RProc(~[@str],
         Option<@str>,
@@ -41,6 +42,7 @@ impl Eq for RuntimeData {
 
 fn data_to_str(data: &RuntimeData) -> ~str {
     match *data {
+        RUndef => ~"<undefined>",
         RPrim(f) => f.to_str(),
         RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", borrow::to_uint(data)),
     }
@@ -808,6 +810,8 @@ impl Runtime {
 
     fn apply(&mut self, proc: &RuntimeData, args: &[@RDatum]) -> Result<@RDatum, RuntimeError> {
         match proc {
+            &RUndef =>
+                Err(NotCallable),
             &RPrim(f) =>
                 self.call_prim(f, args),
             &RProc(ref anames, ref vargs, ref code, ref env) =>
