@@ -3,6 +3,7 @@ use std::borrow;
 use std::uint;
 use std::result;
 use std::str;
+use std::vec;
 use std::num::{One, Zero};
 use std::hashmap::HashMap;
 use std::managed;
@@ -359,6 +360,44 @@ impl Runtime {
         }
     }
 
+    fn syn_letrec(&mut self, bindings: &RDatum, body: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+    {
+        match get_bindings(bindings) {
+            Err(e) => Err(BadSyntax(SynLet, e)),
+            Ok(b) => {
+                let old_frame = self.env;
+                let mut arg_frame = HashMap::new();
+                let (names, exprs) = vec::unzip(b);
+                for names.each |&name| {
+                    arg_frame.insert(name, @LExt(RUndef));
+                }
+                self.env = @mut push(old_frame, arg_frame);
+
+                let mut res:Result<@RDatum, RuntimeError> = Err(NilEval);
+                match result::map_vec(exprs, |&expr| { self.eval(expr) }) {
+                    Ok(vals) => {
+                        do self.env.mut_top |frame| {
+                            for uint::range(0, names.len()) |i| {
+                                frame.insert(names[i], vals[i]);
+                            }
+                        };
+
+                        do body.each |&val| {
+                            res = self.eval(val);
+                            res.is_ok()
+                        };
+                    },
+                    Err(e) => {
+                        res = Err(e);
+                    },
+                }
+
+                self.env = old_frame;
+                res
+            }
+        }
+    }
+
     fn define(&mut self, args: ~[@RDatum]) -> Result<(@str, @RDatum), RuntimeError> {
         match get_syms(&args[0]) {
             Err(e) => Err(BadSyntax(SynDefine, e)),
@@ -415,6 +454,11 @@ impl Runtime {
                     Err(BadSyntax(SynLet, ~"no body given"))
                 } else {
                     self.syn_let(args[0], args.slice(1, args.len()))
+                },
+            SynLetRec => if args.len() < 2 {
+                    Err(BadSyntax(SynLetRec, ~"no body given"))
+                } else {
+                    self.syn_letrec(args[0], args.slice(1, args.len()))
                 },
             SynDefine => if args.len() < 2 {
                     Err(BadSyntax(SynDefine, ~"no body given"))

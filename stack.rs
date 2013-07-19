@@ -47,6 +47,13 @@ impl<T> Stack<T> {
         }
         return true;
     }
+
+    pub fn mut_top(&mut self, op: &fn(&mut T)) {
+        match self.head {
+            None => (),
+            Some(node) => op(&mut node.elem),
+        }
+    }
 }
 
 #[test]
@@ -73,6 +80,24 @@ fn each_mut_test() {
     for stack.each_mut |i| {
         *i += 1;
     }
+
+    for stack.each |&i| {
+        v.push(i);
+    }
+
+    assert_eq!(v, ~[2]);
+}
+
+#[test]
+fn mut_top_test() {
+    let tail: Stack<int> = Stack::new();
+    let mut stack = push(&tail, 1);
+
+    let mut v:~[int] = ~[];
+
+    do stack.mut_top |i| {
+        *i += 1;
+    };
 
     for stack.each |&i| {
         v.push(i);

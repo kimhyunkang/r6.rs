@@ -246,3 +246,8 @@ fn string_ref_test() {
 fn substring_test() {
     eval_test(~"(substring \"hello\" 0 4)", ~"\"hell\"");
 }
+
+#[test]
+fn letrec_test() {
+    eval_test(~"(letrec ((fib (lambda (n) (if (= n 0) 1 (* n (fib (- n 1))))))) (fib 4))", ~"24");
+}
