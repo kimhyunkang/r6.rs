@@ -231,3 +231,8 @@ fn modrem_test() {
 fn string_test() {
     eval_test(~"(string #\\h #\\e #\\l #\\l #\\o)", ~"\"hello\"");
 }
+
+#[test]
+fn string_length_test() {
+    eval_test(~"(string-length \"hello\")", ~"5");
+}

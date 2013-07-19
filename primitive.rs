@@ -29,6 +29,7 @@ pub enum PFunc {
     PPair,
     PIsString,
     PString,
+    PStringLength,
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
@@ -40,7 +41,7 @@ pub fn prelude() -> ~[(@str, PFunc)] {
         PExact, PInexact,
         PEQ, PGT, PLT, PGE, PLE, PNot,
         PNull, PPair,
-        PIsString, PString].map |prim| {
+        PIsString, PString, PStringLength].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
     }
 }
@@ -76,6 +77,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PPair => ~"pair?",
         PIsString => ~"string?",
         PString => ~"string",
+        PStringLength => ~"string-length",
     }
 }
 

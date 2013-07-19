@@ -679,6 +679,12 @@ impl Runtime {
                     Err(e) => Err(e)
                 }
             },
+            PStringLength => do call_prim1(args) |arg| {
+                match arg {
+                    @LString(ref s) => Ok(@LNum(from_int(s.len() as int))),
+                    _ => Err(TypeError),
+                }
+            },
         }
     }
 
