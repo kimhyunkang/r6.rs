@@ -2,7 +2,6 @@ use std::io;
 use std::borrow;
 use std::uint;
 use std::result;
-use std::vec;
 use std::str;
 use std::num::{One, Zero};
 use std::hashmap::HashMap;
@@ -336,10 +335,23 @@ impl Runtime {
         match get_bindings(bindings) {
             Err(e) => Err(BadSyntax(SynLet, e)),
             Ok(b) => {
-                let (names, exprs) = vec::unzip(b);
-                match result::map_vec(exprs, |e| { self.eval(*e) }) {
-                    Ok(args) => self.call_proc(names, None, body, self.env, args),
-                    Err(e) => Err(e),
+                let mut arg_frame = HashMap::new();
+                let mut err:Option<RuntimeError> = None;
+                do b.each |&(name, expr)| {
+                    match self.eval(expr) {
+                        Ok(val) => {
+                            arg_frame.insert(name, val);
+                            true
+                        }
+                        Err(e) => {
+                            err = Some(e);
+                            false
+                        }
+                    }
+                };
+                match err {
+                    Some(e) => Err(e),
+                    None => self.local_eval(arg_frame, self.env, body)
                 }
             }
         }
@@ -515,6 +527,15 @@ impl Runtime {
             arg_frame.insert(anames[i], args[i]);
         }
 
+        self.local_eval(arg_frame, frame, code)
+    }
+
+    fn local_eval(&mut self,
+                arg_frame: HashMap<@str, @RDatum>,
+                frame: @mut Stack<HashMap<@str, @RDatum>>,
+                code: &[@RDatum])
+        -> Result<@RDatum, RuntimeError>
+    {
         // store current env
         let old_env = self.env;
 
