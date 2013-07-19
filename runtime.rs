@@ -360,6 +360,48 @@ impl Runtime {
         }
     }
 
+    fn syn_letstar(&mut self, bindings: &RDatum, body: &[@RDatum])
+        -> Result<@RDatum, RuntimeError>
+    {
+        match get_bindings(bindings) {
+            Err(e) => Err(BadSyntax(SynLet, e)),
+            Ok(b) => {
+                let old_frame = self.env;
+                let mut err:Option<RuntimeError> = None;
+                do b.each |&(name, expr)| {
+                    match self.eval(expr) {
+                        Ok(val) => {
+                            let mut arg_frame = HashMap::new();
+                            arg_frame.insert(name, val);
+                            self.env = @mut push(self.env, arg_frame);
+                            true
+                        },
+                        Err(e) => {
+                            err = Some(e);
+                            false
+                        },
+                    }
+                };
+
+                let mut res:Result<@RDatum, RuntimeError> = Err(NilEval);
+                match err {
+                    Some(e) => {
+                        res = Err(e);
+                    },
+                    None => {
+                        do body.each |&val| {
+                            res = self.eval(val);
+                            res.is_ok()
+                        };
+                    }
+                };
+
+                self.env = old_frame;
+                return res
+            }
+        }
+    }
+
     fn syn_letrec(&mut self, bindings: &RDatum, body: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         match get_bindings(bindings) {
@@ -459,6 +501,11 @@ impl Runtime {
                     Err(BadSyntax(SynLetRec, ~"no body given"))
                 } else {
                     self.syn_letrec(args[0], args.slice(1, args.len()))
+                },
+            SynLetStar => if args.len() < 2 {
+                    Err(BadSyntax(SynLetRec, ~"no body given"))
+                } else {
+                    self.syn_letstar(args[0], args.slice(1, args.len()))
                 },
             SynDefine => if args.len() < 2 {
                     Err(BadSyntax(SynDefine, ~"no body given"))

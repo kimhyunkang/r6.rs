@@ -99,6 +99,7 @@ pub enum PrimSyntax {
     SynLambda,
     SynLet,
     SynLetRec,
+    SynLetStar,
     SynDefine,
     SynSet,
     SynQuote,
@@ -109,7 +110,7 @@ pub enum PrimSyntax {
 }
 
 pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do [SynIf, SynLambda, SynLet, SynLetRec, SynDefine, SynSet,
+    do [SynIf, SynLambda, SynLet, SynLetRec, SynLetStar, SynDefine, SynSet,
         SynQuote, SynQQuote, SynUnquote,
         SynAnd, SynOr].map |syn| {
         (syntax_to_str(syn).to_managed(), *syn)
@@ -122,6 +123,7 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> ~str {
         SynLambda => ~"lambda",
         SynLet => ~"let",
         SynLetRec => ~"letrec",
+        SynLetStar => ~"let*",
         SynDefine => ~"define",
         SynSet => ~"set!",
         SynQuote => ~"quote",

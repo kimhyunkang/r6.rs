@@ -251,3 +251,8 @@ fn substring_test() {
 fn letrec_test() {
     eval_test(~"(letrec ((fib (lambda (n) (if (= n 0) 1 (* n (fib (- n 1))))))) (fib 4))", ~"24");
 }
+
+#[test]
+fn letstar_test() {
+    eval_test(~"(let* ((x 3) (y (+ x 2))) (+ y 1))", ~"6");
+}
