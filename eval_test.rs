@@ -214,3 +214,15 @@ fn not_test() {
     eval_test(~"(not #t)", ~"#f");
     eval_test(~"(not #f)", ~"#t");
 }
+
+#[test]
+fn modrem_test() {
+    eval_test(~"(modulo 13 4)", ~"1");
+    eval_test(~"(remainder 13 4)", ~"1");
+    eval_test(~"(modulo -13 4)", ~"3");
+    eval_test(~"(remainder -13 4)", ~"-1");
+    eval_test(~"(modulo 13 -4)", ~"-3");
+    eval_test(~"(remainder 13 -4)", ~"1");
+    eval_test(~"(modulo -13 -4)", ~"-1");
+    eval_test(~"(remainder -13 -4)", ~"-1");
+}

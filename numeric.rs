@@ -253,6 +253,38 @@ pub fn get_real(n: &LNumeric) -> Option<LReal>
     }
 }
 
+pub fn get_int(n: &LNumeric) -> Option<int>
+{
+    match *n {
+        NExact( Cmplx{ re: re, im: im } ) => if im.is_zero() && re.numerator() == 1 {
+                Some(re.denominator())
+            } else {
+                None
+            },
+        NInexact(_) => None,
+    }
+}
+
+pub fn modulo(l: int, r: int) -> int
+{
+    let q = l % r;
+    if q < 0 {
+        if r < q {
+            q
+        } else {
+            q + r
+        }
+    } else if q > 0 {
+        if q < r {
+            q
+        } else {
+            q + r
+        }
+    } else {
+        q
+    }
+}
+
 #[test]
 fn test_eq() {
     assert_eq!(NRational(Rational::new(2,1)) == NRational(Rational::new(2,1)), true);

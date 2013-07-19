@@ -548,6 +548,36 @@ impl Runtime {
                     Ok(lhs / rhs)
                 }
             },
+            PQuotient => do call_num_foldl1(args) |&lhs, &rhs| {
+                if rhs.is_zero() {
+                    Err(DivideByZeroError)
+                } else {
+                    match (get_int(&lhs), get_int(&rhs)) {
+                        (Some(l), Some(r)) => Ok(from_int(l / r)),
+                        _ => Err(TypeError),
+                    }
+                }
+            },
+            PRemainder => do call_num_foldl1(args) |&lhs, &rhs| {
+                if rhs.is_zero() {
+                    Err(DivideByZeroError)
+                } else {
+                    match (get_int(&lhs), get_int(&rhs)) {
+                        (Some(l), Some(r)) => Ok(from_int(l % r)),
+                        _ => Err(TypeError),
+                    }
+                }
+            },
+            PModulo => do call_num_foldl1(args) |&lhs, &rhs| {
+                if rhs.is_zero() {
+                    Err(DivideByZeroError)
+                } else {
+                    match (get_int(&lhs), get_int(&rhs)) {
+                        (Some(l), Some(r)) => Ok(from_int(modulo(l, r))),
+                        _ => Err(TypeError),
+                    }
+                }
+            },
             PCar => do call_prim1(args) |arg| {
                 match *arg {
                     LCons(h, _) => Ok(h),
