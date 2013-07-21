@@ -35,7 +35,7 @@ priv fn build_exact(sign: bool, radix: uint, &part: &PResult) -> Result<Rational
             Ok(Rational::new(s_to_int(zs, sign, radix), 1)),
         PRational(ds, ns) => {
             let d = s_to_int(ds, sign, radix);
-            let n = s_to_int(ns, sign, radix);
+            let n = s_to_int(ns, true, radix);
             if(n == 0) {
                 Err(~"divide by zero")
             } else {
@@ -954,4 +954,9 @@ fn test_parse_char_list() {
 #[test]
 fn test_minus_num() {
     test_expect(~"-2", &LNum(from_int(-2)));
+}
+
+#[test]
+fn test_minus_rational() {
+    test_expect(~"-7/2", &LNum( from_rational(Rational::new(-7, 2)) ));
 }
