@@ -44,7 +44,7 @@ impl Eq for RuntimeData {
 fn data_to_str(data: &RuntimeData) -> ~str {
     match *data {
         RUndef => ~"<undefined>",
-        RPrim(f) => f.to_str(),
+        RPrim(f) => fmt!("<primitive:%s>", f.to_str()),
         RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", borrow::to_uint(data)),
     }
 }
