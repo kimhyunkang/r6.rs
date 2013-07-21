@@ -184,6 +184,13 @@ pub fn from_f64(re: f64) -> LNumeric {
     NInexact( Cmplx{ re: re, im: 0f64 } )
 }
 
+pub fn from_real(re: &LReal) -> LNumeric {
+    match *re {
+        NRational(x) => from_rational(x),
+        NFloat(x) => from_f64(x),
+    }
+}
+
 pub fn exact(re: Rational, im: Rational) -> LNumeric {
     NExact( Cmplx { re: re, im: im } )
 }
@@ -234,6 +241,43 @@ impl Ord for LReal {
 
     fn ge(&self, other: &LReal) -> bool {
         coerce(self, other, |x,y| {x >= y}, |x,y| {x >= y})
+    }
+}
+
+impl Round for LReal {
+    fn floor(&self) -> LReal {
+        match *self {
+            NRational( f ) => NRational( f.floor() ),
+            NFloat( f ) => NFloat( f.floor() ),
+        }
+    }
+
+    fn ceil(&self) -> LReal {
+        match *self {
+            NRational( f ) => NRational( f.ceil() ),
+            NFloat( f ) => NFloat( f.ceil() ),
+        }
+    }
+
+    fn round(&self) -> LReal {
+        match *self {
+            NRational( f ) => NRational( f.round() ),
+            NFloat( f ) => NFloat( f.round() ),
+        }
+    }
+
+    fn trunc(&self) -> LReal {
+        match *self {
+            NRational( f ) => NRational( f.trunc() ),
+            NFloat( f ) => NFloat( f.trunc() ),
+        }
+    }
+
+    fn fract(&self) -> LReal {
+        match *self {
+            NRational( f ) => NRational( f.fract() ),
+            NFloat( f ) => NFloat( f.fract() ),
+        }
     }
 }
 

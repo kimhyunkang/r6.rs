@@ -228,6 +228,38 @@ fn modrem_test() {
 }
 
 #[test]
+fn floor_test() {
+    eval_test(~"(floor -4.3)", ~"-5.0");
+    eval_test(~"(floor 3.5)", ~"3.0");
+    eval_test(~"(floor -4.0)", ~"-4.0");
+    eval_test(~"(floor 3.0)", ~"3.0");
+    eval_test(~"(floor 9/2)", ~"4");
+    eval_test(~"(floor -7/2)", ~"-4");
+    eval_test(~"(floor 9/3)", ~"3");
+    eval_test(~"(floor -8/2)", ~"-4");
+}
+
+#[test]
+fn ceiling_test() {
+    eval_test(~"(ceiling -4.3)", ~"-4.0");
+    eval_test(~"(ceiling 3.5)", ~"4.0");
+    eval_test(~"(ceiling -4.0)", ~"-4.0");
+    eval_test(~"(ceiling 3.0)", ~"3.0");
+    eval_test(~"(ceiling 9/2)", ~"5");
+    eval_test(~"(ceiling -7/2)", ~"-3");
+    eval_test(~"(ceiling 9/3)", ~"3");
+    eval_test(~"(ceiling -8/2)", ~"-4");
+}
+
+#[test]
+fn round_test() {
+    eval_test(~"(round -4.3)", ~"-4.0");
+    eval_test(~"(round 3.5)", ~"4.0");
+    eval_test(~"(round 7/2)", ~"4");
+    eval_test(~"(round 7)", ~"7");
+}
+
+#[test]
 fn string_test() {
     eval_test(~"(string #\\h #\\e #\\l #\\l #\\o)", ~"\"hello\"");
 }

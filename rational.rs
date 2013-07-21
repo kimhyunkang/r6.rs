@@ -85,6 +85,43 @@ impl Rational {
     }
 }
 
+impl Round for Rational {
+    fn floor(&self) -> Rational {
+        Rational {
+            d: self.d.div_floor(&self.n),
+            n: 1,
+        }
+    }
+
+    fn ceil(&self) -> Rational {
+        Rational {
+            d: -((-self.d).div_floor(&self.n)),
+            n: 1,
+        }
+    }
+
+    fn round(&self) -> Rational {
+        Rational {
+            d: ((self.d as f64) / (self.n as f64)).round() as int,
+            n: 1,
+        }
+    }
+
+    fn trunc(&self) -> Rational {
+        Rational {
+            d: ((self.d as f64) / (self.n as f64)).trunc() as int,
+            n: 1,
+        }
+    }
+
+    fn fract(&self) -> Rational {
+        Rational {
+            d: ((self.d as f64) / (self.n as f64)).fract() as int,
+            n: 1,
+        }
+    }
+}
+
 impl One for Rational {
     fn one() -> Rational {
         Rational {

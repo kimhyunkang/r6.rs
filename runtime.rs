@@ -217,6 +217,19 @@ priv fn call_num_foldl1(args: &[@RDatum],
 
 }
 
+priv fn call_real_prim1(args: &[@RDatum], op: &fn(&LReal) -> LReal)
+    -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [@LNum(ref n)] => match get_real(n) {
+            None => Err(TypeError),
+            Some(r) => Ok(@LNum(from_real(&op(&r)))),
+        },
+        [_] => Err(TypeError),
+        _ => Err(ArgNumError(1, Some(1), args.len())),
+    }
+}
+
 priv fn call_real_bfoldl(args: &[@RDatum], op: &fn(&LReal, &LReal) -> bool)
     -> Result<@RDatum, RuntimeError>
 {
@@ -754,6 +767,10 @@ impl Runtime {
                     }
                 }
             },
+            PFloor => do call_real_prim1(args) |&f| { f.floor() },
+            PCeiling => do call_real_prim1(args) |&f| { f.ceil() },
+            PRound => do call_real_prim1(args) |&f| { f.round() },
+            PTruncate => do call_real_prim1(args) |&f| { f.trunc() },
             PNumerator => match args {
                 [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
                     Ok(@LNum( from_int(re.numerator()) )),
