@@ -754,6 +754,22 @@ impl Runtime {
                     }
                 }
             },
+            PNumerator => match args {
+                [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
+                    Ok(@LNum( from_int(re.numerator()) )),
+                [_] =>
+                    Err(TypeError),
+                _ =>
+                    Err(ArgNumError(1, Some(1), args.len())),
+            },
+            PDenominator => match args {
+                [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
+                    Ok(@LNum( from_int(re.denominator()) )),
+                [_] =>
+                    Err(TypeError),
+                _ =>
+                    Err(ArgNumError(1, Some(1), args.len())),
+            },
             PCar => do call_prim1(args) |arg| {
                 match *arg {
                     LCons(h, _) => Ok(h),
