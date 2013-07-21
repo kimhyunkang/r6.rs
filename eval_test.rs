@@ -256,3 +256,8 @@ fn letrec_test() {
 fn letstar_test() {
     eval_test(~"(let* ((x 3) (y (+ x 2))) (+ y 1))", ~"6");
 }
+
+#[test]
+fn cond_test() {
+    eval_test(~"(cond ((< 3 3) 'less) ((= 3 3) 'equal) (else 'greater))", ~"equal");
+}

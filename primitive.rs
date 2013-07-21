@@ -96,6 +96,7 @@ impl ToStr for PFunc {
 #[deriving(Eq)]
 pub enum PrimSyntax {
     SynIf,
+    SynCond,
     SynLambda,
     SynLet,
     SynLetRec,
@@ -110,7 +111,8 @@ pub enum PrimSyntax {
 }
 
 pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do [SynIf, SynLambda, SynLet, SynLetRec, SynLetStar, SynDefine, SynSet,
+    do [SynIf, SynCond,
+        SynLambda, SynLet, SynLetRec, SynLetStar, SynDefine, SynSet,
         SynQuote, SynQQuote, SynUnquote,
         SynAnd, SynOr].map |syn| {
         (syntax_to_str(syn).to_managed(), *syn)
@@ -120,6 +122,7 @@ pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
 pub fn syntax_to_str(&prim: &PrimSyntax) -> ~str {
     match prim {
         SynIf => ~"if",
+        SynCond => ~"cond",
         SynLambda => ~"lambda",
         SynLet => ~"let",
         SynLetRec => ~"letrec",

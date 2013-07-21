@@ -440,6 +440,52 @@ impl Runtime {
         }
     }
 
+    fn cond(&mut self, conds: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+    {
+        let mut i = 0u;
+        let mut exprs = vec::with_capacity(conds.len());
+        let mut else_opt = None;
+
+        while i < conds.len() {
+            match conds[i].to_list() {
+                Some([@LIdent(els), expr]) if els.as_slice() == "else" => 
+                    if i == conds.len()-1 {
+                        else_opt = Some(expr);
+                    } else {
+                        return Err(BadSyntax(SynCond, ~"trailing conditions after else"));
+                    },
+                Some([pred, expr]) => exprs.push((pred, expr)),
+                _ => return Err(BadSyntax(SynCond, ~"invalid conditional expression")),
+            }
+            i += 1;
+        }
+
+        let mut res = Ok(@LExt(RUndef));
+
+        let expr_end = do exprs.each |&(pred, expr)| {
+            match self.eval(pred) {
+                Err(e) => {
+                    res = Err(e);
+                    false
+                },
+                Ok(@LBool(true)) => {
+                    res = self.eval(expr);
+                    false
+                },
+                Ok(@LBool(false)) => true,
+                _ => {
+                    res = Err(BadSyntax(SynCond, ~"invalid conditional predicate"));
+                    false
+                },
+            }
+        };
+
+        match else_opt {
+            Some(else_expr) if expr_end => self.eval(else_expr),
+            _ => res
+        }
+    }
+
     fn define(&mut self, args: ~[@RDatum]) -> Result<(@str, @RDatum), RuntimeError> {
         match get_syms(&args[0]) {
             Err(e) => Err(BadSyntax(SynDefine, e)),
@@ -481,6 +527,7 @@ impl Runtime {
                 } else {
                     Err(BadSyntax(SynIf, ~"bad number of arguments"))
                 },
+            SynCond => self.cond(args),
             SynLambda => if args.len() < 2 {
                     Err(BadSyntax(SynLambda, ~"no body given"))
                 } else {
