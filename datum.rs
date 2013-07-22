@@ -39,6 +39,13 @@ impl<T> LDatum<T> {
             _ => None,
         }
     }
+
+    pub fn from_list(list: &[@LDatum<T>]) -> @LDatum<T> {
+        match list {
+            [] => @LNil,
+            [h, ..t] => @LCons(h, LDatum::from_list(t)),
+        }
+    }
 }
 
 impl<T: ToStr> LDatum<T> {

@@ -1026,6 +1026,18 @@ impl Runtime {
                 [_, _] => Err(TypeError),
                 _ => Err(ArgNumError(2, Some(2), args.len())),
             },
+            PVectorList => match args {
+                [@LVector(ref v)] => Ok(LDatum::from_list(*v)),
+                [_] => Err(TypeError),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
+            },
+            PListVector => match args {
+                [arg] => match arg.to_list() {
+                    Some(v) => Ok(@LVector(v)),
+                    None => Err(TypeError),
+                },
+                _ => Err(ArgNumError(1, Some(1), args.len())),
+            },
             PNull => do call_prim1(args) |arg| {
                 match arg {
                     @LNil => Ok(@LBool(true)),
