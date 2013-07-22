@@ -232,6 +232,41 @@ impl Exponential for LNumeric {
     }
 }
 
+impl Algebraic for LNumeric {
+    fn pow(&self, n: &LNumeric) -> LNumeric {
+        // x^n = e^(n * ln x)
+        (self.ln() * (*n)).exp()
+    }
+
+    fn sqrt(&self) -> LNumeric {
+        // sqrt(z) = sqrt(|z|) * { cos(arg z / 2) + i sin(arg z / 2) }
+        let (norm, arg) = to_inexact(self).to_polar();
+        let n = norm.sqrt();
+        NInexact( Cmplx { re: (arg * 0.5).cos() * n, im: (arg * 0.5).sin() * n } )
+    }
+
+    fn rsqrt(&self) -> LNumeric {
+        // 1/sqrt(z) = 1/sqrt(|z|) * 1/{ cos(arg z / 2) + i sin(arg z / 2) }
+        //           = 1/sqrt(|z|) * { cos(arg z / 2) - i sin(arg z / 2)
+        let (norm, arg) = to_inexact(self).to_polar();
+        let n = norm.rsqrt();
+        NInexact( Cmplx { re: (arg * 0.5).cos() * n, im: (arg * -0.5).sin() * n } )
+    }
+
+    fn cbrt(&self) -> LNumeric {
+        // cbrt(z) = cbrt(|z|) * { cos(arg z / 3) + i sin(arg z / 3) }
+        let (norm, arg) = to_inexact(self).to_polar();
+        let n = norm.cbrt();
+        NInexact( Cmplx { re: (arg / 3.0).cos() * n, im: (arg / 3.0).sin() * n } )
+    }
+
+    fn hypot(&self, rhs: &LNumeric) -> LNumeric {
+        let x = *self;
+        let y = *rhs;
+        ((x * x) + (y * y)).sqrt()
+    }
+}
+
 pub fn from_int(n: int) -> LNumeric {
     NExact( Cmplx{ re: Rational::new(n, 1), im: Zero::zero() } )
 }
@@ -407,4 +442,10 @@ fn test_eq() {
     assert_eq!(NRational(Rational::new(2,1)) == NRational(Rational::new(2,1)), true);
     assert_eq!(NRational(Rational::new(2,1)) < NFloat(3.0), true);
     assert_eq!(NFloat(3.0) > NRational(Rational::new(2,1)), true);
+}
+
+#[test]
+fn test_log_exp() {
+    let x = NInexact( Cmplx { re: 1.0, im: 1.0 } );
+    assert_approx_eq!(x.ln().exp(), x)
 }

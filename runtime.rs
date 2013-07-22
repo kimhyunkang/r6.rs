@@ -161,20 +161,17 @@ priv fn call_num_prim1(args: &[@RDatum],
     }
 }
 
-priv fn call_num_prim2(args: ~[@RDatum],
-                    op: &fn(&LNumeric, &LNumeric) -> Result<@RDatum, RuntimeError>)
+priv fn call_num_prim2(args: &[@RDatum],
+                    op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
     -> Result<@RDatum, RuntimeError>
 {
-    if args.len() == 2 {
-        match *args[0] {
-            LNum(lhs) => match *args[1] {
-                LNum(rhs) => op(&lhs, &rhs),
-                _ => Err(TypeError),
-            },
-            _ => Err(TypeError),
-        }
-    } else {
-        Err(ArgNumError(2, Some(2), args.len()))
+    match args {
+        [@LNum(ref x), @LNum(ref y)] => match op(x, y) {
+            Ok(n) => Ok(@LNum(n)),
+            Err(e) => Err(e),
+        },
+        [_, _] => Err(TypeError),
+        _ => Err(ArgNumError(2, Some(2), args.len())),
     }
 }
 
@@ -797,6 +794,8 @@ impl Runtime {
             PTruncate => do call_real_prim1(args) |&f| { f.trunc() },
             PExp => do call_num_prim1(args) |&f| { Ok(f.exp()) },
             PLog => do call_num_prim1(args) |&f| { Ok(f.ln()) },
+            PSqrt => do call_num_prim1(args) |&f| { Ok(f.sqrt()) },
+            PExpt => do call_num_prim2(args) |f, r| { Ok(f.pow(r)) },
             PNumerator => match args {
                 [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
                     Ok(@LNum( from_int(re.numerator()) )),
