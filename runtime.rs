@@ -498,13 +498,9 @@ impl Runtime {
                     res = Err(e);
                     false
                 },
-                Ok(@LBool(true)) => {
-                    res = self.eval(expr);
-                    false
-                },
                 Ok(@LBool(false)) => true,
                 _ => {
-                    res = Err(BadSyntax(SynCond, ~"invalid conditional predicate"));
+                    res = self.eval(expr);
                     false
                 },
             }
@@ -549,9 +545,8 @@ impl Runtime {
             SynIf => if args.len() == 3 {
                     do self.eval(args[0]).chain |cond| {
                         match *cond {
-                            LBool(true) => self.eval(args[1]),
                             LBool(false) => self.eval(args[2]),
-                            _ => Err(TypeError),
+                            _ => self.eval(args[1]),
                         }
                     }
                 } else {
@@ -635,12 +630,44 @@ impl Runtime {
                 } else {
                     Err(BadSyntax(SynUnquote, ~"bad number of arguments"))
                 },
-            SynAnd => do self.syn_bool_foldl(args, true) |b0, b1| { b0 && b1 },
-            SynOr => do self.syn_bool_foldl(args, false) |b0, b1| { b0 || b1 },
+            SynAnd => self.syn_and(args),
+            SynOr => self.syn_or(args),
         }
     }
 
-    priv fn syn_bool_foldl(&mut self, args: &[@RDatum], a0: bool, op: &fn(bool, bool) -> bool)
+    priv fn syn_and(&mut self, args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+    {
+        let mut res = @LBool(true);
+        let mut i = 0u;
+        while i < args.len() {
+            match self.eval(args[i]) {
+                Ok(@LBool(false)) => return Ok(@LBool(false)),
+                Ok(x) => { res = x },
+                Err(e) => return Err(e),
+            };
+            i += 1;
+        }
+        return Ok(res)
+    }
+
+    priv fn syn_or(&mut self, args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+    {
+        let mut i = 0u;
+        while i < args.len() {
+            match self.eval(args[i]) {
+                Ok(@LBool(false)) => (),
+                Ok(x) => return Ok(x),
+                Err(e) => return Err(e),
+            };
+            i += 1;
+        }
+        return Ok(@LBool(false))
+    }
+
+    priv fn syn_exp_foldl(&mut self,
+                        args: &[@RDatum],
+                        a0: bool,
+                        op: &fn(bool, bool) -> bool)
         -> Result<@RDatum, RuntimeError>
     {
         let mut res = a0;
@@ -939,11 +966,10 @@ impl Runtime {
             PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
             PGE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs >= rhs },
             PLE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs <= rhs },
-            PNot => do call_prim1(args) |arg| {
-                match arg {
-                    @LBool(b) => Ok(@LBool(!b)),
-                    _ => Err(TypeError),
-                }
+            PNot => match args {
+                [@LBool(false)] => Ok(@LBool(true)),
+                [_] => Ok(@LBool(false)),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
             },
             PBoolean => match args {
                 [@LBool(_)] => Ok(@LBool(true)),

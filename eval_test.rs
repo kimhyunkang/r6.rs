@@ -88,6 +88,7 @@ fn if_true_test() {
 #[test]
 fn if_false_test() {
     eval_test(~"(if #f 1 0)", ~"0");
+    eval_test(~"(if '() 1 0)", ~"1");
 }
 
 #[test]
@@ -196,6 +197,8 @@ fn and_test() {
     eval_test(~"(and #t #t)", ~"#t");
     eval_test(~"(and #t #f #t)", ~"#f");
     eval_test(~"(and #t #f a)", ~"#f");
+    eval_test(~"(and 'a #t #t)", ~"#t");
+    eval_test(~"(and #t #t 'a)", ~"a");
     eval_test(~"(and)", ~"#t");
 }
 
@@ -204,6 +207,7 @@ fn or_test() {
     eval_test(~"(or #f #f)", ~"#f");
     eval_test(~"(or #f #t #f)", ~"#t");
     eval_test(~"(or #f #t a)", ~"#t");
+    eval_test(~"(or #f #f 'a)", ~"a");
     eval_test(~"(or)", ~"#f");
 }
 
@@ -300,6 +304,7 @@ fn letstar_test() {
 #[test]
 fn cond_test() {
     eval_test(~"(cond ((< 3 3) 'less) ((= 3 3) 'equal) (else 'greater))", ~"equal");
+    eval_test(~"(cond ('() 1) (else 0))", ~"1");
 }
 
 #[test]
