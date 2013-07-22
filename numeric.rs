@@ -193,6 +193,15 @@ impl Div<LNumeric, LNumeric> for LNumeric {
     }
 }
 
+impl Fractional for LNumeric {
+    fn recip(&self) -> LNumeric {
+        match *self {
+            NExact( c ) => NExact(One::one::<Cmplx<Rational>>() / c),
+            NInexact( c ) => NInexact(One::one::<Cmplx<f64>>() / c),
+        }
+    }
+}
+
 pub fn cmplx_exp<T: Clone + Exponential + Trigonometric + Num>(c: &Cmplx<T>) -> Cmplx<T> {
     // e^(a+bi) = e^a * (cos b + i sin b)
     let pow = c.re.exp();
