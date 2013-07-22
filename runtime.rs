@@ -4,7 +4,7 @@ use std::uint;
 use std::result;
 use std::str;
 use std::vec;
-use std::num::{One, Zero};
+use std::num::{One, Zero, ToStrRadix};
 use std::hashmap::HashMap;
 use std::managed;
 use extra::complex::Cmplx;
@@ -917,7 +917,21 @@ impl Runtime {
             PExactInexact => do call_num_prim1(args) |arg| { Ok(NInexact(arg.to_inexact())) },
             PNumberString => match args {
                 [@LNum(ref x)] => Ok(@LString(x.to_str())),
-                [_] => Err(TypeError),
+                [@LNum(ref x), @LNum(ref r)] => match get_uint(r) {
+                    None => Err(TypeError),
+                    Some(radix) => {
+                        match x {
+                            &NExact(ref n) => Ok(@LString(n.to_str_radix(radix))),
+                            _ =>
+                                if radix == 10 {
+                                    Ok(@LString(x.to_str()))
+                                } else {
+                                    Err(TypeError)
+                                },
+                        }
+                    },
+                },
+                [_] | [_, _] => Err(TypeError),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
             PEQ => do call_real_bfoldl(args) |&lhs, &rhs| { lhs == rhs },

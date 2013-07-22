@@ -317,3 +317,9 @@ fn make_complex_test() {
 fn exact_inexact_test() {
     eval_test(~"(exact->inexact 1+2i)", ~"1.0+2.0i");
 }
+
+#[test]
+fn number_to_str_test() {
+    eval_test(~"(number->string 1+2i)", ~"\"1+2i\"");
+    eval_test(~"(number->string 5+6i 2)", ~"\"101+110i\"");
+}

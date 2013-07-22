@@ -1,4 +1,4 @@
-use std::num::{One, Zero};
+use std::num::{One, Zero, ToStrRadix};
 use extra::complex::Cmplx;
 use extra::bigint::BigInt;
 
@@ -91,6 +91,19 @@ impl ApproxEq<f64> for LNumeric {
 impl ToStr for LNumeric {
     fn to_str(&self) -> ~str {
         to_str(self)
+    }
+}
+
+pub fn to_str_radix(n: &Cmplx<Rational>, radix: uint) -> ~str
+{
+    if n.im.is_zero() {
+        n.re.to_str_radix(radix)
+    } else if n.re.is_zero() {
+        n.im.to_str_radix(radix) + "i"
+    } else if n.im.is_negative() {
+        n.re.to_str_radix(radix) + n.im.to_str_radix(radix) + "i"
+    } else {
+        n.re.to_str_radix(radix) + "+" + n.im.to_str_radix(radix) + "i"
     }
 }
 
