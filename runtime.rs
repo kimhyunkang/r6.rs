@@ -209,25 +209,6 @@ priv fn call_num_foldl(args: &[@RDatum],
     }
 }
 
-priv fn call_num_foldl1(args: &[@RDatum],
-                    op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
-    -> Result<@RDatum, RuntimeError>
-{
-    if args.len() == 0 {
-        return Err(ArgNumError(1, None, 0))
-    };
-
-    match *args[0] {
-        LNum(a) => {
-            call_num_foldl(args.slice(1, args.len()), a, op)
-        },
-        _ => {
-            Err(TypeError)
-        }
-    }
-
-}
-
 priv fn call_real_prim1(args: &[@RDatum], op: &fn(&LReal) -> LReal)
     -> Result<@RDatum, RuntimeError>
 {
@@ -749,16 +730,31 @@ impl Runtime {
                     Ok(*args.last())
                 },
             PAdd => do call_num_foldl(args, Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
-            PSub => do call_num_foldl1(args) |&lhs, &rhs| { Ok(lhs - rhs) },
-            PMul => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
-            PDiv => do call_num_foldl1(args) |&lhs, &rhs| {
-                if rhs.is_zero() {
-                    Err(DivideByZeroError)
-                } else {
-                    Ok(lhs / rhs)
-                }
+            PSub => match args {
+                [] => Err(ArgNumError(1, None, 0)),
+                [@LNum(x)] => Ok(@LNum(-x)),
+                [@LNum(x), ..tail] => do call_num_foldl(tail, x) |&lhs, &rhs| { Ok(lhs - rhs) },
+                _ => Err(TypeError),
             },
-            PQuotient => do call_num_foldl1(args) |&lhs, &rhs| {
+            PMul => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
+            PDiv => match args {
+                [] => Err(ArgNumError(1, None, 0)),
+                [@LNum(x)] => if x.is_zero() {
+                        Err(DivideByZeroError)
+                    } else {
+                        Ok(@LNum(x.recip()))
+                    },
+                [@LNum(x), ..tail] =>
+                    do call_num_foldl(tail, x) |&lhs, &rhs| {
+                        if rhs.is_zero() {
+                            Err(DivideByZeroError)
+                        } else {
+                            Ok(lhs / rhs)
+                        }
+                    },
+                _ => Err(TypeError),
+            },
+            PQuotient => do call_num_prim2(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
@@ -768,7 +764,7 @@ impl Runtime {
                     }
                 }
             },
-            PRemainder => do call_num_foldl1(args) |&lhs, &rhs| {
+            PRemainder => do call_num_prim2(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
@@ -778,7 +774,7 @@ impl Runtime {
                     }
                 }
             },
-            PModulo => do call_num_foldl1(args) |&lhs, &rhs| {
+            PModulo => do call_num_prim2(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
