@@ -43,6 +43,7 @@ pub enum PFunc {
     PExact,
     PInexact,
     PExactInexact,
+    PNumberString,
     PEQ,
     PGT,
     PLT,
@@ -70,6 +71,7 @@ pub fn prelude() -> ~[(@str, PFunc)] {
         PEqv, PEqual,
         PNumber, PReal, PInteger,
         PExact, PInexact, PExactInexact,
+        PNumberString,
         PEQ, PGT, PLT, PGE, PLE, PNot,
         PNull, PPair,
         PIsString, PString, PStringLength, PStringRef, PSubstring].map |prim| {
@@ -122,6 +124,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PExact => ~"exact?",
         PInexact => ~"inexact?",
         PExactInexact => ~"exact->inexact",
+        PNumberString => ~"number->string",
         PEQ => ~"=",
         PGT => ~">",
         PLT => ~"<",

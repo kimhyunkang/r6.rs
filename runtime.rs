@@ -915,6 +915,11 @@ impl Runtime {
                 }
             },
             PExactInexact => do call_num_prim1(args) |arg| { Ok(NInexact(arg.to_inexact())) },
+            PNumberString => match args {
+                [@LNum(ref x)] => Ok(@LString(x.to_str())),
+                [_] => Err(TypeError),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
+            },
             PEQ => do call_real_bfoldl(args) |&lhs, &rhs| { lhs == rhs },
             PGT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs > rhs },
             PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
