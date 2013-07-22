@@ -208,6 +208,14 @@ pub fn cmplx_exp<T: Clone + Exponential + Trigonometric + Num>(c: &Cmplx<T>) -> 
     Cmplx { re: c.im.cos() * pow, im: c.im.sin() * pow }
 }
 
+pub fn cmplx_ln<T: Clone + Exponential + Trigonometric + Algebraic + Num>(c: &Cmplx<T>)
+    -> Cmplx<T>
+{
+    // e^(a+bi) = e^a * (cos b + i sin b)
+    let (norm, arg) = c.to_polar();
+    Cmplx{ re: norm.ln(), im: arg }
+}
+
 impl Exponential for LNumeric {
     fn exp(&self) -> LNumeric {
         NInexact( cmplx_exp( &to_inexact(self)) )
@@ -220,8 +228,7 @@ impl Exponential for LNumeric {
     }
 
     fn ln(&self) -> LNumeric {
-        let (norm, arg) = to_inexact(self).to_polar();
-        NInexact( Cmplx{ re: norm.ln(), im: arg } )
+        NInexact( cmplx_ln( &to_inexact(self) ) )
     }
 
     fn log(&self, base: &LNumeric) -> LNumeric {
@@ -241,6 +248,13 @@ impl Exponential for LNumeric {
     }
 }
 
+pub fn cmplx_sqrt(c: &Cmplx<f64>) -> Cmplx<f64> {
+    // sqrt(z) = sqrt(|z|) * { cos(arg z / 2) + i sin(arg z / 2) }
+    let (norm, arg) = c.to_polar();
+    let n = norm.sqrt();
+    Cmplx { re: (arg * 0.5).cos() * n, im: (arg * 0.5).sin() * n }
+}
+
 impl Algebraic for LNumeric {
     fn pow(&self, n: &LNumeric) -> LNumeric {
         // x^n = e^(n * ln x)
@@ -248,10 +262,7 @@ impl Algebraic for LNumeric {
     }
 
     fn sqrt(&self) -> LNumeric {
-        // sqrt(z) = sqrt(|z|) * { cos(arg z / 2) + i sin(arg z / 2) }
-        let (norm, arg) = to_inexact(self).to_polar();
-        let n = norm.sqrt();
-        NInexact( Cmplx { re: (arg * 0.5).cos() * n, im: (arg * 0.5).sin() * n } )
+        NInexact( cmplx_sqrt(&to_inexact(self)) )
     }
 
     fn rsqrt(&self) -> LNumeric {
@@ -273,6 +284,79 @@ impl Algebraic for LNumeric {
         let x = *self;
         let y = *rhs;
         ((x * x) + (y * y)).sqrt()
+    }
+}
+
+pub fn cmplx_sin<T: Trigonometric + Hyperbolic + Num>(c: &Cmplx<T>) -> Cmplx<T>
+{
+    // sin(x + iy) = sin x cosh y + i cos x sinh y
+    Cmplx { re: c.re.sin() * c.im.cosh(), im: c.re.cos() * c.im.sinh() }
+}
+
+pub fn cmplx_cos<T: Trigonometric + Hyperbolic + Num>(c: &Cmplx<T>) -> Cmplx<T>
+{
+    // cos(x + iy) = cos x cosh y - i sin x sinh y
+    Cmplx { re: c.re.cos() * c.im.cosh(), im: -(c.re.sin() * c.im.sinh()) }
+}
+
+impl Trigonometric for LNumeric {
+    #[inline]
+    fn sin(&self) -> LNumeric {
+        NInexact( cmplx_sin(&to_inexact(self)) )
+    }
+
+    #[inline]
+    fn cos(&self) -> LNumeric {
+        NInexact( cmplx_cos(&to_inexact(self)) )
+    }
+
+    #[inline]
+    fn tan(&self) -> LNumeric {
+        let x = to_inexact(self);
+        NInexact( cmplx_sin(&x) / cmplx_cos(&x) )
+    }
+
+    #[inline]
+    fn asin(&self) -> LNumeric {
+        // asin x = -i * ln( ix + sqrt(1 - x^2) )
+        let x = to_inexact(self);
+        let i = Cmplx { re: 0f64, im: 1f64 };
+        let y = One::one::<Cmplx<f64>>() - x*x;
+        let z = x * i + cmplx_sqrt(&y);
+        NInexact(-i * cmplx_ln(&z))
+    }
+
+    #[inline]
+    fn acos(&self) -> LNumeric {
+        // acos x = -i * ln( x + i sqrt(1 - x^2) )
+        let x = to_inexact(self);
+        let i = Cmplx { re: 0f64, im: 1f64 };
+        let y = One::one::<Cmplx<f64>>() - x*x;
+        let z = x + cmplx_sqrt(&y) * i;
+        NInexact(i * cmplx_ln(&z))
+    }
+
+    #[inline]
+    fn atan(&self) -> LNumeric {
+        // atan x = i/2 * ( ln(1 - ix) - ln(1 + ix) )
+        let x = to_inexact(self);
+        let i = Cmplx { re: 0f64, im: 1f64 };
+        let ix = i * x;
+        let ihalf = Cmplx { re: 0.5f64, im: 0.5f64 };
+        let one:Cmplx<f64> = One::one();
+        let y:Cmplx<f64> = cmplx_ln(&(one - ix)) - cmplx_ln(&(one + ix));
+        NInexact(ihalf * y)
+    }
+
+    #[inline]
+    fn atan2(&self, _: &LNumeric) -> LNumeric {
+        fail!(~"atan2 not defined for complex numbers")
+    }
+
+    #[inline]
+    fn sin_cos(&self) -> (LNumeric, LNumeric) {
+        let x = to_inexact(self);
+        (NInexact(cmplx_sin(&x)), NInexact(cmplx_cos(&x)))
     }
 }
 

@@ -803,6 +803,12 @@ impl Runtime {
             PTruncate => do call_real_prim1(args) |&f| { f.trunc() },
             PExp => do call_num_prim1(args) |&f| { Ok(f.exp()) },
             PLog => do call_num_prim1(args) |&f| { Ok(f.ln()) },
+            PSin => do call_num_prim1(args) |&f| { Ok(f.sin()) },
+            PCos => do call_num_prim1(args) |&f| { Ok(f.cos()) },
+            PTan => do call_num_prim1(args) |&f| { Ok(f.tan()) },
+            PAsin => do call_num_prim1(args) |&f| { Ok(f.asin()) },
+            PAcos => do call_num_prim1(args) |&f| { Ok(f.acos()) },
+            PAtan => do call_num_prim1(args) |&f| { Ok(f.atan()) },
             PSqrt => do call_num_prim1(args) |&f| { Ok(f.sqrt()) },
             PExpt => do call_num_prim2(args) |f, r| { Ok(f.pow(r)) },
             PMakeRectangular => do call_real_prim2(args) |rx, ry| {
