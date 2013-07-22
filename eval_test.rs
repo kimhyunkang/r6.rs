@@ -335,3 +335,10 @@ fn boolean_test() {
     eval_test(~"(boolean? #f)", ~"#t");
     eval_test(~"(boolean? '())", ~"#f");
 }
+
+#[test]
+fn procedure_test() {
+    eval_test(~"(procedure? (lambda (x) x))", ~"#t");
+    eval_test(~"(procedure? eval)", ~"#t");
+    eval_test(~"(procedure? '())", ~"#f");
+}

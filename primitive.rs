@@ -51,6 +51,7 @@ pub enum PFunc {
     PLE,
     PNot,
     PBoolean,
+    PProcedure,
     PNull,
     PPair,
     PIsString,
@@ -74,7 +75,7 @@ pub fn prelude() -> ~[(@str, PFunc)] {
         PExact, PInexact, PExactInexact,
         PNumberString,
         PEQ, PGT, PLT, PGE, PLE, PNot,
-        PBoolean,
+        PBoolean, PProcedure,
         PNull, PPair,
         PIsString, PString, PStringLength, PStringRef, PSubstring].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
@@ -134,6 +135,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PLE => ~"<=",
         PNot => ~"not",
         PBoolean => ~"boolean?",
+        PProcedure => ~"procedure?",
         PNull => ~"null?",
         PPair => ~"pair?",
         PIsString => ~"string?",
