@@ -811,6 +811,26 @@ impl Runtime {
             PMakePolar => do call_real_prim2(args) |rx, ry| {
                 polar(rx.to_inexact(), ry.to_inexact())
             },
+            PRealPart => do call_num_prim1(args) |&x|  {
+                match x {
+                    NExact( Cmplx { re: re, im: _ } ) => Ok(from_rational(re)),
+                    NInexact( Cmplx { re: re, im: _ } ) => Ok(from_f64(re)),
+                }
+            },
+            PImagPart => do call_num_prim1(args) |&x|  {
+                match x {
+                    NExact( Cmplx { re: _, im: im } ) => Ok(from_rational(im)),
+                    NInexact( Cmplx { re: _, im: im } ) => Ok(from_f64(im)),
+                }
+            },
+            PMagnitude => do call_num_prim1(args) |x|  {
+                let (norm, _) = to_inexact(x).to_polar();
+                Ok(from_f64(norm))
+            },
+            PAngle => do call_num_prim1(args) |x|  {
+                let (_, arg) = to_inexact(x).to_polar();
+                Ok(from_f64(arg))
+            },
             PNumerator => match args {
                 [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
                     Ok(@LNum( from_int(re.numerator()) )),
