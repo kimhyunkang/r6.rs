@@ -46,9 +46,9 @@ pub fn to_str(&n: &LNumeric) -> ~str {
             }
         },
         NInexact(Cmplx{ re: re, im: im }) => {
-            if im == 0f64 {
+            if im.is_zero() {
                 re.to_str()
-            } else if re == 0f64 {
+            } else if re.is_zero() {
                 im.to_str() + "i"
             } else if im < 0f64 {
                 re.to_str() + im.to_str() + "i"
