@@ -178,16 +178,16 @@ priv fn call_num_prim2(args: &[@RDatum],
 }
 
 priv fn call_num_foldl(args: &[@RDatum],
-                    a0: LNumeric,
+                    a0: &LNumeric,
                     op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
     -> Result<@RDatum, RuntimeError>
 {
-    let mut res = a0;
+    let mut res:LNumeric = a0.clone();
     let mut err = false;
     do args.each |&arg| {
-        match *arg {
-            LNum(a) => {
-                match op(&res, &a) {
+        match arg {
+            @LNum(ref a) => {
+                match op(&res, a) {
                     Ok(n) => {
                         res = n;
                         err = false;
@@ -744,22 +744,23 @@ impl Runtime {
                 } else {
                     Ok(*args.last())
                 },
-            PAdd => do call_num_foldl(args, Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
+            PAdd => do call_num_foldl(args, &Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
             PSub => match args {
                 [] => Err(ArgNumError(1, None, 0)),
-                [@LNum(x)] => Ok(@LNum(-x)),
-                [@LNum(x), ..tail] => do call_num_foldl(tail, x) |&lhs, &rhs| { Ok(lhs - rhs) },
+                [@LNum(ref x)] => Ok(@LNum(-*x)),
+                [@LNum(ref x), ..tail] =>
+                    do call_num_foldl(tail, x) |&lhs, &rhs| { Ok(lhs - rhs) },
                 _ => Err(TypeError),
             },
-            PMul => do call_num_foldl(args, One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
+            PMul => do call_num_foldl(args, &One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
             PDiv => match args {
                 [] => Err(ArgNumError(1, None, 0)),
-                [@LNum(x)] => if x.is_zero() {
+                [@LNum(ref x)] => if x.is_zero() {
                         Err(DivideByZeroError)
                     } else {
                         Ok(@LNum(x.recip()))
                     },
-                [@LNum(x), ..tail] =>
+                [@LNum(ref x), ..tail] =>
                     do call_num_foldl(tail, x) |&lhs, &rhs| {
                         if rhs.is_zero() {
                             Err(DivideByZeroError)
@@ -774,7 +775,7 @@ impl Runtime {
                     Err(DivideByZeroError)
                 } else {
                     match (get_int(&lhs), get_int(&rhs)) {
-                        (Some(l), Some(r)) => Ok(from_int(l / r)),
+                        (Some(l), Some(r)) => Ok(from_bigint(l / r)),
                         _ => Err(TypeError),
                     }
                 }
@@ -784,7 +785,7 @@ impl Runtime {
                     Err(DivideByZeroError)
                 } else {
                     match (get_int(&lhs), get_int(&rhs)) {
-                        (Some(l), Some(r)) => Ok(from_int(l % r)),
+                        (Some(l), Some(r)) => Ok(from_bigint(l % r)),
                         _ => Err(TypeError),
                     }
                 }
@@ -794,7 +795,7 @@ impl Runtime {
                     Err(DivideByZeroError)
                 } else {
                     match (get_int(&lhs), get_int(&rhs)) {
-                        (Some(l), Some(r)) => Ok(from_int(modulo(l, r))),
+                        (Some(l), Some(r)) => Ok(from_bigint(modulo(l, r))),
                         _ => Err(TypeError),
                     }
                 }
@@ -821,13 +822,13 @@ impl Runtime {
             },
             PRealPart => do call_num_prim1(args) |&x|  {
                 match x {
-                    NExact( Cmplx { re: re, im: _ } ) => Ok(from_rational(re)),
+                    NExact( Cmplx { re: ref re, im: _ } ) => Ok(from_rational(re)),
                     NInexact( Cmplx { re: re, im: _ } ) => Ok(from_f64(re)),
                 }
             },
             PImagPart => do call_num_prim1(args) |&x|  {
                 match x {
-                    NExact( Cmplx { re: _, im: im } ) => Ok(from_rational(im)),
+                    NExact( Cmplx { re: _, im: ref im } ) => Ok(from_rational(im)),
                     NInexact( Cmplx { re: _, im: im } ) => Ok(from_f64(im)),
                 }
             },
@@ -840,16 +841,16 @@ impl Runtime {
                 Ok(from_f64(arg))
             },
             PNumerator => match args {
-                [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
-                    Ok(@LNum( from_int(re.numerator()) )),
+                [@LNum(NExact( Cmplx { re: ref re, im: ref im } ))] if im.is_zero() =>
+                    Ok(@LNum( from_bigint(re.numerator().clone()) )),
                 [_] =>
                     Err(TypeError),
                 _ =>
                     Err(ArgNumError(1, Some(1), args.len())),
             },
             PDenominator => match args {
-                [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
-                    Ok(@LNum( from_int(re.denominator()) )),
+                [@LNum(NExact( Cmplx { re: ref re, im: ref im } ))] if im.is_zero() =>
+                    Ok(@LNum( from_bigint(re.denominator().clone()) )),
                 [_] =>
                     Err(TypeError),
                 _ =>
@@ -887,16 +888,15 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
-            PReal => do call_prim1(args) |arg| {
-                match *arg {
-                    LNum(c) => Ok(@LBool(c.is_real())),
-                    _ => Ok(@LBool(false)),
-                }
+            PReal => match args {
+                [@LNum(ref c)] => Ok(@LBool(c.is_real())),
+                [_] => Ok(@LBool(false)),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
             },
             PInteger => do call_prim1(args) |arg| {
                 match *arg {
-                    LNum(NExact(Cmplx { re: re, im: im })) =>
-                        Ok(@LBool(re.numerator() == 1 && im.numerator() == 1)),
+                    LNum(NExact(Cmplx { re: ref re, im: ref im })) =>
+                        Ok(@LBool(*re.numerator() == One::one() && *im.numerator() == One::one())),
                     LNum(NInexact(Cmplx { re: re, im: im })) =>
                         Ok(@LBool(re.round() == re && im.round() == im)),
                     _ => Ok(@LBool(false)),

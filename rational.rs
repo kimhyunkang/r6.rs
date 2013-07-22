@@ -1,87 +1,46 @@
-use std::num::{One, Zero};
+use std::num::{One, Zero, IntConvertible};
+use bigint_helper::bigint_to_f64;
+use extra::bigint::BigInt;
 
 pub struct Rational {
-    priv d: int,
-    priv n: int,
-}
-
-priv fn gcd(mut u: uint, mut v: uint) -> uint {
-    let mut g = 1;
-    if(u == 0) {
-        v
-    } else if(v == 0) {
-        u
-    } else {
-        while(u%2 == 0 && v%2 == 0) {
-            u /= 2;
-            v /= 2;
-            g *= 2;
-        }
-
-        while(u%2 == 0) { u /= 2; }
-        while(v%2 == 0) { v /= 2; }
-
-        if(u > v) {
-            g * gcd((u - v)/2, v)
-        } else {
-            g * gcd((v - u)/2, u)
-        }
-    }
-}
-
-priv fn abs(x: int) -> uint {
-    if x < 0 {
-        -x as uint
-    } else {
-        x as uint
-    }
+    priv d: BigInt,
+    priv n: BigInt,
 }
 
 impl Rational {
-    pub fn new(d: int, n: int) -> Rational {
-        if(n == 0) {
+    pub fn new(d: BigInt, n: BigInt) -> Rational {
+        if n.is_zero() {
             fail!(~"divide by zero");
         }
 
-        let g = gcd(abs(d), abs(n)) as int;
+        let g = d.gcd(&n);
 
-        if(n < 0) {
+        if n.is_negative() {
             Rational { d: -d/g, n: -n/g }
         } else {
             Rational { d: d/g, n: n/g }
         }
     }
 
-    pub fn denominator(&self) -> int {
-        self.d
+    pub fn new_int(new_d: int, new_n: int) -> Rational {
+        let d = IntConvertible::from_int::<BigInt>(new_d);
+        let n = IntConvertible::from_int::<BigInt>(new_n);
+
+        Rational::new(d, n)
     }
 
-    pub fn numerator(&self) -> int {
-        self.n
+    pub fn denominator<'r>(&'r self) -> &'r BigInt {
+        &self.d
+    }
+
+    pub fn numerator<'r>(&'r self) -> &'r BigInt {
+        &self.n
     }
 
     pub fn to_f64(&self) -> f64 {
-        (self.d as f64) / (self.n as f64)
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.d == 0
-    }
-
-    pub fn is_nonnegative(&self) -> bool {
-        self.d >= 0
-    }
-
-    pub fn is_negative(&self) -> bool {
-        self.d < 0
-    }
-
-    pub fn is_nonpositive(&self) -> bool {
-        self.d <= 0
-    }
-
-    pub fn is_positive(&self) -> bool {
-        self.d > 0
+        let d = bigint_to_f64(&self.d);
+        let n = bigint_to_f64(&self.n);
+        d / n
     }
 }
 
@@ -89,35 +48,35 @@ impl Round for Rational {
     fn floor(&self) -> Rational {
         Rational {
             d: self.d.div_floor(&self.n),
-            n: 1,
+            n: One::one(),
         }
     }
 
     fn ceil(&self) -> Rational {
         Rational {
             d: -((-self.d).div_floor(&self.n)),
-            n: 1,
+            n: One::one(),
         }
     }
 
     fn round(&self) -> Rational {
         Rational {
-            d: ((self.d as f64) / (self.n as f64)).round() as int,
-            n: 1,
+            d: IntConvertible::from_int::<BigInt>(self.to_f64().round() as int),
+            n: One::one(),
         }
     }
 
     fn trunc(&self) -> Rational {
         Rational {
-            d: ((self.d as f64) / (self.n as f64)).trunc() as int,
-            n: 1,
+            d: IntConvertible::from_int::<BigInt>(self.to_f64().trunc() as int),
+            n: One::one(),
         }
     }
 
     fn fract(&self) -> Rational {
         Rational {
-            d: ((self.d as f64) / (self.n as f64)).fract() as int,
-            n: 1,
+            d: IntConvertible::from_int::<BigInt>(self.to_f64().fract() as int),
+            n: One::one(),
         }
     }
 }
@@ -125,8 +84,8 @@ impl Round for Rational {
 impl One for Rational {
     fn one() -> Rational {
         Rational {
-            d: 1,
-            n: 1,
+            d: One::one(),
+            n: One::one(),
         }
     }
 }
@@ -134,21 +93,47 @@ impl One for Rational {
 impl Zero for Rational {
     fn zero() -> Rational {
         Rational {
-            d: 0,
-            n: 1,
+            d: Zero::zero(),
+            n: One::one(),
         }
     }
 
     fn is_zero(&self) -> bool {
-        self.d == 0
+        self.d.is_zero()
+    }
+}
+
+impl Signed for Rational {
+    fn abs(&self) -> Rational {
+        Rational { d: self.d.abs(), n: self.n.clone() }
+    }
+
+    fn abs_sub(&self, other: &Rational) -> Rational {
+        if *self <= *other { 
+            Zero::zero()
+        } else {
+            *self - *other
+        }
+    }
+
+    fn signum(&self) -> Rational {
+        Rational { d: self.d.signum(), n: One::one() }
+    }
+
+    fn is_positive(&self) -> bool {
+        self.d.is_positive()
+    }
+
+    fn is_negative(&self) -> bool {
+        self.d.is_negative()
     }
 }
 
 impl Clone for Rational {
     fn clone(&self) -> Rational {
         Rational {
-            d: self.d,
-            n: self.n,
+            d: self.d.clone(),
+            n: self.n.clone(),
         }
     }
 }
@@ -157,7 +142,7 @@ impl Neg<Rational> for Rational {
     fn neg(&self) -> Rational {
         Rational {
             d: -self.d,
-            n: self.n,
+            n: self.n.clone(),
         }
     }
 }
@@ -188,7 +173,7 @@ impl Ord for Rational {
 
 impl Add<Rational, Rational> for Rational {
     fn add(&self, rhs: &Rational) -> Rational {
-        let g = gcd(self.n as uint, rhs.n as uint) as int;
+        let g = self.n.gcd(&rhs.n);
         let ln = self.n / g;
         let rn = rhs.n / g;
         Rational {
@@ -200,7 +185,7 @@ impl Add<Rational, Rational> for Rational {
 
 impl Sub<Rational, Rational> for Rational {
     fn sub(&self, rhs: &Rational) -> Rational {
-        let g = gcd(self.n as uint, rhs.n as uint) as int;
+        let g = self.n.gcd(&rhs.n);
         let ln = self.n / g;
         let rn = rhs.n / g;
         Rational {
@@ -214,7 +199,7 @@ impl Mul<Rational, Rational> for Rational {
     fn mul(&self, rhs: &Rational) -> Rational {
         let d = self.d * rhs.d;
         let n = self.n * rhs.n;
-        let g = gcd(abs(d), abs(n)) as int;
+        let g = d.gcd(&n);
         Rational {
             d: d / g,
             n: n / g,
@@ -226,7 +211,7 @@ impl Div<Rational, Rational> for Rational {
     fn div(&self, rhs: &Rational) -> Rational {
         let d = self.d * rhs.n;
         let n = self.n * rhs.d;
-        let g = gcd(abs(d), abs(n)) as int;
+        let g = d.gcd(&n);
         Rational {
             d: d / g,
             n: n / g,
@@ -238,7 +223,7 @@ impl Rem<Rational, Rational> for Rational {
     fn rem(&self, rhs: &Rational) -> Rational {
         let q = self / *rhs;
         let int_q = q.d / q.n;
-        self - rhs * Rational { d: int_q, n: 1 }
+        self - rhs * Rational { d: int_q, n: One::one() }
     }
 }
 
@@ -246,15 +231,10 @@ impl Num for Rational;
 
 impl ToStr for Rational {
     fn to_str(&self) -> ~str {
-        if(self.n == 1) {
+        if(self.n == One::one()) {
             self.d.to_str()
         } else {
             self.d.to_str() + "/" + self.n.to_str()
         }
     }
-}
-
-#[test]
-fn gcd_test() {
-    assert_eq!(gcd(-2, 1), 1);
 }

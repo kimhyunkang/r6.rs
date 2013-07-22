@@ -1,9 +1,10 @@
 use std::num::{One, Zero};
 use extra::complex::Cmplx;
+use extra::bigint::BigInt;
 
 use rational::Rational;
 
-#[deriving(Eq)]
+#[deriving(Eq, Clone)]
 pub enum LNumeric {
     NExact(Cmplx<Rational>),
     NInexact(Cmplx<f64>)
@@ -26,14 +27,14 @@ impl LNumeric {
 
     pub fn is_real(&self) -> bool {
         match *self {
-            NExact(c) => c.im.is_zero(),
-            NInexact(c) => c.im.is_zero(),
+            NExact(ref c) => c.im.is_zero(),
+            NInexact(ref c) => c.im.is_zero(),
         }
     }
 
     pub fn to_inexact(&self) -> Cmplx<f64> {
         match *self {
-            NExact(Cmplx { re: re, im: im }) => Cmplx {re: re.to_f64(), im: im.to_f64()},
+            NExact(Cmplx { re: ref re, im: ref im }) => Cmplx {re: re.to_f64(), im: im.to_f64()},
             NInexact(cmplx) => cmplx
         }
     }
@@ -106,98 +107,78 @@ impl Zero for LNumeric {
 
     fn is_zero(&self) -> bool {
         match *self {
-            NExact(cmplx) => cmplx.is_zero(),
-            NInexact(cmplx) => cmplx.is_zero(),
+            NExact(ref cmplx) => cmplx.is_zero(),
+            NInexact(ref cmplx) => cmplx.is_zero(),
         }
-    }
-}
-
-pub fn neg(&n: &LNumeric) -> LNumeric {
-    match n {
-        NExact(cmplx) => NExact(-cmplx),
-        NInexact(cmplx) => NInexact(-cmplx),
     }
 }
 
 impl Neg<LNumeric> for LNumeric {
     fn neg(&self) -> LNumeric {
-        neg(self)
-    }
-}
-
-pub fn add(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
-    match (lhs, rhs) {
-        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 + cmplx1),
-        _ => {
-            let cmplx0 = lhs.to_inexact();
-            let cmplx1 = rhs.to_inexact();
-            NInexact(cmplx0 + cmplx1)
-        },
+        match self {
+            &NExact(ref cmplx) => NExact(-*cmplx),
+            &NInexact(ref cmplx) => NInexact(-*cmplx),
+        }
     }
 }
 
 impl Add<LNumeric, LNumeric> for LNumeric {
     fn add(&self, rhs: &LNumeric) -> LNumeric {
-        add(self, rhs)
-    }
-}
-
-pub fn sub(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
-    match (lhs, rhs) {
-        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 - cmplx1),
-        _ => {
-            let cmplx0 = lhs.to_inexact();
-            let cmplx1 = rhs.to_inexact();
-            NInexact(cmplx0 - cmplx1)
-        },
+        match (self, rhs) {
+            (&NExact(ref cmplx0), &NExact(ref cmplx1)) => NExact(*cmplx0 + *cmplx1),
+            _ => {
+                let cmplx0 = self.to_inexact();
+                let cmplx1 = rhs.to_inexact();
+                NInexact(cmplx0 + cmplx1)
+            },
+        }
     }
 }
 
 impl Sub<LNumeric, LNumeric> for LNumeric {
     fn sub(&self, rhs: &LNumeric) -> LNumeric {
-        sub(self, rhs)
-    }
-}
-
-pub fn mul(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
-    match (lhs, rhs) {
-        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 * cmplx1),
-        _ => {
-            let cmplx0 = lhs.to_inexact();
-            let cmplx1 = rhs.to_inexact();
-            NInexact(cmplx0 * cmplx1)
-        },
+        match (self, rhs) {
+            (&NExact(ref cmplx0), &NExact(ref cmplx1)) => NExact(*cmplx0 - *cmplx1),
+            _ => {
+                let cmplx0 = self.to_inexact();
+                let cmplx1 = rhs.to_inexact();
+                NInexact(cmplx0 - cmplx1)
+            },
+        }
     }
 }
 
 impl Mul<LNumeric, LNumeric> for LNumeric {
     fn mul(&self, rhs: &LNumeric) -> LNumeric {
-        mul(self, rhs)
-    }
-}
-
-pub fn div(&lhs: &LNumeric, &rhs: &LNumeric) -> LNumeric {
-    match (lhs, rhs) {
-        (NExact(cmplx0), NExact(cmplx1)) => NExact(cmplx0 / cmplx1),
-        _ => {
-            let cmplx0 = lhs.to_inexact();
-            let cmplx1 = rhs.to_inexact();
-            NInexact(cmplx0 / cmplx1)
-        },
+        match (self, rhs) {
+            (&NExact(ref cmplx0), &NExact(ref cmplx1)) => NExact((*cmplx0) * (*cmplx1)),
+            _ => {
+                let cmplx0 = self.to_inexact();
+                let cmplx1 = rhs.to_inexact();
+                NInexact(cmplx0 * cmplx1)
+            },
+        }
     }
 }
 
 impl Div<LNumeric, LNumeric> for LNumeric {
     fn div(&self, rhs: &LNumeric) -> LNumeric {
-        div(self, rhs)
+        match (self, rhs) {
+            (&NExact(ref cmplx0), &NExact(ref cmplx1)) => NExact(*cmplx0 / *cmplx1),
+            _ => {
+                let cmplx0 = self.to_inexact();
+                let cmplx1 = rhs.to_inexact();
+                NInexact(cmplx0 / cmplx1)
+            },
+        }
     }
 }
 
 impl Fractional for LNumeric {
     fn recip(&self) -> LNumeric {
-        match *self {
-            NExact( c ) => NExact(One::one::<Cmplx<Rational>>() / c),
-            NInexact( c ) => NInexact(One::one::<Cmplx<f64>>() / c),
+        match self {
+            &NExact( ref c ) => NExact(One::one::<Cmplx<Rational>>() / *c),
+            &NInexact( ref c ) => NInexact(One::one::<Cmplx<f64>>() / *c),
         }
     }
 }
@@ -281,9 +262,7 @@ impl Algebraic for LNumeric {
     }
 
     fn hypot(&self, rhs: &LNumeric) -> LNumeric {
-        let x = *self;
-        let y = *rhs;
-        ((x * x) + (y * y)).sqrt()
+        ((*self * *self) + (*rhs * *rhs)).sqrt()
     }
 }
 
@@ -361,11 +340,15 @@ impl Trigonometric for LNumeric {
 }
 
 pub fn from_int(n: int) -> LNumeric {
-    NExact( Cmplx{ re: Rational::new(n, 1), im: Zero::zero() } )
+    NExact( Cmplx{ re: Rational::new_int(n, 1), im: Zero::zero() } )
 }
 
-pub fn from_rational(re: Rational) -> LNumeric {
-    NExact( Cmplx{ re: re, im: Zero::zero() } )
+pub fn from_bigint(n: BigInt) -> LNumeric {
+    NExact( Cmplx{ re: Rational::new(n, One::one()), im: Zero::zero() } )
+}
+
+pub fn from_rational(re: &Rational) -> LNumeric {
+    NExact( Cmplx{ re: re.clone(), im: Zero::zero() } )
 }
 
 pub fn from_f64(re: f64) -> LNumeric {
@@ -373,9 +356,9 @@ pub fn from_f64(re: f64) -> LNumeric {
 }
 
 pub fn from_real(re: &LReal) -> LNumeric {
-    match *re {
-        NRational(x) => from_rational(x),
-        NFloat(x) => from_f64(x),
+    match re {
+        &NRational(ref x) => from_rational(x),
+        &NFloat(x) => from_f64(x),
     }
 }
 
@@ -398,9 +381,9 @@ pub enum LReal {
 
 impl LReal {
     pub fn to_inexact(&self) -> f64 {
-        match *self {
-            NRational(x) => x.to_f64(),
-            NFloat(x) => x,
+        match self {
+            &NRational(ref x) => x.to_f64(),
+            &NFloat(x) => x,
         }
     }
 }
@@ -447,62 +430,63 @@ impl Ord for LReal {
 
 impl Round for LReal {
     fn floor(&self) -> LReal {
-        match *self {
-            NRational( f ) => NRational( f.floor() ),
-            NFloat( f ) => NFloat( f.floor() ),
+        match self {
+            &NRational( ref f ) => NRational( f.floor() ),
+            &NFloat( ref f ) => NFloat( f.floor() ),
         }
     }
 
     fn ceil(&self) -> LReal {
-        match *self {
-            NRational( f ) => NRational( f.ceil() ),
-            NFloat( f ) => NFloat( f.ceil() ),
+        match self {
+            &NRational( ref f ) => NRational( f.ceil() ),
+            &NFloat( ref f ) => NFloat( f.ceil() ),
         }
     }
 
     fn round(&self) -> LReal {
-        match *self {
-            NRational( f ) => NRational( f.round() ),
-            NFloat( f ) => NFloat( f.round() ),
+        match self {
+            &NRational( ref f ) => NRational( f.round() ),
+            &NFloat( ref f ) => NFloat( f.round() ),
         }
     }
 
     fn trunc(&self) -> LReal {
-        match *self {
-            NRational( f ) => NRational( f.trunc() ),
-            NFloat( f ) => NFloat( f.trunc() ),
+        match self {
+            &NRational( ref f ) => NRational( f.trunc() ),
+            &NFloat( ref f ) => NFloat( f.trunc() ),
         }
     }
 
     fn fract(&self) -> LReal {
-        match *self {
-            NRational( f ) => NRational( f.fract() ),
-            NFloat( f ) => NFloat( f.fract() ),
+        match self {
+            &NRational( ref f ) => NRational( f.fract() ),
+            &NFloat( ref f ) => NFloat( f.fract() ),
         }
     }
 }
 
 pub fn get_real(n: &LNumeric) -> Option<LReal>
 {
-    match *n {
-        NExact( Cmplx{ re: re, im: im } ) => if im.is_zero() {
-                Some( NRational ( re ) )
+    match n {
+        &NExact( Cmplx{ re: ref re, im: ref im } ) => if im.is_zero() {
+                Some( NRational ( re.clone() ) )
             } else {
                 None
             },
-        NInexact( Cmplx{ re: re, im: im } ) => if im.is_zero() {
-                Some( NFloat ( re ) )
+        &NInexact( Cmplx{ re: ref re, im: ref im } ) => if im.is_zero() {
+                Some( NFloat ( re.clone() ) )
             } else {
                 None
             },
     }
 }
 
-pub fn get_int(n: &LNumeric) -> Option<int>
+pub fn get_int(n: &LNumeric) -> Option<BigInt>
 {
     match *n {
-        NExact( Cmplx{ re: re, im: im } ) => if im.is_zero() && re.numerator() == 1 {
-                Some(re.denominator())
+        NExact( Cmplx{ re: ref re, im: ref im } ) =>
+            if im.is_zero() && *re.numerator() == One::one() {
+                Some(re.denominator().clone())
             } else {
                 None
             },
@@ -513,9 +497,9 @@ pub fn get_int(n: &LNumeric) -> Option<int>
 pub fn get_uint(n: &LNumeric) -> Option<uint>
 {
     match *n {
-        NExact( Cmplx{ re: re, im: im } ) =>
-            if im.is_zero() && re.numerator() == 1 && re.denominator() >= 0 {
-                Some(re.denominator() as uint)
+        NExact( Cmplx{ re: ref re, im: ref im } ) =>
+            if im.is_zero() && *re.numerator() == One::one() && !re.denominator().is_negative() {
+                Some(re.denominator().to_uint())
             } else {
                 None
             },
@@ -523,16 +507,16 @@ pub fn get_uint(n: &LNumeric) -> Option<uint>
     }
 }
 
-pub fn modulo(l: int, r: int) -> int
+pub fn modulo(l: BigInt, r: BigInt) -> BigInt
 {
     let q = l % r;
-    if q < 0 {
+    if q.is_negative() {
         if r < q {
             q
         } else {
             q + r
         }
-    } else if q > 0 {
+    } else if q.is_positive() {
         if q < r {
             q
         } else {
@@ -545,13 +529,35 @@ pub fn modulo(l: int, r: int) -> int
 
 #[test]
 fn test_eq() {
-    assert_eq!(NRational(Rational::new(2,1)) == NRational(Rational::new(2,1)), true);
-    assert_eq!(NRational(Rational::new(2,1)) < NFloat(3.0), true);
-    assert_eq!(NFloat(3.0) > NRational(Rational::new(2,1)), true);
+    assert_eq!(NRational(Rational::new_int(2,1)) == NRational(Rational::new_int(2,1)), true);
+    assert_eq!(NRational(Rational::new_int(2,1)) < NFloat(3.0), true);
+    assert_eq!(NFloat(3.0) > NRational(Rational::new_int(2,1)), true);
 }
 
 #[test]
 fn test_log_exp() {
     let x = NInexact( Cmplx { re: 1.0, im: 1.0 } );
     assert_approx_eq!(x.ln().exp(), x)
+}
+
+#[test]
+fn test_pow() {
+    let x = NExact( Cmplx { re: Rational::new_int(2, 1), im: Zero::zero() } );
+    let y = NInexact( Cmplx { re: 4.0, im: 0.0 } );
+    assert_approx_eq!(x.pow(&x), y)
+}
+
+#[test]
+fn test_ln() {
+    let x = NExact( Cmplx { re: Rational::new_int(2, 1), im: Zero::zero() } );
+    let y = NInexact( Cmplx { re: Real::ln_2(), im: 0.0 } );
+    assert_approx_eq!(x.ln(), y)
+}
+
+#[test]
+fn test_mul() {
+    let x = NExact( Cmplx { re: Rational::new_int(2, 1), im: Zero::zero() } );
+    let y = NInexact( Cmplx { re: 3.0, im: 0.0 } );
+    let z = NInexact( Cmplx { re: 6.0, im: 0.0 } );
+    assert_eq!(x * y, z)
 }

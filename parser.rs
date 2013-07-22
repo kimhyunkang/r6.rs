@@ -3,7 +3,9 @@ use std::num;
 use std::f64;
 use std::str;
 use std::vec;
-use std::num::FromStrRadix;
+use std::num::{Zero, One, IntConvertible, FromStrRadix};
+use extra::bigint::BigInt;
+use bigint_helper::*;
 use rational::Rational;
 use numeric::*;
 use datum::*;
@@ -32,11 +34,11 @@ priv enum DResult<T> {
 priv fn build_exact(sign: bool, radix: uint, &part: &PResult) -> Result<Rational, ~str> {
     match part {
         PInt(zs) =>
-            Ok(Rational::new(s_to_int(zs, sign, radix), 1)),
+            Ok(Rational::new(s_to_int(zs, sign, radix), One::one())),
         PRational(ds, ns) => {
-            let d = s_to_int(ds, sign, radix);
-            let n = s_to_int(ns, true, radix);
-            if(n == 0) {
+            let d:BigInt = s_to_int(ds, sign, radix);
+            let n:BigInt = s_to_int(ns, true, radix);
+            if n.is_zero() {
                 Err(~"divide by zero")
             } else {
                 Ok(Rational::new(d, n))
@@ -50,11 +52,12 @@ priv fn build_exact(sign: bool, radix: uint, &part: &PResult) -> Result<Rational
                 s_to_int(e, true, 10)
             };
 
-            let n:int = num::pow_with_uint(10, f.len());
+            let _10 = IntConvertible::from_int(10);
+            let n = big_pow(&_10, f.len());
             let d = s_to_int(i + f, sign, 10);
-            let p = num::pow_with_uint(10, num::abs(exp) as uint);
+            let p = big_pow(&_10, num::abs(exp) as uint);
 
-            if(n == 0) {
+            if n.is_zero() {
                 Err(~"divide by zero")
             } else if(exp < 0) {
                 Ok(Rational::new(d, n*p))
@@ -68,14 +71,14 @@ priv fn build_exact(sign: bool, radix: uint, &part: &PResult) -> Result<Rational
 priv fn build_inexact(sign: bool, radix: uint, &part: &PResult) -> Result<f64, ~str> {
     match part {
         PInt(zs) => 
-            Ok(s_to_int(zs, sign, radix) as f64),
+            Ok(bigint_to_f64(&s_to_int(zs, sign, radix))),
         PRational(ds, ns) => {
-            let d = s_to_int(ds, sign, radix);
-            let n = s_to_int(ns, sign, radix);
-            if(n == 0) {
+            let d:BigInt = s_to_int(ds, sign, radix);
+            let n:BigInt = s_to_int(ns, sign, radix);
+            if n.is_zero() {
                 Err(~"divide by zero")
             } else {
-                Ok((d as f64) / (n as f64))
+                Ok(bigint_to_f64(&d) / bigint_to_f64(&n))
             }
         },
         PFloat(i, f, e) => {
@@ -102,7 +105,7 @@ priv fn build_complex(exactness: Option<bool>,
             (exactness == None && !is_pfloat(rpart) && !is_pfloat(ipart)) {
         do build_exact(rsign, radix, rpart).chain |re| {
             do build_exact(isign, radix, ipart).chain |im| {
-                Ok(exact(re, im))
+                Ok(exact(re.clone(), im.clone()))
             }
         }
     } else {
@@ -122,8 +125,8 @@ priv fn s_to_f64(s: &str, sign: bool) -> f64 {
     }
 }
 
-priv fn s_to_int(s: &str, sign: bool, r: uint) -> int {
-    let maybe_int:Option<int> = FromStrRadix::from_str_radix(s, r);
+priv fn s_to_int<T: FromStrRadix + Neg<T>>(s: &str, sign: bool, r: uint) -> T {
+    let maybe_int:Option<T> = FromStrRadix::from_str_radix(s, r);
     match maybe_int {
         Some(z) => if sign { z } else { -z },
         None => fail!(~"failed to convert int literal " + s + " with radix " + r.to_str()),
@@ -788,7 +791,7 @@ fn expect_rational(src: ~str, d:int, n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        let expected: LDatum<()> = LNum(from_rational(Rational::new(d, n)));
+        let expected: LDatum<()> = LNum(from_rational(&Rational::new_int(d, n)));
         assert_eq!(val, Ok(expected));
     }
 }
@@ -808,8 +811,8 @@ fn expect_ecmplx(src: ~str, re_d: int, re_n: int, im_d: int, im_n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        let expected: LDatum<()> = LNum(exact(Rational::new(re_d, re_n),
-                                                Rational::new(im_d, im_n)));
+        let expected: LDatum<()> = LNum(exact(Rational::new_int(re_d, re_n),
+                                                Rational::new_int(im_d, im_n)));
         assert_eq!(val, Ok(expected));
     }
 }
@@ -958,5 +961,5 @@ fn test_minus_num() {
 
 #[test]
 fn test_minus_rational() {
-    test_expect(~"-7/2", &LNum( from_rational(Rational::new(-7, 2)) ));
+    test_expect(~"-7/2", &LNum( from_rational(&Rational::new_int(-7, 2)) ));
 }
