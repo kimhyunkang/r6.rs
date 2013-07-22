@@ -241,7 +241,7 @@ priv fn call_inexact(args: &[@RDatum], op: &fn(&Cmplx<f64>) -> Cmplx<f64>)
     -> Result<@RDatum, RuntimeError>
 {
     match args {
-        [@LNum(ref n)] => Ok(@LNum(NInexact(op(&to_inexact(n))))),
+        [@LNum(ref n)] => Ok(@LNum(NInexact(op(&n.to_inexact())))),
         [_] => Err(TypeError),
         _ => Err(ArgNumError(1, Some(1), args.len())),
     }
@@ -832,11 +832,11 @@ impl Runtime {
                 }
             },
             PMagnitude => do call_num_prim1(args) |x|  {
-                let (norm, _) = to_inexact(x).to_polar();
+                let (norm, _) = x.to_inexact().to_polar();
                 Ok(from_f64(norm))
             },
             PAngle => do call_num_prim1(args) |x|  {
-                let (_, arg) = to_inexact(x).to_polar();
+                let (_, arg) = x.to_inexact().to_polar();
                 Ok(from_f64(arg))
             },
             PNumerator => match args {
