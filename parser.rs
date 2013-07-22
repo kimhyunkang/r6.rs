@@ -357,8 +357,35 @@ impl Parser {
                 do self.parse_number(~"#" + str::from_char(c)).chain |n| {
                     Ok(LNum(n))
                 },
+            '(' =>
+                match self.parse_vector() {
+                    Ok(v) => Ok(LVector(v)),
+                    Err(e) => Err(e),
+                },
             _ =>
                 Err(~"unexpected character: " + str::from_char(c)),
+        }
+    }
+
+    fn parse_vector<T>(&mut self) -> Result<~[@LDatum<T>], ~str> {
+        let mut vec = ~[];
+
+        loop {
+            self.consume_whitespace();
+            if self.eof() {
+                return Err(~"parenthesis not closed");
+            }
+
+            match self.lookahead() {
+                ')' => {
+                    self.consume();
+                    return Ok(vec)
+                },
+                _ => match self.parse_datum() {
+                    Err(e) => return Err(e),
+                    Ok(x) => vec.push(@x),
+                }
+            }
         }
     }
 
@@ -906,6 +933,11 @@ fn test_expect_list(src: ~str, list: ~[@LDatum<int>]) {
 #[test]
 fn test_parse_list() {
     test_expect_list(~"(a b 1)", ~[@LIdent(@"a"), @LIdent(@"b"), @LNum(from_int(1))]);
+}
+
+#[test]
+fn test_parse_vector() {
+    test_expect(~"#(a b 1)", &LVector(~[@LIdent(@"a"), @LIdent(@"b"), @LNum(from_int(1))]));
 }
 
 #[test]
