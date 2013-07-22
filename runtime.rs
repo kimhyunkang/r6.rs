@@ -982,6 +982,31 @@ impl Runtime {
                 [_] => Ok(@LBool(false)),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
+            PVector => match args {
+                [@LVector(_)] => Ok(@LBool(true)),
+                [_] => Ok(@LBool(false)),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
+            },
+            PMakeVector => match args {
+                [@LNum(ref x)] => match get_uint(x) {
+                    Some(k) => {
+                        let mut v = ~[];
+                        v.grow(k, &@LExt(RUndef));
+                        Ok(@LVector(v))
+                    },
+                    None => Err(TypeError),
+                },
+                [@LNum(ref x), ref y] => match get_uint(x) {
+                    Some(k) => {
+                        let mut v = ~[];
+                        v.grow(k, y);
+                        Ok(@LVector(v))
+                    },
+                    None => Err(TypeError),
+                },
+                [_] | [_, _] => Err(TypeError),
+                _ => Err(ArgNumError(1, Some(2), args.len())),
+            },
             PNull => do call_prim1(args) |arg| {
                 match arg {
                     @LNil => Ok(@LBool(true)),
