@@ -982,7 +982,7 @@ impl Runtime {
                 [_] => Ok(@LBool(false)),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
-            PVector => match args {
+            PIsVector => match args {
                 [@LVector(_)] => Ok(@LBool(true)),
                 [_] => Ok(@LBool(false)),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
@@ -1007,6 +1007,7 @@ impl Runtime {
                 [_] | [_, _] => Err(TypeError),
                 _ => Err(ArgNumError(1, Some(2), args.len())),
             },
+            PVector => Ok(@LVector(args.to_owned())),
             PNull => do call_prim1(args) |arg| {
                 match arg {
                     @LNil => Ok(@LBool(true)),

@@ -349,7 +349,7 @@ fn procedure_test() {
 }
 
 #[test]
-fn vector_test() {
+fn is_vector_test() {
     eval_test(~"(vector? #(1 (2) 3))", ~"#t");
     eval_test(~"(vector? #())", ~"#t");
     eval_test(~"(vector? 1)", ~"#f");
@@ -358,4 +358,9 @@ fn vector_test() {
 #[test]
 fn make_vector_test() {
     eval_test(~"(make-vector 2 'a)", ~"#(a a)");
+}
+
+#[test]
+fn vector_test() {
+    eval_test(~"(vector 2 'a)", ~"#(2 a)");
 }
