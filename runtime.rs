@@ -1099,6 +1099,12 @@ impl Runtime {
                             }
                         },
                 },
+            @LVector(ref v) => {
+                match result::map_vec(*v, |x| { self.recursive_qq(x) }) {
+                    Ok(qmap) => Ok(@LVector(qmap)),
+                    Err(e) => Err(e),
+                }
+            },
             _ => 
                 Ok(*val),
         }

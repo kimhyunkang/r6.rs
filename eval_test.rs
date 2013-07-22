@@ -102,6 +102,11 @@ fn quasiquote_test() {
 }
 
 #[test]
+fn vector_quasiquote_test() {
+    eval_test(~"`#(,(+ 1 2) 4)", ~"#(3 4)");
+}
+
+#[test]
 fn nested_quasiquote_test() {
     eval_test(~"`(a `(b ,(+ 1 2) ,(foo ,(+ 1 3) d) e) f)", ~"(a `(b ,(+ 1 2) ,(foo 4 d) e) f)");
 }
