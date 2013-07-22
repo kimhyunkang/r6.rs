@@ -122,6 +122,8 @@ fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
         let (key, syntax) = pair;
         map.insert(key, Right(syntax));
     }
+
+    map.insert("pi".to_managed(), Left(@LNum(inexact(Real::pi(), 0f64))));
     map
 }
 
