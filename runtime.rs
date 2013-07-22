@@ -980,6 +980,12 @@ impl Runtime {
                 [_] => Ok(@LBool(false)),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
+            PChar => do call_prim1(args) |arg| {
+                match arg {
+                    @LChar(_) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
             PProcedure => match args {
                 [@LExt(RUndef)] => Ok(@LBool(false)),
                 [@LExt(_)] => Ok(@LBool(true)),

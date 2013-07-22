@@ -378,3 +378,9 @@ fn symbol_conversion_test() {
     eval_test(~"(symbol->string 'str)", ~"\"str\"");
     eval_test(~"(string->symbol \"str\")", ~"str");
 }
+
+#[test]
+fn char_test() {
+    eval_test(~"(char? #\\space)", ~"#t");
+    eval_test(~"(char? \" \")", ~"#f");
+}
