@@ -7,6 +7,7 @@ use std::vec;
 use std::num::{One, Zero, ToStrRadix};
 use std::hashmap::HashMap;
 use std::managed;
+use bounded_iterator::BoundedIterator;
 use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
@@ -114,13 +115,16 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
 
 fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
     let mut map = HashMap::new();
-    for prelude().each |&pair| {
-        let (key, func) = pair;
-        map.insert(key, Left(@LExt(RPrim(func))));
+    let mut prim_iter = BoundedIterator::new::<PFunc>();
+    for prim_iter.advance |prim:PFunc| {
+        let key = prim.to_str();
+        map.insert(key.to_managed(), Left(@LExt(RPrim(prim))));
     }
-    for syntax_prelude().each |&pair| {
-        let (key, syntax) = pair;
-        map.insert(key, Right(syntax));
+
+    let mut syntax_iter = BoundedIterator::new::<PrimSyntax>();
+    for syntax_iter.advance |syntax:PrimSyntax| {
+        let key = syntax.to_str();
+        map.insert(key.to_managed(), Right(syntax));
     }
 
     map.insert("pi".to_managed(), Left(@LNum(inexact(Real::pi(), 0f64))));

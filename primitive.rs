@@ -1,3 +1,6 @@
+use std::num::IntConvertible;
+use std::cast;
+
 #[deriving(Eq)]
 pub enum PFunc {
     PEval,
@@ -71,26 +74,23 @@ pub enum PFunc {
     PSymbolString,
 }
 
-pub fn prelude() -> ~[(@str, PFunc)] {
-    do [PEval, PApply, PBegin, PAdd, PSub, PMul, PDiv,
-        PQuotient, PRemainder, PModulo,
-        PNumerator, PDenominator,
-        PFloor, PCeiling, PRound, PTruncate,
-        PExp, PLog, PSin, PCos, PTan, PAsin, PAcos, PAtan,
-        PSqrt, PExpt,
-        PMakeRectangular, PMakePolar, PRealPart, PImagPart, PMagnitude, PAngle,
-        PCar, PCdr, PCons,
-        PEqv, PEqual,
-        PNumber, PReal, PInteger,
-        PExact, PInexact, PExactInexact,
-        PNumberString,
-        PEQ, PGT, PLT, PGE, PLE, PNot,
-        PBoolean, PProcedure,
-        PIsVector, PMakeVector, PVector, PVectorLength, PVectorRef, PVectorList, PListVector,
-        PNull, PPair,
-        PIsString, PString, PStringLength, PStringRef, PSubstring,
-        PSymbol, PStringSymbol, PSymbolString].map |prim| {
-        (proc_to_str(prim).to_managed(), *prim)
+impl Bounded for PFunc {
+    #[inline]
+    fn min_value() -> PFunc { PEval }
+
+    #[inline]
+    fn max_value() -> PFunc { PSymbolString }
+}
+
+impl IntConvertible for PFunc {
+    #[inline]
+    fn to_int(&self) -> int {
+        *self as int
+    }
+
+    #[inline]
+    fn from_int(n: int) -> PFunc {
+        unsafe { cast::transmute(n) }
     }
 }
 
@@ -191,12 +191,23 @@ pub enum PrimSyntax {
     SynOr,
 }
 
-pub fn syntax_prelude() -> ~[(@str, PrimSyntax)] {
-    do [SynIf, SynCond,
-        SynLambda, SynLet, SynLetRec, SynLetStar, SynDefine, SynSet,
-        SynQuote, SynQQuote, SynUnquote,
-        SynAnd, SynOr].map |syn| {
-        (syntax_to_str(syn).to_managed(), *syn)
+impl Bounded for PrimSyntax {
+    #[inline]
+    fn min_value() -> PrimSyntax { SynIf }
+
+    #[inline]
+    fn max_value() -> PrimSyntax { SynOr }
+}
+
+impl IntConvertible for PrimSyntax {
+    #[inline]
+    fn to_int(&self) -> int {
+        *self as int
+    }
+
+    #[inline]
+    fn from_int(n: int) -> PrimSyntax {
+        unsafe { cast::transmute(n) }
     }
 }
 
