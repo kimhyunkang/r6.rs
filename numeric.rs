@@ -59,6 +59,27 @@ pub fn to_str(&n: &LNumeric) -> ~str {
     }
 }
 
+impl ApproxEq<f64> for LNumeric {
+    #[inline]
+    fn approx_epsilon() -> f64 {
+        ApproxEq::approx_epsilon::<f64, f64>() * Real::sqrt2()
+    }
+
+    #[inline]
+    fn approx_eq(&self, other: &LNumeric) -> bool
+    {
+        self.approx_eq_eps(other, &ApproxEq::approx_epsilon::<f64, LNumeric>())
+    }
+
+    #[inline]
+    fn approx_eq_eps(&self, other: &LNumeric, approx_epsilon: &f64) -> bool
+    {
+        let delta = *self - *other;
+        let delta2 = to_inexact(&delta).norm();
+        delta2 < *approx_epsilon
+    }
+}
+
 impl ToStr for LNumeric {
     fn to_str(&self) -> ~str {
         to_str(self)
