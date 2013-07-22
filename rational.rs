@@ -1,4 +1,4 @@
-use std::num::{One, Zero, IntConvertible};
+use std::num::{One, Zero, IntConvertible, ToStrRadix};
 use bigint_helper::bigint_to_f64;
 use extra::bigint::BigInt;
 
@@ -231,10 +231,16 @@ impl Num for Rational;
 
 impl ToStr for Rational {
     fn to_str(&self) -> ~str {
-        if(self.n == One::one()) {
-            self.d.to_str()
+        self.to_str_radix(10)
+    }
+}
+
+impl ToStrRadix for Rational {
+    fn to_str_radix(&self, radix: uint) -> ~str {
+        if self.n == One::one() {
+            self.d.to_str_radix(radix)
         } else {
-            self.d.to_str() + "/" + self.n.to_str()
+            self.d.to_str_radix(radix) + "/" + self.n.to_str_radix(radix)
         }
     }
 }
