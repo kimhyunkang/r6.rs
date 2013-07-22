@@ -945,6 +945,11 @@ impl Runtime {
                     _ => Err(TypeError),
                 }
             },
+            PBoolean => match args {
+                [@LBool(_)] => Ok(@LBool(true)),
+                [_] => Ok(@LBool(false)),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
+            },
             PNull => do call_prim1(args) |arg| {
                 match arg {
                     @LNil => Ok(@LBool(true)),

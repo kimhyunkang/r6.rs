@@ -323,3 +323,10 @@ fn number_to_str_test() {
     eval_test(~"(number->string 1+2i)", ~"\"1+2i\"");
     eval_test(~"(number->string 5+6i 2)", ~"\"101+110i\"");
 }
+
+#[test]
+fn boolean_test() {
+    eval_test(~"(boolean? #t)", ~"#t");
+    eval_test(~"(boolean? #f)", ~"#t");
+    eval_test(~"(boolean? '())", ~"#f");
+}
