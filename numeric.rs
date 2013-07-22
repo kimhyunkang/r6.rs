@@ -172,6 +172,45 @@ impl Div<LNumeric, LNumeric> for LNumeric {
     }
 }
 
+pub fn cmplx_exp<T: Clone + Exponential + Trigonometric + Num>(c: &Cmplx<T>) -> Cmplx<T> {
+    // e^(a+bi) = e^a * (cos b + i sin b)
+    let pow = c.re.exp();
+    Cmplx { re: c.im.cos() * pow, im: c.im.sin() * pow }
+}
+
+impl Exponential for LNumeric {
+    fn exp(&self) -> LNumeric {
+        NInexact( cmplx_exp( &to_inexact(self)) )
+    }
+
+    fn exp2(&self) -> LNumeric {
+        let x = to_inexact(self);
+        let l2 = Real::ln_2();
+        NInexact( cmplx_exp( &Cmplx{ re: x.re * l2, im: x.im * l2 }) )
+    }
+
+    fn ln(&self) -> LNumeric {
+        let (norm, arg) = to_inexact(self).to_polar();
+        NInexact( Cmplx{ re: norm.ln(), im: arg } )
+    }
+
+    fn log(&self, base: &LNumeric) -> LNumeric {
+        self.ln() / base.ln()
+    }
+
+    fn log2(&self) -> LNumeric {
+        let (norm, arg) = to_inexact(self).to_polar();
+        let l2 = Real::ln_2();
+        NInexact( Cmplx{ re: norm.ln() / l2, im: arg / l2 } )
+    }
+
+    fn log10(&self) -> LNumeric {
+        let (norm, arg) = to_inexact(self).to_polar();
+        let l10 = Real::ln_10();
+        NInexact( Cmplx{ re: norm.ln() / l10, im: arg / l10 } )
+    }
+}
+
 pub fn from_int(n: int) -> LNumeric {
     NExact( Cmplx{ re: Rational::new(n, 1), im: Zero::zero() } )
 }

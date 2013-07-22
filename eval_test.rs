@@ -293,3 +293,8 @@ fn letstar_test() {
 fn cond_test() {
     eval_test(~"(cond ((< 3 3) 'less) ((= 3 3) 'equal) (else 'greater))", ~"equal");
 }
+
+#[test]
+fn exp_log_test() {
+    eval_test(~"(log (exp 1-2i))", ~"1.0-2.0i");
+}

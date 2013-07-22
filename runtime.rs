@@ -147,6 +147,20 @@ priv fn call_prim2(args: &[@RDatum],
     }
 }
 
+priv fn call_num_prim1(args: &[@RDatum],
+                    op: &fn(&LNumeric) -> Result<LNumeric, RuntimeError>)
+    -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [@LNum(ref x)] => match op(x) {
+            Ok(n) => Ok(@LNum(n)),
+            Err(e) => Err(e),
+        },
+        [_] => Err(TypeError),
+        _ => Err(ArgNumError(1, Some(1), args.len())),
+    }
+}
+
 priv fn call_num_prim2(args: ~[@RDatum],
                     op: &fn(&LNumeric, &LNumeric) -> Result<@RDatum, RuntimeError>)
     -> Result<@RDatum, RuntimeError>
@@ -225,6 +239,16 @@ priv fn call_real_prim1(args: &[@RDatum], op: &fn(&LReal) -> LReal)
             None => Err(TypeError),
             Some(r) => Ok(@LNum(from_real(&op(&r)))),
         },
+        [_] => Err(TypeError),
+        _ => Err(ArgNumError(1, Some(1), args.len())),
+    }
+}
+
+priv fn call_inexact(args: &[@RDatum], op: &fn(&Cmplx<f64>) -> Cmplx<f64>)
+    -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [@LNum(ref n)] => Ok(@LNum(NInexact(op(&to_inexact(n))))),
         [_] => Err(TypeError),
         _ => Err(ArgNumError(1, Some(1), args.len())),
     }
@@ -771,6 +795,8 @@ impl Runtime {
             PCeiling => do call_real_prim1(args) |&f| { f.ceil() },
             PRound => do call_real_prim1(args) |&f| { f.round() },
             PTruncate => do call_real_prim1(args) |&f| { f.trunc() },
+            PExp => do call_num_prim1(args) |&f| { Ok(f.exp()) },
+            PLog => do call_num_prim1(args) |&f| { Ok(f.ln()) },
             PNumerator => match args {
                 [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
                     Ok(@LNum( from_int(re.numerator()) )),
