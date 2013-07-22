@@ -312,3 +312,8 @@ fn make_complex_test() {
     eval_test(~"(make-rectangular 1 -2)", ~"1-2i");
     eval_test(~"(make-polar 1 0)", ~"1.0");
 }
+
+#[test]
+fn exact_inexact_test() {
+    eval_test(~"(exact->inexact 1+2i)", ~"1.0+2.0i");
+}

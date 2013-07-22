@@ -914,6 +914,7 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
+            PExactInexact => do call_num_prim1(args) |arg| { Ok(NInexact(arg.to_inexact())) },
             PEQ => do call_real_bfoldl(args) |&lhs, &rhs| { lhs == rhs },
             PGT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs > rhs },
             PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
