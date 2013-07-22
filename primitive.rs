@@ -66,6 +66,9 @@ pub enum PFunc {
     PStringLength,
     PStringRef,
     PSubstring,
+    PSymbol,
+    PStringSymbol,
+    PSymbolString,
 }
 
 pub fn prelude() -> ~[(@str, PFunc)] {
@@ -85,7 +88,8 @@ pub fn prelude() -> ~[(@str, PFunc)] {
         PBoolean, PProcedure,
         PIsVector, PMakeVector, PVector, PVectorLength, PVectorRef, PVectorList, PListVector,
         PNull, PPair,
-        PIsString, PString, PStringLength, PStringRef, PSubstring].map |prim| {
+        PIsString, PString, PStringLength, PStringRef, PSubstring,
+        PSymbol, PStringSymbol, PSymbolString].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
     }
 }
@@ -158,6 +162,9 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PStringLength => ~"string-length",
         PStringRef => ~"string-ref",
         PSubstring => ~"substring",
+        PSymbol => ~"symbol?",
+        PStringSymbol => ~"string->symbol",
+        PSymbolString => ~"symbol->string",
     }
 }
 

@@ -53,4 +53,16 @@
         )
     )
   )
+
+  (define (hsplit lst)
+    (if (null? lst)
+        (cons '() '())
+        (let ((this (car lst))
+              (next (hsplit (cdr lst))))
+          (cons
+            (cons (car this) (car next))
+            (cons (cdr this) (cdr next)))
+        )
+    )
+  )
 )

@@ -1109,7 +1109,25 @@ impl Runtime {
                     },
                 [_, _] | [_, _, _] => Err(TypeError),
                 _ => Err(ArgNumError(2, Some(3), args.len())),
-            }
+            },
+            PSymbol => do call_prim1(args) |arg| {
+                match arg {
+                    @LIdent(_) => Ok(@LBool(true)),
+                    _ => Ok(@LBool(false)),
+                }
+            },
+            PSymbolString => do call_prim1(args) |arg| {
+                match arg {
+                    @LIdent(ref s) => Ok(@LString(s.to_owned())),
+                    _ => Err(TypeError),
+                }
+            },
+            PStringSymbol => do call_prim1(args) |arg| {
+                match arg {
+                    @LString(ref s) => Ok(@LIdent(s.to_managed())),
+                    _ => Err(TypeError),
+                }
+            },
         }
     }
 

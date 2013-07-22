@@ -372,3 +372,9 @@ fn vector_conversion_test() {
     eval_test(~"(vector->list #(2 a))", ~"(2 a)");
     eval_test(~"(list->vector '(2 a))", ~"#(2 a)");
 }
+
+#[test]
+fn symbol_conversion_test() {
+    eval_test(~"(symbol->string 'str)", ~"\"str\"");
+    eval_test(~"(string->symbol \"str\")", ~"str");
+}
