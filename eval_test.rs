@@ -363,4 +363,6 @@ fn make_vector_test() {
 #[test]
 fn vector_test() {
     eval_test(~"(vector 2 'a)", ~"#(2 a)");
+    eval_test(~"(vector-length #(2 a))", ~"2");
+    eval_test(~"(vector-ref #(2 a) 1)", ~"a");
 }

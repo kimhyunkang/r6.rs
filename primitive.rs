@@ -55,6 +55,8 @@ pub enum PFunc {
     PIsVector,
     PMakeVector,
     PVector,
+    PVectorLength,
+    PVectorRef,
     PNull,
     PPair,
     PIsString,
@@ -79,7 +81,7 @@ pub fn prelude() -> ~[(@str, PFunc)] {
         PNumberString,
         PEQ, PGT, PLT, PGE, PLE, PNot,
         PBoolean, PProcedure,
-        PIsVector, PMakeVector, PVector,
+        PIsVector, PMakeVector, PVector, PVectorLength, PVectorRef,
         PNull, PPair,
         PIsString, PString, PStringLength, PStringRef, PSubstring].map |prim| {
         (proc_to_str(prim).to_managed(), *prim)
@@ -143,6 +145,8 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PIsVector => ~"vector?",
         PMakeVector => ~"make-vector",
         PVector => ~"vector",
+        PVectorLength => ~"vector-length",
+        PVectorRef => ~"vector-ref",
         PNull => ~"null?",
         PPair => ~"pair?",
         PIsString => ~"string?",

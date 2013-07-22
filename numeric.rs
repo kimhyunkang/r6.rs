@@ -356,6 +356,10 @@ pub fn from_int(n: int) -> LNumeric {
     NExact( Cmplx{ re: Rational::new_int(n, 1), im: Zero::zero() } )
 }
 
+pub fn from_uint(n: uint) -> LNumeric {
+    NExact( Cmplx{ re: Rational::new(BigInt::from_uint(n), One::one()), im: Zero::zero() } )
+}
+
 pub fn from_bigint(n: BigInt) -> LNumeric {
     NExact( Cmplx{ re: Rational::new(n, One::one()), im: Zero::zero() } )
 }
