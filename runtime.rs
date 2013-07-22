@@ -222,6 +222,19 @@ priv fn call_real_prim1(args: &[@RDatum], op: &fn(&LReal) -> LReal)
     }
 }
 
+priv fn call_real_prim2(args: &[@RDatum], op: &fn(&LReal, &LReal) -> LNumeric)
+    -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [@LNum(ref x), @LNum(ref y)] => match (get_real(x), get_real(y)) {
+            (Some(ref rx), Some(ref ry)) => Ok(@LNum(op(rx, ry))),
+            _ => Err(TypeError),
+        },
+        [_, _] => Err(TypeError),
+        _ => Err(ArgNumError(2, Some(2), args.len())),
+    }
+}
+
 priv fn call_inexact(args: &[@RDatum], op: &fn(&Cmplx<f64>) -> Cmplx<f64>)
     -> Result<@RDatum, RuntimeError>
 {
@@ -792,6 +805,12 @@ impl Runtime {
             PLog => do call_num_prim1(args) |&f| { Ok(f.ln()) },
             PSqrt => do call_num_prim1(args) |&f| { Ok(f.sqrt()) },
             PExpt => do call_num_prim2(args) |f, r| { Ok(f.pow(r)) },
+            PMakeRectangular => do call_real_prim2(args) |rx, ry| {
+                coerce(rx, ry, |&a, &b| { exact(a, b) }, |a, b| { inexact(a, b) })
+            },
+            PMakePolar => do call_real_prim2(args) |rx, ry| {
+                polar(rx.to_inexact(), ry.to_inexact())
+            },
             PNumerator => match args {
                 [@LNum(NExact( Cmplx { re: re, im: im } ))] if im.is_zero() =>
                     Ok(@LNum( from_int(re.numerator()) )),

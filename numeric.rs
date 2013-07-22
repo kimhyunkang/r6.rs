@@ -303,12 +303,25 @@ pub fn inexact(re: f64, im: f64) -> LNumeric {
     NInexact( Cmplx { re: re, im: im } )
 }
 
+pub fn polar(norm: f64, arg: f64) -> LNumeric {
+    inexact(norm * arg.cos(), norm * arg.sin())
+}
+
 pub enum LReal {
     NRational(Rational),
     NFloat(f64)
 }
 
-priv fn coerce<T>(a: &LReal, b: &LReal,
+impl LReal {
+    pub fn to_inexact(&self) -> f64 {
+        match *self {
+            NRational(x) => x.to_f64(),
+            NFloat(x) => x,
+        }
+    }
+}
+
+pub fn coerce<T>(a: &LReal, b: &LReal,
                     op_r: &fn(&Rational, &Rational) -> T,
                     op_f: &fn(f64, f64) -> T) -> T
 {

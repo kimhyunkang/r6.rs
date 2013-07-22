@@ -306,3 +306,9 @@ fn cond_test() {
 fn exp_log_test() {
     eval_test(~"(log (exp 1-2i))", ~"1.0-2.0i");
 }
+
+#[test]
+fn make_complex_test() {
+    eval_test(~"(make-rectangular 1 -2)", ~"1-2i");
+    eval_test(~"(make-polar 1 0)", ~"1.0");
+}
