@@ -386,16 +386,6 @@ priv fn call_num_foldl(args: &[@RDatum],
     }
 }
 
-priv fn call_inexact(args: &[@RDatum], op: &fn(&Cmplx<f64>) -> Cmplx<f64>)
-    -> Result<@RDatum, RuntimeError>
-{
-    match args {
-        [@LNum(ref n)] => Ok(@LNum(NInexact(op(&n.to_inexact())))),
-        [_] => Err(TypeError),
-        _ => Err(ArgNumError(1, Some(1), args.len())),
-    }
-}
-
 priv fn call_real_bfoldl(args: &[@RDatum], op: &fn(&LReal, &LReal) -> bool)
     -> Result<@RDatum, RuntimeError>
 {
