@@ -24,6 +24,21 @@ enum RuntimeData {
         @mut Stack<HashMap<@str, @LDatum<RuntimeData>>>),
 }
 
+impl Clone for RuntimeData {
+    fn clone(&self) -> RuntimeData {
+        match self {
+            &RUndef => RUndef,
+            &RPrim(f) => RPrim(f),
+            &RProc(ref args, ref vargs, ref body, ref env) => {
+                let cloneargs = do args.map |&arg| {
+                    arg
+                };
+                RProc(cloneargs, *vargs, body.clone(), *env)
+            },
+        }
+    }
+}
+
 fn eq(lhs: &RuntimeData, rhs: &RuntimeData) -> bool {
     match (lhs, rhs) {
         (&RPrim(l), &RPrim(r)) => l == r,
@@ -57,6 +72,83 @@ impl ToStr for RuntimeData {
 }
 
 type RDatum = LDatum<RuntimeData>;
+
+pub trait DatumConv {
+    fn from_datum<R>(@RDatum, &fn(&Self) -> R) -> Option<R>;
+    fn to_datum(&self) -> @RDatum;
+    fn typename() -> ~str;
+}
+
+impl DatumConv for @RDatum {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&@RDatum) -> R) -> Option<R> {
+        Some(op(&datum))
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        *self
+    }
+
+    fn typename() -> ~str {
+        ~"datum"
+    }
+}
+
+impl DatumConv for RuntimeData {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&RuntimeData) -> R) -> Option<R> {
+        match datum {
+            @LExt(ref r) => Some(op(r)),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LExt(self.clone())
+    }
+
+    fn typename() -> ~str {
+        ~"procedure"
+    }
+}
+
+impl DatumConv for LNumeric {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&LNumeric) -> R) -> Option<R> {
+        match datum {
+            @LNum(ref n) => Some(op(n)),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNum(self.clone())
+    }
+
+    fn typename() -> ~str {
+        ~"number"
+    }
+}
+
+struct GetList {
+    list: ~[@RDatum]
+}
+
+impl DatumConv for GetList {
+    #[inline]
+    fn from_datum<R>(datum: @RDatum, op: &fn(&GetList) -> R) -> Option<R> {
+        match datum.to_list() {
+            Some(l) => Some(op(&GetList{ list: l })),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    fn to_datum(&self) -> @RDatum {
+        LDatum::from_list(self.list)
+    }
+
+    fn typename() -> ~str {
+        ~"list"
+    }
+}
 
 struct Runtime {
     stdin: @Reader,
@@ -153,17 +245,44 @@ priv fn call_prim2(args: &[@RDatum],
     }
 }
 
-priv fn call_num_prim1(args: &[@RDatum],
-                    op: &fn(&LNumeric) -> Result<LNumeric, RuntimeError>)
-    -> Result<@RDatum, RuntimeError>
+priv fn call_tc1<A: DatumConv, R: DatumConv> (
+        args: &[@RDatum], op: &fn(&A) -> R
+    ) -> Result<@RDatum, RuntimeError>
 {
     match args {
-        [@LNum(ref x)] => match op(x) {
-            Ok(n) => Ok(@LNum(n)),
-            Err(e) => Err(e),
+        [arg] => {
+            let res = DatumConv::from_datum::<A, R>(arg, op);
+            match res {
+                Some(ref x) => Ok(x.to_datum()),
+                None => Err(TypeError),
+            }
         },
-        [_] => Err(TypeError),
         _ => Err(ArgNumError(1, Some(1), args.len())),
+    }
+}
+
+priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
+        args: &[@RDatum], op: &fn(&A, &B) -> Result<R, RuntimeError>
+    ) -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [arg0, arg1] => {
+            let r = do DatumConv::from_datum::<A, Result<R, RuntimeError>>(arg0) |a| {
+                let res = do DatumConv::from_datum::<B, Result<R, RuntimeError>>(arg1) |b| {
+                    op(a, b)
+                };
+                match res {
+                    Some(x) => x,
+                    None => Err(TypeError),
+                }
+            };
+            match r {
+                Some(Ok(x)) => Ok(x.to_datum()),
+                Some(Err(e)) => Err(e),
+                None => Err(TypeError),
+            }
+        },
+        _ => Err(ArgNumError(2, Some(2), args.len())),
     }
 }
 
@@ -728,19 +847,15 @@ impl Runtime {
                 args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         match f {
-            PEval => do call_prim1(args) |arg| {
-                self.eval(arg)
+            PEval => match args {
+                [arg] => self.eval(arg),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
             },
-            PApply => match args {
-                [@LExt(ref f), arg] => match arg.to_list() {
-                    Some(alist) => self.apply(f, alist),
-                    None => Err(NotList),
-                },
-                [_, _arg] => Err(NotCallable),
-                _ => Err(ArgNumError(2, Some(2), 0)),
+            PApply => do call_err2::<RuntimeData, GetList, @RDatum>(args) |f, l| {
+                self.apply(f, l.list)
             },
             PBegin => if args.len() == 0 {
-                    Ok(@LNil)
+                    Ok(@LExt(RUndef))
                 } else {
                     Ok(*args.last())
                 },
@@ -804,15 +919,15 @@ impl Runtime {
             PCeiling => do call_real_prim1(args) |&f| { f.ceil() },
             PRound => do call_real_prim1(args) |&f| { f.round() },
             PTruncate => do call_real_prim1(args) |&f| { f.trunc() },
-            PExp => do call_num_prim1(args) |&f| { Ok(f.exp()) },
-            PLog => do call_num_prim1(args) |&f| { Ok(f.ln()) },
-            PSin => do call_num_prim1(args) |&f| { Ok(f.sin()) },
-            PCos => do call_num_prim1(args) |&f| { Ok(f.cos()) },
-            PTan => do call_num_prim1(args) |&f| { Ok(f.tan()) },
-            PAsin => do call_num_prim1(args) |&f| { Ok(f.asin()) },
-            PAcos => do call_num_prim1(args) |&f| { Ok(f.acos()) },
-            PAtan => do call_num_prim1(args) |&f| { Ok(f.atan()) },
-            PSqrt => do call_num_prim1(args) |&f| { Ok(f.sqrt()) },
+            PExp => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.exp() },
+            PLog => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.ln() },
+            PSin => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sin() },
+            PCos => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.cos() },
+            PTan => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.tan() },
+            PAsin => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.asin() },
+            PAcos => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.acos() },
+            PAtan => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.atan() },
+            PSqrt => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sqrt() },
             PExpt => do call_num_prim2(args) |f, r| { Ok(f.pow(r)) },
             PMakeRectangular => do call_real_prim2(args) |rx, ry| {
                 coerce(rx, ry, |&a, &b| { exact(a, b) }, |a, b| { inexact(a, b) })
@@ -820,25 +935,25 @@ impl Runtime {
             PMakePolar => do call_real_prim2(args) |rx, ry| {
                 polar(rx.to_inexact(), ry.to_inexact())
             },
-            PRealPart => do call_num_prim1(args) |&x|  {
+            PRealPart => do call_tc1::<LNumeric, LNumeric>(args) |&x|  {
                 match x {
-                    NExact( Cmplx { re: ref re, im: _ } ) => Ok(from_rational(re)),
-                    NInexact( Cmplx { re: re, im: _ } ) => Ok(from_f64(re)),
+                    NExact( Cmplx { re: ref re, im: _ } ) => from_rational(re),
+                    NInexact( Cmplx { re: re, im: _ } ) => from_f64(re),
                 }
             },
-            PImagPart => do call_num_prim1(args) |&x|  {
+            PImagPart => do call_tc1::<LNumeric, LNumeric>(args) |&x|  {
                 match x {
-                    NExact( Cmplx { re: _, im: ref im } ) => Ok(from_rational(im)),
-                    NInexact( Cmplx { re: _, im: im } ) => Ok(from_f64(im)),
+                    NExact( Cmplx { re: _, im: ref im } ) => from_rational(im),
+                    NInexact( Cmplx { re: _, im: im } ) => from_f64(im),
                 }
             },
-            PMagnitude => do call_num_prim1(args) |x|  {
+            PMagnitude => do call_tc1::<LNumeric, LNumeric>(args) |x|  {
                 let (norm, _) = x.to_inexact().to_polar();
-                Ok(from_f64(norm))
+                from_f64(norm)
             },
-            PAngle => do call_num_prim1(args) |x|  {
+            PAngle => do call_tc1::<LNumeric, LNumeric>(args) |x|  {
                 let (_, arg) = x.to_inexact().to_polar();
-                Ok(from_f64(arg))
+                from_f64(arg)
             },
             PNumerator => match args {
                 [@LNum(NExact( Cmplx { re: ref re, im: ref im } ))] if im.is_zero() =>
@@ -914,7 +1029,9 @@ impl Runtime {
                     _ => Ok(@LBool(false)),
                 }
             },
-            PExactInexact => do call_num_prim1(args) |arg| { Ok(NInexact(arg.to_inexact())) },
+            PExactInexact => do call_tc1::<LNumeric, LNumeric>(args) |arg| {
+                NInexact(arg.to_inexact())
+            },
             PNumberString => match args {
                 [@LNum(ref x)] => Ok(@LString(x.to_str())),
                 [@LNum(ref x), @LNum(ref r)] => match get_uint(r) {
