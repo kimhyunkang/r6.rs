@@ -405,3 +405,16 @@ fn char_cmp_test() {
     eval_test(~"(char>=? #\\4 #\\3)", ~"#t");
     eval_test(~"(char>=? #\\D #\\B)", ~"#t");
 }
+
+#[test]
+fn char_ci_cmp_test() {
+    eval_test(~"(char-ci=? #\\a #\\A)", ~"#t");
+    eval_test(~"(char-ci<? #\\a #\\B)", ~"#t");
+    eval_test(~"(char-ci<? #\\d #\\B)", ~"#f");
+    eval_test(~"(char-ci>? #\\a #\\B)", ~"#f");
+    eval_test(~"(char-ci>? #\\d #\\B)", ~"#t");
+    eval_test(~"(char-ci<=? #\\a #\\B)", ~"#t");
+    eval_test(~"(char-ci<=? #\\d #\\B)", ~"#f");
+    eval_test(~"(char-ci>=? #\\a #\\B)", ~"#f");
+    eval_test(~"(char-ci>=? #\\d #\\B)", ~"#t");
+}

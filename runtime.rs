@@ -721,6 +721,12 @@ priv fn call_num_foldl(args: &[@RDatum],
     }
 }
 
+#[inline]
+priv fn ci_cmp(a: char, b: char, op: &fn(u8, u8) -> bool) -> bool
+{
+    op(a.to_ascii().to_lower().to_byte(), b.to_ascii().to_lower().to_byte())
+}
+
 priv fn get_bindings(arg: &RDatum) -> Result<~[(@str, @RDatum)], ~str> {
     match arg.to_list() {
         None => Err(~"non-list bindings"),
@@ -1318,6 +1324,21 @@ impl Runtime {
             PCharLT => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs < rhs },
             PCharGE => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs >= rhs },
             PCharLE => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs <= rhs },
+            PCharCIEQ => do call_bfoldl::<char>(args) |&lhs, &rhs| {
+                do ci_cmp(lhs, rhs) |a, b| { a == b }
+            },
+            PCharCIGT => do call_bfoldl::<char>(args) |&lhs, &rhs| {
+                do ci_cmp(lhs, rhs) |a, b| { a > b }
+            },
+            PCharCILT => do call_bfoldl::<char>(args) |&lhs, &rhs| {
+                do ci_cmp(lhs, rhs) |a, b| { a < b }
+            },
+            PCharCIGE => do call_bfoldl::<char>(args) |&lhs, &rhs| {
+                do ci_cmp(lhs, rhs) |a, b| { a >= b }
+            },
+            PCharCILE => do call_bfoldl::<char>(args) |&lhs, &rhs| {
+                do ci_cmp(lhs, rhs) |a, b| { a <= b }
+            },
             PProcedure => match args {
                 [@LExt(RUndef)] => Ok(@LBool(false)),
                 [@LExt(_)] => Ok(@LBool(true)),
