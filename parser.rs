@@ -463,6 +463,8 @@ impl Parser {
 
         let lit =
         do io::with_str_writer |wr| {
+            wr.write_char(self.consume());
+
             while(!self.eof()) {
                 match(self.lookahead()) {
                     'a' .. 'z' => wr.write_char(self.consume()),
@@ -984,6 +986,7 @@ fn test_parse_exponent() {
 #[test]
 fn test_parse_char_list() {
     test_expect(~"(#\\a)", &LCons(@LChar('a'), @LNil));
+    test_expect(~"(#\\1)", &LCons(@LChar('1'), @LNil));
 }
 
 #[test]
