@@ -13,6 +13,7 @@ use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
 use numeric::*;
+use rational::Rational;
 use stack::*;
 use parser::Parser;
 
@@ -145,6 +146,25 @@ impl DatumConv for LReal {
 
     fn typename() -> ~str {
         ~"real number"
+    }
+}
+
+impl DatumConv for Rational {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&Rational) -> R) -> Option<R> {
+        match datum {
+            @LNum(NExact(ref n)) if n.im.is_zero() => {
+                Some(op(&n.re))
+            },
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNum(from_rational(self))
+    }
+
+    fn typename() -> ~str {
+        ~"rational number"
     }
 }
 
@@ -1010,22 +1030,8 @@ impl Runtime {
                 let (_, arg) = x.to_inexact().to_polar();
                 from_f64(arg)
             },
-            PNumerator => match args {
-                [@LNum(NExact( Cmplx { re: ref re, im: ref im } ))] if im.is_zero() =>
-                    Ok(@LNum( from_bigint(re.numerator().clone()) )),
-                [_] =>
-                    Err(TypeError),
-                _ =>
-                    Err(ArgNumError(1, Some(1), args.len())),
-            },
-            PDenominator => match args {
-                [@LNum(NExact( Cmplx { re: ref re, im: ref im } ))] if im.is_zero() =>
-                    Ok(@LNum( from_bigint(re.denominator().clone()) )),
-                [_] =>
-                    Err(TypeError),
-                _ =>
-                    Err(ArgNumError(1, Some(1), args.len())),
-            },
+            PNumerator => do call_tc1::<Rational, BigInt>(args) |x| { x.numerator().clone() },
+            PDenominator => do call_tc1::<Rational, BigInt>(args) |x| { x.denominator().clone() },
             PCar => do call_tc1::<(@RDatum, @RDatum), @RDatum>(args) |&(h, _)| { h },
             PCdr => do call_tc1::<(@RDatum, @RDatum), @RDatum>(args) |&(_, t)| { t },
             PCons => do call_prim2(args) |arg1, arg2| { Ok(@LCons(arg1, arg2)) },
