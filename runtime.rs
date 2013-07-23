@@ -306,6 +306,23 @@ impl DatumConv for bool {
     }
 }
 
+impl DatumConv for char {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&char) -> R) -> Option<R> {
+        match datum {
+            @LChar(ref c) => Some(op(c)),
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: char) -> @RDatum {
+        @LChar(x)
+    }
+
+    fn typename() -> ~str {
+        ~"character"
+    }
+}
+
 impl DatumConv for () {
     fn from_datum<R>(datum: @RDatum, op: &fn(&()) -> R) -> Option<R> {
         match datum {
@@ -1228,12 +1245,7 @@ impl Runtime {
                 }
             },
             PBoolean => typecheck::<bool>(args),
-            PChar => do call_prim1(args) |arg| {
-                match arg {
-                    @LChar(_) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
+            PChar => typecheck::<char>(args),
             PProcedure => match args {
                 [@LExt(RUndef)] => Ok(@LBool(false)),
                 [@LExt(_)] => Ok(@LBool(true)),
@@ -1312,17 +1324,11 @@ impl Runtime {
                 }
             },
             PStringLength => do call_tc1::<~str, uint>(args) |s| { s.len() },
-            PStringRef => do call_prim2(args) |arg, idx| {
-                match (arg, idx) {
-                    (@LString(ref s), @LNum(ref n)) => match get_uint(n) {
-                        Some(i) => if i < s.len() {
-                                Ok(@LChar(s.char_at(i)))
-                            } else {
-                                Err(RangeError)
-                            },
-                        None => Err(TypeError),
-                    },
-                    _ => Err(TypeError),
+            PStringRef => do call_err2::<~str, uint, char>(args) |s, &idx| {
+                if idx <= s.len() {
+                    Ok(s.char_at(idx))
+                } else {
+                    Err(RangeError)
                 }
             },
             PSubstring => match args.len() {
