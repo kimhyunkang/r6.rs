@@ -173,6 +173,23 @@ impl DatumConv for BigInt {
     }
 }
 
+impl DatumConv for (@RDatum, @RDatum) {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&(@RDatum, @RDatum)) -> R) -> Option<R> {
+        match datum {
+            @LCons(a, b) => Some(op(&(a, b))),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LCons(self.first(), self.second())
+    }
+
+    fn typename() -> ~str {
+        ~"cons"
+    }
+}
+
 struct GetList {
     list: ~[@RDatum]
 }
@@ -978,18 +995,8 @@ impl Runtime {
                 _ =>
                     Err(ArgNumError(1, Some(1), args.len())),
             },
-            PCar => do call_prim1(args) |arg| {
-                match *arg {
-                    LCons(h, _) => Ok(h),
-                    _ => Err(TypeError),
-                }
-            },
-            PCdr => do call_prim1(args) |arg| {
-                match *arg {
-                    LCons(_, t) => Ok(t),
-                    _ => Err(TypeError),
-                }
-            },
+            PCar => do call_tc1::<(@RDatum, @RDatum), @RDatum>(args) |&(h, _)| { h },
+            PCdr => do call_tc1::<(@RDatum, @RDatum), @RDatum>(args) |&(_, t)| { t },
             PCons => do call_prim2(args) |arg1, arg2| { Ok(@LCons(arg1, arg2)) },
             PEqv => do call_prim2(args) |arg1, arg2| {
                 let b =
