@@ -728,6 +728,12 @@ priv fn ci_cmp(a: char, b: char, op: &fn(u8, u8) -> bool) -> bool
     op(a.to_ascii().to_lower().to_byte(), b.to_ascii().to_lower().to_byte())
 }
 
+#[inline]
+priv fn str_ci_cmp(a: &str, b: &str, op: &fn(~str, ~str) -> bool) -> bool
+{
+    op(a.to_ascii().to_lower().to_str_ascii(), b.to_ascii().to_lower().to_str_ascii())
+}
+
 priv fn get_bindings(arg: &RDatum) -> Result<~[(@str, @RDatum)], ~str> {
     match arg.to_list() {
         None => Err(~"non-list bindings"),
@@ -1403,6 +1409,26 @@ impl Runtime {
             PNull => typecheck::<()>(args),
             PPair => typecheck::<(@RDatum, @RDatum)>(args),
             PIsString => typecheck::<~str>(args),
+            PStringEQ => do call_bfoldl::<~str>(args) |&lhs, &rhs| { lhs == rhs },
+            PStringGT => do call_bfoldl::<~str>(args) |&lhs, &rhs| { lhs > rhs },
+            PStringLT => do call_bfoldl::<~str>(args) |&lhs, &rhs| { lhs < rhs },
+            PStringGE => do call_bfoldl::<~str>(args) |&lhs, &rhs| { lhs >= rhs },
+            PStringLE => do call_bfoldl::<~str>(args) |&lhs, &rhs| { lhs <= rhs },
+            PStringCIEQ => do call_bfoldl::<~str>(args) |&lhs, &rhs| {
+                do str_ci_cmp(lhs, rhs) |a, b| { a == b }
+            },
+            PStringCIGT => do call_bfoldl::<~str>(args) |&lhs, &rhs| {
+                do str_ci_cmp(lhs, rhs) |a, b| { a > b }
+            },
+            PStringCILT => do call_bfoldl::<~str>(args) |&lhs, &rhs| {
+                do str_ci_cmp(lhs, rhs) |a, b| { a < b }
+            },
+            PStringCIGE => do call_bfoldl::<~str>(args) |&lhs, &rhs| {
+                do str_ci_cmp(lhs, rhs) |a, b| { a >= b }
+            },
+            PStringCILE => do call_bfoldl::<~str>(args) |&lhs, &rhs| {
+                do str_ci_cmp(lhs, rhs) |a, b| { a <= b }
+            },
             PString => do call_vargs::<char, ~str>(args) |chars| { str::from_chars(chars) },
             PStringLength => do call_tc1::<~str, uint>(args) |s| { s.len() },
             PStringRef => do call_err2::<~str, uint, char>(args) |s, &idx| {
