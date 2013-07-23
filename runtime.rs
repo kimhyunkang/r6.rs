@@ -129,6 +129,40 @@ impl DatumConv for LNumeric {
     }
 }
 
+impl DatumConv for Cmplx<f64> {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&Cmplx<f64>) -> R) -> Option<R> {
+        match datum {
+            @LNum(NInexact(ref n)) => Some(op(n)),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNum(NInexact(*self))
+    }
+
+    fn typename() -> ~str {
+        ~"inexact number"
+    }
+}
+
+impl DatumConv for Cmplx<Rational> {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&Cmplx<Rational>) -> R) -> Option<R> {
+        match datum {
+            @LNum(NExact(ref n)) => Some(op(n)),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNum(NExact(self.clone()))
+    }
+
+    fn typename() -> ~str {
+        ~"exact number"
+    }
+}
+
 impl DatumConv for LReal {
     fn from_datum<R>(datum: @RDatum, op: &fn(&LReal) -> R) -> Option<R> {
         match datum {
@@ -1074,21 +1108,9 @@ impl Runtime {
                     _ => false,
                 }
             },
-            PExact => do call_prim1(args) |arg| {
-                match *arg {
-                    LNum(NExact(_)) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
-            PInexact => do call_prim1(args) |arg| {
-                match *arg {
-                    LNum(NInexact(_)) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
-            PExactInexact => do call_tc1::<LNumeric, LNumeric>(args) |arg| {
-                NInexact(arg.to_inexact())
-            },
+            PExact => typecheck::<Cmplx<Rational>>(args),
+            PInexact => typecheck::<Cmplx<f64>>(args),
+            PExactInexact => do call_tc1::<LNumeric, Cmplx<f64>>(args) |x| { x.to_inexact() },
             PNumberString => match args {
                 [@LNum(ref x)] => Ok(@LString(x.to_str())),
                 [@LNum(ref x), @LNum(ref r)] => match get_uint(r) {
