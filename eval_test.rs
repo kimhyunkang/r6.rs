@@ -434,3 +434,8 @@ fn char_ci_cmp_test() {
     eval_test(~"(char-ci>=? #\\a #\\B)", ~"#f");
     eval_test(~"(char-ci>=? #\\d #\\B)", ~"#t");
 }
+
+#[test]
+fn string_append_test() {
+    eval_test(~"(string-append \"r5\" \".\" \"rs\")", ~"\"r5.rs\"");
+}

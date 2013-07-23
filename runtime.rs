@@ -1455,6 +1455,7 @@ impl Runtime {
                 },
                 n => Err(ArgNumError(2, Some(3), n)),
             },
+            PStringAppend => do call_vargs::<~str, ~str>(args) |strs| { strs.concat() },
             PSymbol => typecheck::<@str>(args),
             PSymbolString => do call_tc1::<@str, ~str>(args) |&s| { s.to_owned() },
             PStringSymbol => do call_tc1::<~str, @str>(args) |&s| { s.to_managed() },
