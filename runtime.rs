@@ -210,6 +210,23 @@ impl DatumConv for (@RDatum, @RDatum) {
     }
 }
 
+impl DatumConv for bool {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&bool) -> R) -> Option<R> {
+        match datum {
+            @LBool(ref b) => Some(op(b)),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LBool(*self)
+    }
+
+    fn typename() -> ~str {
+        ~"boolean"
+    }
+}
+
 impl DatumConv for () {
     fn from_datum<R>(datum: @RDatum, op: &fn(&()) -> R) -> Option<R> {
         match datum {
@@ -1045,18 +1062,16 @@ impl Runtime {
                 };
                 Ok(@LBool(b))
             },
-            PEqual => do call_prim2(args) |arg1, arg2| {
-                Ok(@LBool(arg1 == arg2))
-            },
+            PEqual => do call_tc2::<@RDatum, @RDatum, bool>(args) |&a, &b| { a == b },
             PNumber => typecheck::<LNumeric>(args),
             PReal => typecheck::<LReal>(args),
-            PInteger => do call_prim1(args) |arg| {
-                match *arg {
-                    LNum(NExact(Cmplx { re: ref re, im: ref im })) =>
-                        Ok(@LBool(*re.numerator() == One::one() && *im.numerator() == One::one())),
-                    LNum(NInexact(Cmplx { re: re, im: im })) =>
-                        Ok(@LBool(re.round() == re && im.round() == im)),
-                    _ => Ok(@LBool(false)),
+            PInteger => do call_tc1::<@RDatum, bool>(args) |&arg| {
+                match arg {
+                    @LNum(NExact(Cmplx { re: ref re, im: ref im })) =>
+                        *re.numerator() == One::one() && *im.numerator() == One::one(),
+                    @LNum(NInexact(Cmplx { re: re, im: im })) =>
+                        re.round() == re && im.round() == im,
+                    _ => false,
                 }
             },
             PExact => do call_prim1(args) |arg| {
@@ -1098,16 +1113,13 @@ impl Runtime {
             PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
             PGE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs >= rhs },
             PLE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs <= rhs },
-            PNot => match args {
-                [@LBool(false)] => Ok(@LBool(true)),
-                [_] => Ok(@LBool(false)),
-                _ => Err(ArgNumError(1, Some(1), args.len())),
+            PNot => do call_tc1::<@RDatum, bool>(args) |&arg| {
+                match arg {
+                    @LBool(false) => true,
+                    _ => false,
+                }
             },
-            PBoolean => match args {
-                [@LBool(_)] => Ok(@LBool(true)),
-                [_] => Ok(@LBool(false)),
-                _ => Err(ArgNumError(1, Some(1), args.len())),
-            },
+            PBoolean => typecheck::<bool>(args),
             PChar => do call_prim1(args) |arg| {
                 match arg {
                     @LChar(_) => Ok(@LBool(true)),
