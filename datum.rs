@@ -26,7 +26,7 @@ pub enum Quotation
 impl<T: ToStr> ToStr for LDatum<T> {
     fn to_str(&self) -> ~str {
         do io::with_str_writer |wr| {
-            write_ldatum(wr, self)
+            write_ldatum(wr, self, true)
         }
     }
 }
@@ -50,7 +50,11 @@ impl<T> LDatum<T> {
 
 impl<T: ToStr> LDatum<T> {
     pub fn write(&self, wr: @io::Writer) {
-        write_ldatum(wr, self)
+        write_ldatum(wr, self, true)
+    }
+
+    pub fn write_raw(&self, wr: @io::Writer) {
+        write_ldatum(wr, self, false)
     }
 }
 
@@ -83,13 +87,17 @@ priv fn datum_to_list<T>(head: @LDatum<T>, tail: @LDatum<T>) -> Option<~[@LDatum
     }
 }
 
-priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
+priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>, display: bool) {
     match v {
         LIdent(s) => wr.write_str(s),
         LString(s) => {
-            wr.write_char('"');
-            wr.write_str(s);
-            wr.write_char('"');
+            if display {
+                wr.write_char('"');
+                wr.write_str(s.escape_default());
+                wr.write_char('"');
+            } else {
+                wr.write_str(s);
+            }
         },
         LChar(' ') => wr.write_str("#\\space"),
         LChar('\n') => wr.write_str("#\\newline"),
@@ -109,12 +117,12 @@ priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
                         QuasiQuote => '`',
                     };
                     wr.write_char(ch);
-                    write_ldatum(wr, v);
+                    write_ldatum(wr, v, display);
                 },
                 None => {
                     wr.write_char('(');
-                    write_ldatum(wr, *head);
-                    write_list(wr, *tail);
+                    write_ldatum(wr, *head, display);
+                    write_list(wr, *tail, display);
                 },
             }
         },
@@ -124,10 +132,10 @@ priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
             match v {
                 [] => (),
                 [head, .. tail] => {
-                    write_ldatum(wr, head);
+                    write_ldatum(wr, head, display);
                     for tail.each |&x| {
                         wr.write_char(' ');
-                        write_ldatum(wr, x);
+                        write_ldatum(wr, x, display);
                     }
                 }
             }
@@ -159,17 +167,17 @@ pub fn is_quote<T>(&head: &@LDatum<T>, &tail: &@LDatum<T>) -> Option<(Quotation,
     }
 }
 
-priv fn write_list<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>) {
+priv fn write_list<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>, display: bool) {
     match v {
         LCons(head, tail) => {
             wr.write_char(' ');
-            write_ldatum(wr, head);
-            write_list(wr, tail);
+            write_ldatum(wr, head, display);
+            write_list(wr, tail, display);
         },
         LNil => wr.write_char(')'),
         _ => {
             wr.write_str(" . ");
-            write_ldatum(wr, &v);
+            write_ldatum(wr, &v, display);
             wr.write_char(')');
         },
     }
