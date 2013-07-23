@@ -279,6 +279,8 @@ fn round_test() {
 #[test]
 fn string_test() {
     eval_test(~"(string #\\h #\\e #\\l #\\l #\\o)", ~"\"hello\"");
+    eval_test(~"(list->string '(#\\h #\\e #\\l #\\l #\\o))", ~"\"hello\"");
+    eval_test(~"(string->list \"hello\")", ~"(#\\h #\\e #\\l #\\l #\\o)");
 }
 
 #[test]

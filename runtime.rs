@@ -378,7 +378,7 @@ impl<T: DatumConv> DatumConv for GetList<T> {
     }
 
     fn typename() -> ~str {
-        ~"list"
+        fmt!("list of %s", DatumConv::typename::<T>())
     }
 }
 
@@ -1474,6 +1474,12 @@ impl Runtime {
                 n => Err(ArgNumError(2, Some(3), n)),
             },
             PStringAppend => do call_vargs::<~str, ~str>(args) |strs| { strs.concat() },
+            PStringList => do call_tc1::<~str, GetList<char>>(args) |&s| {
+                GetList { list: s.iter().collect() }
+            },
+            PListString => do call_tc1::<GetList<char>, ~str>(args) |cs| {
+                str::from_chars(cs.list)
+            },
             PSymbol => typecheck::<@str>(args),
             PSymbolString => do call_tc1::<@str, ~str>(args) |&s| { s.to_owned() },
             PStringSymbol => do call_tc1::<~str, @str>(args) |&s| { s.to_managed() },
