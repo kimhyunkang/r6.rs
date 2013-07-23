@@ -1345,6 +1345,18 @@ impl Runtime {
             PCharCILE => do call_bfoldl::<char>(args) |&lhs, &rhs| {
                 do ci_cmp(lhs, rhs) |a, b| { a <= b }
             },
+            PCharInteger => do call_tc1::<char, uint>(args) |&c| {
+                c.to_ascii().to_byte() as uint
+            },
+            PIntegerChar => do call_err1::<uint, char>(args) |&n| {
+                if n <= 0xff { Ok(n as char) } else { Err(TypeError) }
+            },
+            PCharUpcase => do call_tc1::<char, char>(args) |&c| {
+                c.to_ascii().to_upper().to_byte() as char
+            },
+            PCharDowncase => do call_tc1::<char, char>(args) |&c| {
+                c.to_ascii().to_lower().to_byte() as char
+            },
             PProcedure => match args {
                 [@LExt(RUndef)] => Ok(@LBool(false)),
                 [@LExt(_)] => Ok(@LBool(true)),
