@@ -1591,6 +1591,12 @@ impl Runtime {
                 2 => do call_tc2::<char, @Writer, ()>(args) |&c, &wr| { wr.write_char(c) },
                 n => Err(ArgNumError(1, Some(2), n)),
             },
+            PLoad => do call_err1::<~str, @RDatum>(args) |&name| { 
+                match io::file_reader(&Path(name)) {
+                    Ok(rdr) => self.load(rdr),
+                    Err(e) => Err(IOError(e)),
+                }
+            },
         }
     }
 

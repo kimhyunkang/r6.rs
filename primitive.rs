@@ -119,6 +119,7 @@ pub enum PFunc {
     PDisplay,
     PNewline,
     PWriteChar,
+    PLoad,
 }
 
 impl Bounded for PFunc {
@@ -126,7 +127,7 @@ impl Bounded for PFunc {
     fn min_value() -> PFunc { PEval }
 
     #[inline]
-    fn max_value() -> PFunc { PWriteChar }
+    fn max_value() -> PFunc { PLoad }
 }
 
 impl IntConvertible for PFunc {
@@ -259,6 +260,7 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PDisplay => ~"display",
         PNewline => ~"newline",
         PWriteChar => ~"write-char",
+        PLoad => ~"load",
     }
 }
 
