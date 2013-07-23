@@ -1381,6 +1381,9 @@ impl Runtime {
             PLT => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs < rhs },
             PGE => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs >= rhs },
             PLE => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs <= rhs },
+            PZero => do call_tc1::<LNumeric, bool>(args) |&n| { n.is_zero() },
+            PPositive => do call_tc1::<LReal, bool>(args) |&n| { n.is_positive() },
+            PNegative => do call_tc1::<LReal, bool>(args) |&n| { n.is_negative() },
             PNot => do call_tc1::<@RDatum, bool>(args) |&arg| {
                 match arg {
                     @LBool(false) => true,

@@ -1,4 +1,4 @@
-use std::num::{One, Zero, ToStrRadix};
+use std::num::{One, Zero, ToStrRadix, IntConvertible};
 use extra::complex::Cmplx;
 use extra::bigint::BigInt;
 
@@ -418,6 +418,19 @@ pub fn coerce<T>(a: &LReal, b: &LReal,
     }
 }
 
+pub fn coerce_build(a: &LReal, b: &LReal,
+                    op_r: &fn(&Rational, &Rational) -> Rational,
+                    op_f: &fn(f64, f64) -> f64) -> LReal
+{
+    match (a, b) {
+        (&NRational(ref x), &NRational(ref y)) => NRational(op_r(x, y)),
+        (&NRational(ref x), &NFloat(y)) => NFloat(op_f(x.to_f64(), y)),
+        (&NFloat(x), &NRational(ref y)) => NFloat(op_f(x, y.to_f64())),
+        (&NFloat(x), &NFloat(y)) => NFloat(op_f(x, y)),
+    }
+}
+
+
 impl Eq for LReal {
     fn eq(&self, other: &LReal) -> bool {
         coerce(self, other, |x,y| {x == y}, |x,y| {x == y})
@@ -425,6 +438,43 @@ impl Eq for LReal {
 
     fn ne(&self, other: &LReal) -> bool {
         coerce(self, other, |x,y| {x != y}, |x,y| {x != y})
+    }
+}
+
+impl Signed for LReal {
+    fn abs(&self) -> LReal {
+        match *self {
+            NRational(ref n) => NRational(n.abs()),
+            NFloat(ref n) => NFloat(n.abs()),
+        }
+    }
+
+    fn abs_sub(&self, other: &LReal) -> LReal {
+        coerce_build(self, other, |x,y| {x.abs_sub(y)}, |x,y| {x.abs_sub(&y)})
+    }
+
+    fn signum(&self) -> LReal {
+        match *self {
+            NRational(ref n) => NRational(n.signum()),
+            NFloat(ref n) => {
+                let d = IntConvertible::from_int(n.signum() as int);
+                NRational(Rational::new(d, One::one()))
+            },
+        }
+    }
+
+    fn is_positive(&self) -> bool {
+        match *self {
+            NRational(ref n) => n.is_positive(),
+            NFloat(ref n) => n.is_positive(),
+        }
+    }
+
+    fn is_negative(&self) -> bool {
+        match *self {
+            NRational(ref n) => n.is_negative(),
+            NFloat(ref n) => n.is_negative(),
+        }
     }
 }
 
