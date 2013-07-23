@@ -384,3 +384,24 @@ fn char_test() {
     eval_test(~"(char? #\\space)", ~"#t");
     eval_test(~"(char? \" \")", ~"#f");
 }
+
+#[test]
+fn char_cmp_test() {
+    eval_test(~"(char=? #\\1 #\\1)", ~"#t");
+    eval_test(~"(char<? #\\0 #\\3)", ~"#t");
+    eval_test(~"(char<? #\\A #\\B)", ~"#t");
+    eval_test(~"(char<? #\\4 #\\3)", ~"#f");
+    eval_test(~"(char<? #\\D #\\B)", ~"#f");
+    eval_test(~"(char>? #\\0 #\\3)", ~"#f");
+    eval_test(~"(char>? #\\A #\\B)", ~"#f");
+    eval_test(~"(char>? #\\4 #\\3)", ~"#t");
+    eval_test(~"(char>? #\\D #\\B)", ~"#t");
+    eval_test(~"(char<=? #\\0 #\\3)", ~"#t");
+    eval_test(~"(char<=? #\\A #\\B)", ~"#t");
+    eval_test(~"(char<=? #\\4 #\\3)", ~"#f");
+    eval_test(~"(char<=? #\\D #\\B)", ~"#f");
+    eval_test(~"(char>=? #\\0 #\\3)", ~"#f");
+    eval_test(~"(char>=? #\\A #\\B)", ~"#f");
+    eval_test(~"(char>=? #\\4 #\\3)", ~"#t");
+    eval_test(~"(char>=? #\\D #\\B)", ~"#t");
+}

@@ -1313,6 +1313,11 @@ impl Runtime {
             },
             PBoolean => typecheck::<bool>(args),
             PChar => typecheck::<char>(args),
+            PCharEQ => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs == rhs },
+            PCharGT => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs > rhs },
+            PCharLT => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs < rhs },
+            PCharGE => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs >= rhs },
+            PCharLE => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs <= rhs },
             PProcedure => match args {
                 [@LExt(RUndef)] => Ok(@LBool(false)),
                 [@LExt(_)] => Ok(@LBool(true)),
