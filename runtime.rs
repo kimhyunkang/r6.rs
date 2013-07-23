@@ -341,22 +341,40 @@ impl DatumConv for () {
     }
 }
 
-struct GetList {
-    list: ~[@RDatum]
+struct GetList<T> {
+    list: ~[T]
 }
 
-impl DatumConv for GetList {
+impl<T: DatumConv> DatumConv for GetList<T> {
     #[inline]
-    fn from_datum<R>(datum: @RDatum, op: &fn(&GetList) -> R) -> Option<R> {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&GetList<T>) -> R) -> Option<R> {
         match datum.to_list() {
-            Some(l) => Some(op(&GetList{ list: l })),
+            Some(l) => {
+                let mut idx = 0u;
+                let mut list = vec::with_capacity(l.len());
+
+                while idx < l.len() {
+                    match DatumConv::from_datum::<T, T>(l[idx], |&x| {x}) {
+                        Some(x) => list.push(x),
+                        None => return None,
+                    }
+
+                    idx += 1;
+                }
+
+                return Some(op(&GetList { list: list }))
+            }
             _ => None,
         }
     }
 
     #[inline]
-    fn move_datum(x: GetList) -> @RDatum {
-        LDatum::from_list(x.list)
+    fn move_datum(x: GetList<T>) -> @RDatum {
+        let mut bottom = @LNil;
+        do x.list.consume_reverse |_, a| {
+            bottom = @LCons(DatumConv::move_datum(a), bottom);
+        };
+        bottom
     }
 
     fn typename() -> ~str {
@@ -1176,7 +1194,7 @@ impl Runtime {
                 [arg] => self.eval(arg),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
-            PApply => do call_err2::<RuntimeData, GetList, @RDatum>(args) |f, l| {
+            PApply => do call_err2::<RuntimeData, GetList<@RDatum>, @RDatum>(args) |f, l| {
                 self.apply(f, l.list)
             },
             PBegin => if args.len() == 0 {
