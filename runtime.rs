@@ -128,6 +128,26 @@ impl DatumConv for LNumeric {
     }
 }
 
+impl DatumConv for LReal {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&LReal) -> R) -> Option<R> {
+        match datum {
+            @LNum(ref n) => match get_real(n) {
+                Some(ref r) => Some(op(r)),
+                None => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNum(from_real(self))
+    }
+
+    fn typename() -> ~str {
+        ~"real number"
+    }
+}
+
 impl DatumConv for BigInt {
     fn from_datum<R>(datum: @RDatum, op: &fn(&BigInt) -> R) -> Option<R> {
         match datum {
@@ -363,32 +383,6 @@ priv fn call_num_foldl(args: &[@RDatum],
         Err(TypeError)
     } else {
         Ok(@LNum(res))
-    }
-}
-
-priv fn call_real_prim1(args: &[@RDatum], op: &fn(&LReal) -> LReal)
-    -> Result<@RDatum, RuntimeError>
-{
-    match args {
-        [@LNum(ref n)] => match get_real(n) {
-            None => Err(TypeError),
-            Some(r) => Ok(@LNum(from_real(&op(&r)))),
-        },
-        [_] => Err(TypeError),
-        _ => Err(ArgNumError(1, Some(1), args.len())),
-    }
-}
-
-priv fn call_real_prim2(args: &[@RDatum], op: &fn(&LReal, &LReal) -> LNumeric)
-    -> Result<@RDatum, RuntimeError>
-{
-    match args {
-        [@LNum(ref x), @LNum(ref y)] => match (get_real(x), get_real(y)) {
-            (Some(ref rx), Some(ref ry)) => Ok(@LNum(op(rx, ry))),
-            _ => Err(TypeError),
-        },
-        [_, _] => Err(TypeError),
-        _ => Err(ArgNumError(2, Some(2), args.len())),
     }
 }
 
@@ -938,10 +932,10 @@ impl Runtime {
                     Ok(modulo(lhs, rhs))
                 }
             },
-            PFloor => do call_real_prim1(args) |&f| { f.floor() },
-            PCeiling => do call_real_prim1(args) |&f| { f.ceil() },
-            PRound => do call_real_prim1(args) |&f| { f.round() },
-            PTruncate => do call_real_prim1(args) |&f| { f.trunc() },
+            PFloor => do call_tc1::<LReal, LReal>(args) |&x| { x.floor() },
+            PCeiling => do call_tc1::<LReal, LReal>(args) |&x| { x.ceil() },
+            PRound => do call_tc1::<LReal, LReal>(args) |&x| { x.round() },
+            PTruncate => do call_tc1::<LReal, LReal>(args) |&x| { x.trunc() },
             PExp => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.exp() },
             PLog => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.ln() },
             PSin => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sin() },
@@ -952,10 +946,10 @@ impl Runtime {
             PAtan => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.atan() },
             PSqrt => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sqrt() },
             PExpt => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, r| { x.pow(r) },
-            PMakeRectangular => do call_real_prim2(args) |rx, ry| {
+            PMakeRectangular => do call_tc2::<LReal, LReal, LNumeric>(args) |rx, ry| {
                 coerce(rx, ry, |&a, &b| { exact(a, b) }, |a, b| { inexact(a, b) })
             },
-            PMakePolar => do call_real_prim2(args) |rx, ry| {
+            PMakePolar => do call_tc2::<LReal, LReal, LNumeric>(args) |rx, ry| {
                 polar(rx.to_inexact(), ry.to_inexact())
             },
             PRealPart => do call_tc1::<LNumeric, LNumeric>(args) |&x|  {
