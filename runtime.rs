@@ -146,6 +146,23 @@ impl DatumConv for Cmplx<f64> {
     }
 }
 
+impl DatumConv for f64 {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&f64) -> R) -> Option<R> {
+        match datum {
+            @LNum(NInexact(ref n)) if n.im.is_zero() => Some(op(&n.re)),
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: f64) -> @RDatum {
+        @LNum(from_f64(x))
+    }
+
+    fn typename() -> ~str {
+        ~"inexact real number"
+    }
+}
+
 impl DatumConv for Cmplx<Rational> {
     fn from_datum<R>(datum: @RDatum, op: &fn(&Cmplx<Rational>) -> R) -> Option<R> {
         match datum {
@@ -1073,13 +1090,11 @@ impl Runtime {
                     NInexact( Cmplx { re: _, im: im } ) => from_f64(im),
                 }
             },
-            PMagnitude => do call_tc1::<LNumeric, LNumeric>(args) |x|  {
-                let (norm, _) = x.to_inexact().to_polar();
-                from_f64(norm)
+            PMagnitude => do call_tc1::<LNumeric, f64>(args) |x| {
+                x.to_inexact().to_polar().first()
             },
-            PAngle => do call_tc1::<LNumeric, LNumeric>(args) |x|  {
-                let (_, arg) = x.to_inexact().to_polar();
-                from_f64(arg)
+            PAngle => do call_tc1::<LNumeric, f64>(args) |x| {
+                x.to_inexact().to_polar().second()
             },
             PNumerator => do call_tc1::<Rational, BigInt>(args) |x| { x.numerator().clone() },
             PDenominator => do call_tc1::<Rational, BigInt>(args) |x| { x.denominator().clone() },
