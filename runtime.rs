@@ -91,6 +91,15 @@ pub trait DatumConv {
     fn typename() -> ~str;
 }
 
+impl LDatum<RuntimeData> {
+    pub fn is_bottom(&self) -> bool {
+        match *self {
+            LExt(RBot) => true,
+            _ => false,
+        }
+    }
+}
+
 impl DatumConv for @RDatum {
     fn from_datum<R>(datum: @RDatum, op: &fn(&@RDatum) -> R) -> Option<R> {
         Some(op(&datum))

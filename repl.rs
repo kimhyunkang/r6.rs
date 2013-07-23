@@ -1,7 +1,7 @@
 extern mod r5;
 
 use std::io;
-use r5::runtime::{Runtime};
+use r5::runtime::Runtime;
 
 fn prompt() {
     print("repl > ")
@@ -23,7 +23,9 @@ fn main() {
         do io::with_str_reader(line) |rdr| {
             match runtime.load(rdr) {
                 Ok(result) => {
-                    result.write(io::stdout());
+                    if !result.is_bottom() {
+                        result.write(io::stdout());
+                    }
                     print("\n");
                 },
                 Err(e) => println(fmt!("Error: %s", e.to_str())),
