@@ -54,6 +54,17 @@
     )
   )
 
+  (define (reverse lst)
+    (letrec ((f (lambda (l r)
+                (if (null? l)
+                    r
+                    (f (cdr l) (cons (car l) r))
+                )
+            )))
+      (f lst null)
+    )
+  )
+
   (define (hsplit lst)
     (if (null? lst)
         (cons '() '())
