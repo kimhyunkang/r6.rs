@@ -548,14 +548,14 @@ fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
     let mut map = HashMap::new();
     let mut prim_iter = BoundedIterator::new::<PFunc>();
     for prim_iter.advance |prim:PFunc| {
-        let key = prim.to_str();
-        map.insert(key.to_managed(), Left(@LExt(RPrim(prim))));
+        let key = proc_to_str(&prim);
+        map.insert(key, Left(@LExt(RPrim(prim))));
     }
 
     let mut syntax_iter = BoundedIterator::new::<PrimSyntax>();
     for syntax_iter.advance |syntax:PrimSyntax| {
-        let key = syntax.to_str();
-        map.insert(key.to_managed(), Right(syntax));
+        let key = syntax_to_str(&syntax);
+        map.insert(key, Right(syntax));
     }
 
     map.insert("pi".to_managed(), Left(@LNum(inexact(Real::pi(), 0f64))));
