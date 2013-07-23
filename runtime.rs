@@ -77,7 +77,7 @@ type RDatum = LDatum<RuntimeData>;
 
 pub trait DatumConv {
     fn from_datum<R>(@RDatum, &fn(&Self) -> R) -> Option<R>;
-    fn to_datum(&self) -> @RDatum;
+    fn move_datum(Self) -> @RDatum;
     fn typename() -> ~str;
 }
 
@@ -86,8 +86,8 @@ impl DatumConv for @RDatum {
         Some(op(&datum))
     }
 
-    fn to_datum(&self) -> @RDatum {
-        *self
+    fn move_datum(x: @RDatum) -> @RDatum {
+        x
     }
 
     fn typename() -> ~str {
@@ -103,8 +103,8 @@ impl DatumConv for RuntimeData {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LExt(self.clone())
+    fn move_datum(x: RuntimeData) -> @RDatum {
+        @LExt(x)
     }
 
     fn typename() -> ~str {
@@ -120,8 +120,8 @@ impl DatumConv for LNumeric {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LNum(self.clone())
+    fn move_datum(x: LNumeric) -> @RDatum {
+        @LNum(x)
     }
 
     fn typename() -> ~str {
@@ -137,8 +137,8 @@ impl DatumConv for Cmplx<f64> {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LNum(NInexact(*self))
+    fn move_datum(x: Cmplx<f64>) -> @RDatum {
+        @LNum(NInexact(x))
     }
 
     fn typename() -> ~str {
@@ -154,8 +154,8 @@ impl DatumConv for Cmplx<Rational> {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LNum(NExact(self.clone()))
+    fn move_datum(x: Cmplx<Rational>) -> @RDatum {
+        @LNum(NExact(x))
     }
 
     fn typename() -> ~str {
@@ -174,8 +174,8 @@ impl DatumConv for LReal {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LNum(from_real(self))
+    fn move_datum(x: LReal) -> @RDatum {
+        @LNum(from_real(&x))
     }
 
     fn typename() -> ~str {
@@ -193,8 +193,8 @@ impl DatumConv for Rational {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LNum(from_rational(self))
+    fn move_datum(x: Rational) -> @RDatum {
+        @LNum(from_rational(&x))
     }
 
     fn typename() -> ~str {
@@ -218,8 +218,8 @@ impl DatumConv for BigInt {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LNum(from_bigint(self.clone()))
+    fn move_datum(x: BigInt) -> @RDatum {
+        @LNum(from_bigint(x))
     }
 
     fn typename() -> ~str {
@@ -235,8 +235,8 @@ impl DatumConv for (@RDatum, @RDatum) {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LCons(self.first(), self.second())
+    fn move_datum((x, y): (@RDatum, @RDatum)) -> @RDatum {
+        @LCons(x, y)
     }
 
     fn typename() -> ~str {
@@ -252,8 +252,8 @@ impl DatumConv for bool {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
-        @LBool(*self)
+    fn move_datum(x: bool) -> @RDatum {
+        @LBool(x)
     }
 
     fn typename() -> ~str {
@@ -269,7 +269,7 @@ impl DatumConv for () {
         }
     }
 
-    fn to_datum(&self) -> @RDatum {
+    fn move_datum(_: ()) -> @RDatum {
         @LNil
     }
 
@@ -292,8 +292,8 @@ impl DatumConv for GetList {
     }
 
     #[inline]
-    fn to_datum(&self) -> @RDatum {
-        LDatum::from_list(self.list)
+    fn move_datum(x: GetList) -> @RDatum {
+        LDatum::from_list(x.list)
     }
 
     fn typename() -> ~str {
@@ -418,7 +418,7 @@ priv fn call_tc1<A: DatumConv, R: DatumConv> (
         [arg] => {
             let res = DatumConv::from_datum::<A, R>(arg, op);
             match res {
-                Some(ref x) => Ok(x.to_datum()),
+                Some(x) => Ok(DatumConv::move_datum(x)),
                 None => Err(TypeError),
             }
         },
@@ -438,7 +438,7 @@ priv fn call_tc2<A: DatumConv, B:DatumConv, R: DatumConv> (
                 }
             };
             match res {
-                Some(Some(x)) => Ok(x.to_datum()),
+                Some(Some(x)) => Ok(DatumConv::move_datum(x)),
                 _ => Err(TypeError),
             }
         },
@@ -462,7 +462,7 @@ priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
                 }
             };
             match r {
-                Some(Ok(x)) => Ok(x.to_datum()),
+                Some(Ok(x)) => Ok(DatumConv::move_datum(x)),
                 Some(Err(e)) => Err(e),
                 None => Err(TypeError),
             }
