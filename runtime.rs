@@ -190,6 +190,23 @@ impl DatumConv for (@RDatum, @RDatum) {
     }
 }
 
+impl DatumConv for () {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&()) -> R) -> Option<R> {
+        match datum {
+            @LNil => Some(op(&())),
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNil
+    }
+
+    fn typename() -> ~str {
+        ~"()"
+    }
+}
+
 struct GetList {
     list: ~[@RDatum]
 }
@@ -305,6 +322,20 @@ priv fn call_prim2(args: &[@RDatum],
         op(args[0], args[1])
     } else {
         Err(ArgNumError(2, Some(2), args.len()))
+    }
+}
+
+priv fn typecheck<A: DatumConv>(args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [arg] => {
+            let res = do DatumConv::from_datum::<A, ()>(arg) |_| { () };
+            match res {
+                Some(_) => Ok(@LBool(true)),
+                None => Ok(@LBool(false)),
+            }
+        },
+        _ => Err(ArgNumError(1, Some(1), args.len())),
     }
 }
 
@@ -1011,17 +1042,8 @@ impl Runtime {
             PEqual => do call_prim2(args) |arg1, arg2| {
                 Ok(@LBool(arg1 == arg2))
             },
-            PNumber => do call_prim1(args) |arg| {
-                match *arg {
-                    LNum(_) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
-            PReal => match args {
-                [@LNum(ref c)] => Ok(@LBool(c.is_real())),
-                [_] => Ok(@LBool(false)),
-                _ => Err(ArgNumError(1, Some(1), args.len())),
-            },
+            PNumber => typecheck::<LNumeric>(args),
+            PReal => typecheck::<LReal>(args),
             PInteger => do call_prim1(args) |arg| {
                 match *arg {
                     LNum(NExact(Cmplx { re: ref re, im: ref im })) =>
@@ -1148,18 +1170,8 @@ impl Runtime {
                 },
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
-            PNull => do call_prim1(args) |arg| {
-                match arg {
-                    @LNil => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
-            PPair => do call_prim1(args) |arg| {
-                match arg {
-                    @LCons(_, _) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
+            PNull => typecheck::<()>(args),
+            PPair => typecheck::<(@RDatum, @RDatum)>(args),
             PIsString => do call_prim1(args) |arg| {
                 match arg {
                     @LString(_) => Ok(@LBool(true)),
