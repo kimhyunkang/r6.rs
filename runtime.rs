@@ -4,7 +4,7 @@ use std::uint;
 use std::result;
 use std::str;
 use std::vec;
-use std::num::{One, Zero, ToStrRadix};
+use std::num::{One, Zero, ToStrRadix, IntConvertible};
 use std::hashmap::HashMap;
 use std::managed;
 use bounded_iterator::BoundedIterator;
@@ -244,6 +244,34 @@ impl DatumConv for BigInt {
     }
 }
 
+impl DatumConv for uint {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&uint) -> R) -> Option<R> {
+        let max_int:BigInt = IntConvertible::from_int(Bounded::max_value::<int>());
+        match datum {
+            @LNum(NExact( Cmplx{ re: ref re, im: ref im } )) =>
+                if im.is_zero() && !re.is_negative() && *re.numerator() == One::one() {
+                    let d = re.denominator();
+                    if *d <= max_int {
+                        Some(op(&(d.to_int() as uint)))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                },
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: uint) -> @RDatum {
+        @LNum(from_uint(x))
+    }
+
+    fn typename() -> ~str {
+        ~"unsigned integer"
+    }
+}
+
 impl DatumConv for (@RDatum, @RDatum) {
     fn from_datum<R>(datum: @RDatum, op: &fn(&(@RDatum, @RDatum)) -> R) -> Option<R> {
         match datum {
@@ -315,6 +343,23 @@ impl DatumConv for GetList {
 
     fn typename() -> ~str {
         ~"list"
+    }
+}
+
+impl DatumConv for ~str {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&~str) -> R) -> Option<R> {
+        match datum {
+            @LString(ref s) => Some(op(s)),
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: ~str) -> @RDatum {
+        @LString(x)
+    }
+
+    fn typename() -> ~str {
+        ~"string"
     }
 }
 
@@ -485,6 +530,37 @@ priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
             }
         },
         _ => Err(ArgNumError(2, Some(2), args.len())),
+    }
+}
+
+priv fn call_err3<A: DatumConv, B: DatumConv, C: DatumConv, R: DatumConv> (
+        args: &[@RDatum], op: &fn(&A, &B, &C) -> Result<R, RuntimeError>
+    ) -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [arg0, arg1, arg2] => {
+            let r0 = do DatumConv::from_datum::<A, Result<R, RuntimeError>>(arg0) |a| {
+                let r1 = do DatumConv::from_datum::<B, Result<R, RuntimeError>>(arg1) |b| {
+                    let r2 = do DatumConv::from_datum::<C, Result<R, RuntimeError>>(arg2) |c| {
+                        op(a, b, c)
+                    };
+                    match r2 {
+                        Some(x) => x,
+                        None => Err(TypeError),
+                    }
+                };
+                match r1 {
+                    Some(x) => x,
+                    None => Err(TypeError),
+                }
+            };
+            match r0 {
+                Some(Ok(x)) => Ok(DatumConv::move_datum(x)),
+                Some(Err(e)) => Err(e),
+                None => Err(TypeError),
+            }
+        },
+        _ => Err(ArgNumError(3, Some(3), args.len())),
     }
 }
 
@@ -1126,24 +1202,19 @@ impl Runtime {
             PExact => typecheck::<Cmplx<Rational>>(args),
             PInexact => typecheck::<Cmplx<f64>>(args),
             PExactInexact => do call_tc1::<LNumeric, Cmplx<f64>>(args) |x| { x.to_inexact() },
-            PNumberString => match args {
-                [@LNum(ref x)] => Ok(@LString(x.to_str())),
-                [@LNum(ref x), @LNum(ref r)] => match get_uint(r) {
-                    None => Err(TypeError),
-                    Some(radix) => {
+            PNumberString => match args.len() {
+                1 => do call_tc1::<LNumeric, ~str>(args) |x| { x.to_str() },
+                2 => do call_err2::<LNumeric, uint, ~str>(args) |&x, &radix| {
                         match x {
-                            &NExact(ref n) => Ok(@LString(n.to_str_radix(radix))),
-                            _ =>
-                                if radix == 10 {
-                                    Ok(@LString(x.to_str()))
-                                } else {
-                                    Err(TypeError)
-                                },
+                            NExact(ref n) => Ok(n.to_str_radix(radix)),
+                            _ => if radix == 10 {
+                                Ok(x.to_str())
+                            } else {
+                                Err(TypeError)
+                            },
                         }
-                    },
                 },
-                [_] | [_, _] => Err(TypeError),
-                _ => Err(ArgNumError(1, Some(1), args.len())),
+                n => Err(ArgNumError(1, Some(2), n))
             },
             PEQ => do call_real_bfoldl(args) |&lhs, &rhs| { lhs == rhs },
             PGT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs > rhs },
@@ -1227,12 +1298,7 @@ impl Runtime {
             },
             PNull => typecheck::<()>(args),
             PPair => typecheck::<(@RDatum, @RDatum)>(args),
-            PIsString => do call_prim1(args) |arg| {
-                match arg {
-                    @LString(_) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
+            PIsString => typecheck::<~str>(args),
             PString => {
                 let char_list = do result::map_vec(args) |arg| {
                     match *arg {
@@ -1245,12 +1311,7 @@ impl Runtime {
                     Err(e) => Err(e)
                 }
             },
-            PStringLength => do call_prim1(args) |arg| {
-                match arg {
-                    @LString(ref s) => Ok(@LNum(from_int(s.len() as int))),
-                    _ => Err(TypeError),
-                }
-            },
+            PStringLength => do call_tc1::<~str, uint>(args) |s| { s.len() },
             PStringRef => do call_prim2(args) |arg, idx| {
                 match (arg, idx) {
                     (@LString(ref s), @LNum(ref n)) => match get_uint(n) {
@@ -1264,28 +1325,22 @@ impl Runtime {
                     _ => Err(TypeError),
                 }
             },
-            PSubstring => match args {
-                [@LString(ref s), @LNum(ref n)] =>
-                    match get_uint(n) {
-                        Some(i) => if i <= s.len() {
-                                Ok(@LString(s.slice(i, s.len()).to_owned()))
-                            } else {
-                                Err(RangeError)
-                            },
-                        _ => Err(TypeError),
-                    },
-                [@LString(ref s), @LNum(ref from), @LNum(ref to)] =>
-                    match (get_uint(from), get_uint(to)) {
-                        (Some(start), Some(end)) =>
-                            if start <= end && end <= s.len() {
-                                Ok(@LString(s.slice(start, end).to_owned()))
-                            } else {
-                                Err(RangeError)
-                            },
-                        _ => Err(TypeError),
-                    },
-                [_, _] | [_, _, _] => Err(TypeError),
-                _ => Err(ArgNumError(2, Some(3), args.len())),
+            PSubstring => match args.len() {
+                2 => do call_err2::<~str, uint, ~str>(args) |s, &start| {
+                    if start <= s.len() {
+                        Ok(s.slice(start, s.len()).to_owned())
+                    } else {
+                        Err(RangeError)
+                    }
+                },
+                3 => do call_err3::<~str, uint, uint, ~str>(args) |s, &start, &end| {
+                    if start <= end && end <= s.len() {
+                        Ok(s.slice(start, end).to_owned())
+                    } else {
+                        Err(RangeError)
+                    }
+                },
+                n => Err(ArgNumError(2, Some(3), n)),
             },
             PSymbol => do call_prim1(args) |arg| {
                 match arg {
