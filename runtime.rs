@@ -525,6 +525,25 @@ priv fn call_tc2<A: DatumConv, B:DatumConv, R: DatumConv> (
     }
 }
 
+priv fn call_vargs<A: DatumConv, R: DatumConv> (args: &[@RDatum], op: &fn(&[A]) -> R)
+    -> Result<@RDatum, RuntimeError>
+{
+    let mut idx = 0u;
+    let mut vec = vec::with_capacity(args.len());
+
+    while idx < args.len() {
+        match DatumConv::from_datum(args[idx], |&a| {a}) {
+            Some(x) => vec.push(x),
+            None => return Err(TypeError),
+        };
+
+        idx += 1;
+    }
+
+    let res:@RDatum = DatumConv::move_datum(op(vec));
+    Ok(res)
+}
+
 priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
         args: &[@RDatum], op: &fn(&A, &B) -> Result<R, RuntimeError>
     ) -> Result<@RDatum, RuntimeError>
@@ -1311,18 +1330,7 @@ impl Runtime {
             PNull => typecheck::<()>(args),
             PPair => typecheck::<(@RDatum, @RDatum)>(args),
             PIsString => typecheck::<~str>(args),
-            PString => {
-                let char_list = do result::map_vec(args) |arg| {
-                    match *arg {
-                        @LChar(c) => Ok(c),
-                        _ => Err(TypeError),
-                    }
-                };
-                match char_list {
-                    Ok(chars) => Ok(@LString(str::from_chars(chars))),
-                    Err(e) => Err(e)
-                }
-            },
+            PString => do call_vargs::<char, ~str>(args) |chars| { str::from_chars(chars) },
             PStringLength => do call_tc1::<~str, uint>(args) |s| { s.len() },
             PStringRef => do call_err2::<~str, uint, char>(args) |s, &idx| {
                 if idx <= s.len() {
