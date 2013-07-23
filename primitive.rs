@@ -105,6 +105,8 @@ pub enum PFunc {
     PSymbol,
     PStringSymbol,
     PSymbolString,
+    PInputPort,
+    POutputPort,
 }
 
 impl Bounded for PFunc {
@@ -231,6 +233,8 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PSymbol => ~"symbol?",
         PStringSymbol => ~"string->symbol",
         PSymbolString => ~"symbol->string",
+        PInputPort => ~"input-port?",
+        POutputPort => ~"output-port?",
     }
 }
 

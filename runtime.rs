@@ -20,6 +20,8 @@ use parser::Parser;
 
 enum RuntimeData {
     RUndef,
+    RInputPort(@Reader),
+    ROutputPort(@Writer),
     RPrim(PFunc),
     RProc(~[@str],
         Option<@str>,
@@ -38,6 +40,8 @@ impl Clone for RuntimeData {
                 };
                 RProc(cloneargs, *vargs, body.clone(), *env)
             },
+            &RInputPort(rdr) => RInputPort(rdr),
+            &ROutputPort(wr) => ROutputPort(wr),
         }
     }
 }
@@ -65,6 +69,8 @@ fn data_to_str(data: &RuntimeData) -> ~str {
         RUndef => ~"<undefined>",
         RPrim(f) => fmt!("<primitive:%s>", f.to_str()),
         RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", borrow::to_uint(data)),
+        RInputPort(x) => fmt!("<input-port:%?>", x),
+        ROutputPort(x) => fmt!("<output-port:%?>", x),
     }
 }
 
@@ -110,6 +116,40 @@ impl DatumConv for RuntimeData {
 
     fn typename() -> ~str {
         ~"procedure"
+    }
+}
+
+impl DatumConv for @Reader {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&@Reader) -> R) -> Option<R> {
+        match datum {
+            @LExt(RInputPort(ref r)) => Some(op(r)),
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: @Reader) -> @RDatum {
+        @LExt(RInputPort(x))
+    }
+
+    fn typename() -> ~str {
+        ~"input-port"
+    }
+}
+
+impl DatumConv for @Writer {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&@Writer) -> R) -> Option<R> {
+        match datum {
+            @LExt(ROutputPort(ref r)) => Some(op(r)),
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: @Writer) -> @RDatum {
+        @LExt(ROutputPort(x))
+    }
+
+    fn typename() -> ~str {
+        ~"output-port"
     }
 }
 
@@ -1462,6 +1502,8 @@ impl Runtime {
             PSymbol => typecheck::<@str>(args),
             PSymbolString => do call_tc1::<@str, ~str>(args) |&s| { s.to_owned() },
             PStringSymbol => do call_tc1::<~str, @str>(args) |&s| { s.to_managed() },
+            PInputPort => typecheck::<@Reader>(args),
+            POutputPort => typecheck::<@Writer>(args),
         }
     }
 
@@ -1520,12 +1562,12 @@ impl Runtime {
 
     fn apply(&mut self, proc: &RuntimeData, args: &[@RDatum]) -> Result<@RDatum, RuntimeError> {
         match proc {
-            &RUndef =>
-                Err(NotCallable),
             &RPrim(f) =>
                 self.call_prim(f, args),
             &RProc(ref anames, ref vargs, ref code, ref env) =>
                 self.call_proc(*anames, *vargs, *code, *env, args),
+            _ =>
+                Err(NotCallable),
         }
     }
 
