@@ -668,37 +668,6 @@ impl Runtime {
         return Ok(@LBool(false))
     }
 
-    priv fn syn_exp_foldl(&mut self,
-                        args: &[@RDatum],
-                        a0: bool,
-                        op: &fn(bool, bool) -> bool)
-        -> Result<@RDatum, RuntimeError>
-    {
-        let mut res = a0;
-        let mut err:Option<RuntimeError> = None;
-
-        do args.each |arg| {
-            match self.eval(*arg) {
-                Ok(@LBool(a)) => {
-                    res = op(res, a);
-                },
-                Ok(_) => {
-                    err = Some(TypeError);
-                },
-                Err(e) => {
-                    err = Some(e);
-                }
-            }
-
-            res == a0 && err.is_none()
-        };
-
-        match err {
-            Some(e) => Err(e),
-            None => Ok(@LBool(res)),
-        }
-    }
-
     fn call_proc(&mut self,
                 anames: &[@str],
                 vargs: Option<@str>,
