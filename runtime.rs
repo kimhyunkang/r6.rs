@@ -666,6 +666,27 @@ priv fn call_bfoldl<A: Clone + DatumConv> (args: &[@RDatum], op: &fn(&A, &A) -> 
     }
 }
 
+priv fn call_foldl<A: Clone + DatumConv> (
+        args: &[@RDatum], a0: &A, op: &fn(&A, &A) -> Result<A, RuntimeError>
+    ) -> Result<@RDatum, RuntimeError>
+{
+    let mut res = a0.clone();
+    let mut err = None;
+    do args.each |&arg| {
+        match DatumConv::from_datum(arg, |a| { op(&res, a) }) {
+            None => err = Some(TypeError),
+            Some(Ok(n)) => res = n,
+            Some(Err(e)) => err = Some(e),
+        };
+        err.is_none()
+    };
+
+    match err {
+        Some(e) => Err(e),
+        _ => Ok(DatumConv::move_datum(res)),
+    }
+}
+
 priv fn call_err1<A: DatumConv, R: DatumConv> (
         args: &[@RDatum], op: &fn(&A) -> Result<R, RuntimeError>
     ) -> Result<@RDatum, RuntimeError>
@@ -735,40 +756,6 @@ priv fn call_err3<A: DatumConv, B: DatumConv, C: DatumConv, R: DatumConv> (
             }
         },
         _ => Err(ArgNumError(3, Some(3), args.len())),
-    }
-}
-
-priv fn call_num_foldl(args: &[@RDatum],
-                    a0: &LNumeric,
-                    op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
-    -> Result<@RDatum, RuntimeError>
-{
-    let mut res:LNumeric = a0.clone();
-    let mut err = false;
-    do args.each |&arg| {
-        match arg {
-            @LNum(ref a) => {
-                match op(&res, a) {
-                    Ok(n) => {
-                        res = n;
-                        err = false;
-                    },
-                    _ => {
-                        err = true;
-                    }
-                }
-            },
-            _ => {
-                err = true;
-            }
-        }
-        !err
-    };
-
-    if err {
-        Err(TypeError)
-    } else {
-        Ok(@LNum(res))
     }
 }
 
@@ -1246,15 +1233,15 @@ impl Runtime {
                 } else {
                     Ok(*args.last())
                 },
-            PAdd => do call_num_foldl(args, &Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
+            PAdd => do call_foldl::<LNumeric>(args, &Zero::zero()) |&lhs, &rhs| { Ok(lhs + rhs) },
             PSub => match args {
                 [] => Err(ArgNumError(1, None, 0)),
                 [@LNum(ref x)] => Ok(@LNum(-*x)),
                 [@LNum(ref x), ..tail] =>
-                    do call_num_foldl(tail, x) |&lhs, &rhs| { Ok(lhs - rhs) },
+                    do call_foldl::<LNumeric>(tail, x) |&lhs, &rhs| { Ok(lhs - rhs) },
                 _ => Err(TypeError),
             },
-            PMul => do call_num_foldl(args, &One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
+            PMul => do call_foldl::<LNumeric>(args, &One::one()) |&lhs, &rhs| { Ok(lhs * rhs) },
             PDiv => match args {
                 [] => Err(ArgNumError(1, None, 0)),
                 [@LNum(ref x)] => if x.is_zero() {
@@ -1263,7 +1250,7 @@ impl Runtime {
                         Ok(@LNum(x.recip()))
                     },
                 [@LNum(ref x), ..tail] =>
-                    do call_num_foldl(tail, x) |&lhs, &rhs| {
+                    do call_foldl::<LNumeric>(tail, x) |&lhs, &rhs| {
                         if rhs.is_zero() {
                             Err(DivideByZeroError)
                         } else {
