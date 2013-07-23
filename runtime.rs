@@ -1320,7 +1320,7 @@ impl Runtime {
             },
             PBoolean => typecheck::<bool>(args),
             PChar => typecheck::<char>(args),
-            PCharAlphabetical => do call_tc1::<char, bool>(args) |&c| { char::is_alphabetic(c) },
+            PCharAlphabetic => do call_tc1::<char, bool>(args) |&c| { char::is_alphabetic(c) },
             PCharNumeric => do call_tc1::<char, bool>(args) |&c| { char::is_digit(c) },
             PCharWhitespace => do call_tc1::<char, bool>(args) |&c| { char::is_whitespace(c) },
             PCharUpperCase => do call_tc1::<char, bool>(args) |&c| { char::is_uppercase(c) },
