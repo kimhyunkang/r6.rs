@@ -19,6 +19,7 @@ use stack::*;
 use parser::Parser;
 
 enum RuntimeData {
+    RBot,
     RUndef,
     RInputPort(@Reader),
     ROutputPort(@Writer),
@@ -32,6 +33,7 @@ enum RuntimeData {
 impl Clone for RuntimeData {
     fn clone(&self) -> RuntimeData {
         match self {
+            &RBot => RBot,
             &RUndef => RUndef,
             &RPrim(f) => RPrim(f),
             &RProc(ref args, ref vargs, ref body, ref env) => {
@@ -66,6 +68,7 @@ impl Eq for RuntimeData {
 
 fn data_to_str(data: &RuntimeData) -> ~str {
     match *data {
+        RBot => ~"<bottom>",
         RUndef => ~"<undefined>",
         RPrim(f) => fmt!("<primitive:%s>", f.to_str()),
         RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", borrow::to_uint(data)),
@@ -367,17 +370,17 @@ impl DatumConv for char {
 impl DatumConv for () {
     fn from_datum<R>(datum: @RDatum, op: &fn(&()) -> R) -> Option<R> {
         match datum {
-            @LNil => Some(op(&())),
+            @LExt(RBot) => Some(op(&())),
             _ => None,
         }
     }
 
     fn move_datum(_: ()) -> @RDatum {
-        @LNil
+        @LExt(RBot)
     }
 
     fn typename() -> ~str {
-        ~"()"
+        ~"bottom"
     }
 }
 
@@ -974,7 +977,7 @@ impl Runtime {
             i += 1;
         }
 
-        let mut res = Ok(@LExt(RUndef));
+        let mut res = Ok(@LExt(RBot));
 
         let expr_end = do exprs.each |&(pred, expr)| {
             match self.eval(pred) {
@@ -1216,7 +1219,7 @@ impl Runtime {
                 self.apply(f, l.list)
             },
             PBegin => if args.len() == 0 {
-                    Ok(@LExt(RUndef))
+                    Ok(@LExt(RBot))
                 } else {
                     Ok(*args.last())
                 },
@@ -1401,8 +1404,8 @@ impl Runtime {
                 c.to_ascii().to_lower().to_byte() as char
             },
             PProcedure => match args {
-                [@LExt(RUndef)] => Ok(@LBool(false)),
-                [@LExt(_)] => Ok(@LBool(true)),
+                [@LExt(RPrim(_))] => Ok(@LBool(true)),
+                [@LExt(RProc(_, _, _, _))] => Ok(@LBool(true)),
                 [_] => Ok(@LBool(false)),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
@@ -1443,7 +1446,11 @@ impl Runtime {
                     None => Err(TypeError),
                 }
             },
-            PNull => typecheck::<()>(args),
+            PNull => match args {
+                [@LNil] => Ok(@LBool(true)),
+                [_] => Ok(@LBool(false)),
+                _ => Err(ArgNumError(1, Some(1), args.len())),
+            },
             PPair => typecheck::<(@RDatum, @RDatum)>(args),
             PIsString => typecheck::<~str>(args),
             PStringEQ => do call_bfoldl::<~str>(args) |&lhs, &rhs| { lhs == rhs },
