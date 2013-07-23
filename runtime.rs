@@ -1,5 +1,6 @@
 use std::io;
 use std::borrow;
+use std::char;
 use std::uint;
 use std::result;
 use std::str;
@@ -1319,6 +1320,11 @@ impl Runtime {
             },
             PBoolean => typecheck::<bool>(args),
             PChar => typecheck::<char>(args),
+            PCharAlphabetical => do call_tc1::<char, bool>(args) |&c| { char::is_alphabetic(c) },
+            PCharNumeric => do call_tc1::<char, bool>(args) |&c| { char::is_digit(c) },
+            PCharWhitespace => do call_tc1::<char, bool>(args) |&c| { char::is_whitespace(c) },
+            PCharUpperCase => do call_tc1::<char, bool>(args) |&c| { char::is_uppercase(c) },
+            PCharLowerCase => do call_tc1::<char, bool>(args) |&c| { char::is_lowercase(c) },
             PCharEQ => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs == rhs },
             PCharGT => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs > rhs },
             PCharLT => do call_bfoldl::<char>(args) |&lhs, &rhs| { lhs < rhs },

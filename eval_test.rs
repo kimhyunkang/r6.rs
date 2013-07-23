@@ -383,6 +383,22 @@ fn symbol_conversion_test() {
 fn char_test() {
     eval_test(~"(char? #\\space)", ~"#t");
     eval_test(~"(char? \" \")", ~"#f");
+    eval_test(~"(char-alphabetical? #\\A)", ~"#t");
+    eval_test(~"(char-alphabetical? #\\a)", ~"#t");
+    eval_test(~"(char-alphabetical? #\\1)", ~"#f");
+    eval_test(~"(char-alphabetical? #\\space)", ~"#f");
+    eval_test(~"(char-numeric? #\\A)", ~"#f");
+    eval_test(~"(char-numeric? #\\a)", ~"#f");
+    eval_test(~"(char-numeric? #\\1)", ~"#t");
+    eval_test(~"(char-numeric? #\\space)", ~"#f");
+    eval_test(~"(char-whitespace? #\\A)", ~"#f");
+    eval_test(~"(char-whitespace? #\\a)", ~"#f");
+    eval_test(~"(char-whitespace? #\\1)", ~"#f");
+    eval_test(~"(char-whitespace? #\\space)", ~"#t");
+    eval_test(~"(char-upper-case? #\\A)", ~"#t");
+    eval_test(~"(char-upper-case? #\\a)", ~"#f");
+    eval_test(~"(char-lower-case? #\\A)", ~"#f");
+    eval_test(~"(char-lower-case? #\\a)", ~"#t");
 }
 
 #[test]
