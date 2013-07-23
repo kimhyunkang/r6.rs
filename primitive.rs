@@ -107,6 +107,18 @@ pub enum PFunc {
     PSymbolString,
     PInputPort,
     POutputPort,
+    PCurrentInputPort,
+    PCurrentOutputPort,
+    POpenInputFile,
+    POpenOutputFile,
+    PCloseInputPort,
+    PCloseOutputPort,
+    PRead,
+    PReadChar,
+    PWrite,
+    PDisplay,
+    PNewline,
+    PWriteChar,
 }
 
 impl Bounded for PFunc {
@@ -114,7 +126,7 @@ impl Bounded for PFunc {
     fn min_value() -> PFunc { PEval }
 
     #[inline]
-    fn max_value() -> PFunc { PSymbolString }
+    fn max_value() -> PFunc { PWriteChar }
 }
 
 impl IntConvertible for PFunc {
@@ -235,6 +247,18 @@ pub fn proc_to_str(&prim: &PFunc) -> ~str {
         PSymbolString => ~"symbol->string",
         PInputPort => ~"input-port?",
         POutputPort => ~"output-port?",
+        PCurrentInputPort => ~"current-input-port",
+        PCurrentOutputPort => ~"current-output-port",
+        POpenInputFile => ~"open-input-file",
+        POpenOutputFile => ~"open-output-file",
+        PCloseInputPort => ~"close-input-port",
+        PCloseOutputPort => ~"close-output-port",
+        PRead => ~"read",
+        PReadChar => ~"read-char",
+        PWrite => ~"write",
+        PDisplay => ~"display",
+        PNewline => ~"newline",
+        PWriteChar => ~"write-char",
     }
 }
 

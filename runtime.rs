@@ -72,8 +72,8 @@ fn data_to_str(data: &RuntimeData) -> ~str {
         RUndef => ~"<undefined>",
         RPrim(f) => fmt!("<primitive:%s>", f.to_str()),
         RProc(_, _, _, _) => fmt!("<procedure 0x%08x>", borrow::to_uint(data)),
-        RInputPort(x) => fmt!("<input-port:%?>", x),
-        ROutputPort(x) => fmt!("<output-port:%?>", x),
+        RInputPort(_) => fmt!("<input-port>"),
+        ROutputPort(_) => fmt!("<output-port>"),
     }
 }
 
@@ -509,6 +509,7 @@ enum RuntimeError {
     BadSyntax(PrimSyntax, ~str),
     ParseError(uint, uint, ~str),
     RangeError,
+    IOError(~str),
 }
 
 impl ToStr for RuntimeError {
@@ -539,6 +540,7 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
         BadSyntax(syn, reason) => ~"bad syntax for " + syn.to_str() + ": " + reason,
         ParseError(line, col, reason) => fmt!("failed to parse: %u:%u: %s", line, col, reason),
         RangeError => ~"index out of range", 
+        IOError(e) => fmt!("io error: %s", e),
     }
 }
 
@@ -791,6 +793,18 @@ priv fn get_bindings(arg: &RDatum) -> Result<~[(@str, @RDatum)], ~str> {
                 Some(_) | None => Err(~"invalid binding")
             }
         }
+    }
+}
+
+priv fn read(rdr: @io::Reader) -> Result<@RDatum, RuntimeError>
+{
+    let mut parser = Parser(rdr);
+    match parser.parse() {
+        Ok(datum) => Ok(@datum),
+        Err(e) => {
+            let (line, col) = parser.pos();
+            Err(ParseError(line, col, e))
+        },
     }
 }
 
@@ -1520,6 +1534,63 @@ impl Runtime {
             PStringSymbol => do call_tc1::<~str, @str>(args) |&s| { s.to_managed() },
             PInputPort => typecheck::<@Reader>(args),
             POutputPort => typecheck::<@Writer>(args),
+            PCurrentInputPort => if args.len() == 0 {
+                    Ok(@LExt(RInputPort(self.stdin)))
+                } else {
+                    Err(ArgNumError(0, Some(0), args.len()))
+                },
+            PCurrentOutputPort => if args.len() == 0 {
+                    Ok(@LExt(ROutputPort(self.stdout)))
+                } else {
+                    Err(ArgNumError(0, Some(0), args.len()))
+                },
+            POpenInputFile => do call_err1::<~str, @Reader>(args) |&s| {
+                match io::file_reader(&Path(s)) {
+                    Ok(rdr) => Ok(rdr),
+                    Err(e) => Err(IOError(e)),
+                }
+            },
+            POpenOutputFile => do call_err1::<~str, @Writer>(args) |&s| {
+                match io::file_writer(&Path(s), []) {
+                    Ok(wr) => Ok(wr),
+                    Err(e) => Err(IOError(e)),
+                }
+            },
+            PCloseInputPort => do call_tc1::<@Reader, ()>(args) |&_| { () },
+            PCloseOutputPort => do call_tc1::<@Writer, ()>(args) |&_| { () },
+            PRead => match args.len() {
+                0 => read(self.stdin),
+                1 => do call_err1::<@Reader, @RDatum>(args) |&rdr| { read(rdr) },
+                n => Err(ArgNumError(0, Some(1), n)),
+            },
+            PReadChar => match args.len() {
+                0 => Ok(@LChar(self.stdin.read_char())),
+                1 => do call_tc1::<@Reader, char>(args) |&rdr| { rdr.read_char() },
+                n => Err(ArgNumError(0, Some(1), n)),
+            },
+            PWrite => match args.len() {
+                1 => do call_tc1::<@RDatum, ()>(args) |&x| { x.write(self.stdout) },
+                2 => do call_tc2::<@RDatum, @Writer, ()>(args) |&x, &wr| { x.write(wr) },
+                n => Err(ArgNumError(1, Some(2), n)),
+            },
+            PDisplay => match args.len() {
+                1 => do call_tc1::<@RDatum, ()>(args) |&x| { x.write_raw(self.stdout) },
+                2 => do call_tc2::<@RDatum, @Writer, ()>(args) |&x, &wr| { x.write_raw(wr) },
+                n => Err(ArgNumError(1, Some(2), n)),
+            },
+            PNewline => match args.len() {
+                0 => {
+                    self.stdout.write_char('\n');
+                    Ok(@LNil)
+                },
+                1 => do call_tc1::<@Writer, ()>(args) |&wr| { wr.write_char('\n') },
+                n => Err(ArgNumError(0, Some(1), n)),
+            },
+            PWriteChar => match args.len() {
+                1 => do call_tc1::<char, ()>(args) |&c| { self.stdout.write_char(c) },
+                2 => do call_tc2::<char, @Writer, ()>(args) |&c, &wr| { wr.write_char(c) },
+                n => Err(ArgNumError(1, Some(2), n)),
+            },
         }
     }
 
@@ -1633,13 +1704,8 @@ impl Runtime {
 
     pub fn load(&mut self, rdr: @io::Reader) -> Result<@RDatum, RuntimeError>
     {
-        let mut parser = Parser(rdr);
-        match parser.parse() {
-            Ok(datum) => self.eval(@datum),
-            Err(e) => {
-                let (line, col) = parser.pos();
-                Err(ParseError(line, col, e))
-            },
+        do read(rdr).chain() |datum| {
+            self.eval(datum)
         }
     }
 }
