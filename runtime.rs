@@ -399,6 +399,23 @@ impl DatumConv for ~str {
     }
 }
 
+impl DatumConv for @str {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&@str) -> R) -> Option<R> {
+        match datum {
+            @LIdent(ref s) => Some(op(s)),
+            _ => None,
+        }
+    }
+
+    fn move_datum(x: @str) -> @RDatum {
+        @LIdent(x)
+    }
+
+    fn typename() -> ~str {
+        ~"symbol"
+    }
+}
+
 struct Runtime {
     stdin: @Reader,
     stdout: @Writer,
@@ -1372,24 +1389,9 @@ impl Runtime {
                 },
                 n => Err(ArgNumError(2, Some(3), n)),
             },
-            PSymbol => do call_prim1(args) |arg| {
-                match arg {
-                    @LIdent(_) => Ok(@LBool(true)),
-                    _ => Ok(@LBool(false)),
-                }
-            },
-            PSymbolString => do call_prim1(args) |arg| {
-                match arg {
-                    @LIdent(ref s) => Ok(@LString(s.to_owned())),
-                    _ => Err(TypeError),
-                }
-            },
-            PStringSymbol => do call_prim1(args) |arg| {
-                match arg {
-                    @LString(ref s) => Ok(@LIdent(s.to_managed())),
-                    _ => Err(TypeError),
-                }
-            },
+            PSymbol => typecheck::<@str>(args),
+            PSymbolString => do call_tc1::<@str, ~str>(args) |&s| { s.to_owned() },
+            PStringSymbol => do call_tc1::<~str, @str>(args) |&s| { s.to_managed() },
         }
     }
 
