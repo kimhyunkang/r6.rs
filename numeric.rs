@@ -391,6 +391,7 @@ pub fn polar(norm: f64, arg: f64) -> LNumeric {
     inexact(norm * arg.cos(), norm * arg.sin())
 }
 
+#[deriving(Clone)]
 pub enum LReal {
     NRational(Rational),
     NFloat(f64)

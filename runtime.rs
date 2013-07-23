@@ -580,6 +580,41 @@ priv fn call_vargs<A: DatumConv, R: DatumConv> (args: &[@RDatum], op: &fn(&[A]) 
     Ok(res)
 }
 
+priv fn call_bfoldl<A: Clone + DatumConv> (args: &[@RDatum], op: &fn(&A, &A) -> bool)
+    -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [arg0, ..tail] => match DatumConv::from_datum(arg0, |&x| {x}) {
+            None => Err(TypeError),
+            Some(x) => {
+                let mut a = x;
+                let mut err = false;
+
+                let res = do tail.each |&arg| {
+                    match DatumConv::from_datum(arg, |&x| {x}) {
+                        Some(b) => {
+                            let res = op(&a, &b);
+                            a = b;
+                            res
+                        },
+                        None => {
+                            err = true;
+                            false
+                        },
+                    }
+                };
+
+                if err {
+                    Err(TypeError)
+                } else {
+                    Ok(@LBool(res))
+                }
+            },
+        },
+        _ => Err(ArgNumError(1, None, args.len())),
+    }
+}
+
 priv fn call_err1<A: DatumConv, R: DatumConv> (
         args: &[@RDatum], op: &fn(&A) -> Result<R, RuntimeError>
     ) -> Result<@RDatum, RuntimeError>
@@ -684,45 +719,6 @@ priv fn call_num_foldl(args: &[@RDatum],
     } else {
         Ok(@LNum(res))
     }
-}
-
-priv fn call_real_bfoldl(args: &[@RDatum], op: &fn(&LReal, &LReal) -> bool)
-    -> Result<@RDatum, RuntimeError>
-{
-    let n = args.len();
-    if n < 2 {
-        return Err(ArgNumError(2, None, n));
-    }
-
-    let mut a = match args[0] {
-        @LNum(ref n) => match get_real(n) {
-            None => return Err(TypeError),
-            Some(r) => r,
-        },
-        _ => return Err(TypeError),
-    };
-
-    let mut idx = 1;
-
-    while idx < n {
-        let b = match args[idx] {
-            @LNum(ref n) => match get_real(n) {
-                None => return Err(TypeError),
-                Some(r) => r,
-            },
-            _ => return Err(TypeError),
-        };
-
-        if !op(&a, &b) {
-            return Ok(@LBool(false));
-        }
-
-        a = b;
-
-        idx += 1;
-    }
-
-    return Ok(@LBool(true));
 }
 
 priv fn get_bindings(arg: &RDatum) -> Result<~[(@str, @RDatum)], ~str> {
@@ -1304,11 +1300,11 @@ impl Runtime {
                 },
                 n => Err(ArgNumError(1, Some(2), n))
             },
-            PEQ => do call_real_bfoldl(args) |&lhs, &rhs| { lhs == rhs },
-            PGT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs > rhs },
-            PLT => do call_real_bfoldl(args) |&lhs, &rhs| { lhs < rhs },
-            PGE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs >= rhs },
-            PLE => do call_real_bfoldl(args) |&lhs, &rhs| { lhs <= rhs },
+            PEQ => do call_bfoldl::<LNumeric>(args) |&lhs, &rhs| { lhs == rhs },
+            PGT => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs > rhs },
+            PLT => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs < rhs },
+            PGE => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs >= rhs },
+            PLE => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs <= rhs },
             PNot => do call_tc1::<@RDatum, bool>(args) |&arg| {
                 match arg {
                     @LBool(false) => true,
