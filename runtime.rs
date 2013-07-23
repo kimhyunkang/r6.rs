@@ -8,6 +8,7 @@ use std::num::{One, Zero, ToStrRadix};
 use std::hashmap::HashMap;
 use std::managed;
 use bounded_iterator::BoundedIterator;
+use extra::bigint::BigInt;
 use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
@@ -124,6 +125,31 @@ impl DatumConv for LNumeric {
 
     fn typename() -> ~str {
         ~"number"
+    }
+}
+
+impl DatumConv for BigInt {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&BigInt) -> R) -> Option<R> {
+        match datum {
+            @LNum(ref n) => match *n {
+                NExact( Cmplx{ re: ref re, im: ref im } ) =>
+                    if im.is_zero() && *re.numerator() == One::one() {
+                        Some(op(re.denominator()))
+                    } else {
+                        None
+                    },
+                NInexact(_) => None,
+            },
+            _ => None,
+        }
+    }
+
+    fn to_datum(&self) -> @RDatum {
+        @LNum(from_bigint(self.clone()))
+    }
+
+    fn typename() -> ~str {
+        ~"integer"
     }
 }
 
@@ -261,6 +287,26 @@ priv fn call_tc1<A: DatumConv, R: DatumConv> (
     }
 }
 
+priv fn call_tc2<A: DatumConv, B:DatumConv, R: DatumConv> (
+        args: &[@RDatum], op: &fn(&A, &B) -> R
+    ) -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [arg0, arg1] => {
+            let res = do DatumConv::from_datum::<A, Option<R>>(arg0) |a| {
+                do DatumConv::from_datum::<B, R>(arg1) |b| {
+                    op(a, b)
+                }
+            };
+            match res {
+                Some(Some(x)) => Ok(x.to_datum()),
+                _ => Err(TypeError),
+            }
+        },
+        _ => Err(ArgNumError(2, Some(2), args.len())),
+    }
+}
+
 priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
         args: &[@RDatum], op: &fn(&A, &B) -> Result<R, RuntimeError>
     ) -> Result<@RDatum, RuntimeError>
@@ -282,20 +328,6 @@ priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
                 None => Err(TypeError),
             }
         },
-        _ => Err(ArgNumError(2, Some(2), args.len())),
-    }
-}
-
-priv fn call_num_prim2(args: &[@RDatum],
-                    op: &fn(&LNumeric, &LNumeric) -> Result<LNumeric, RuntimeError>)
-    -> Result<@RDatum, RuntimeError>
-{
-    match args {
-        [@LNum(ref x), @LNum(ref y)] => match op(x, y) {
-            Ok(n) => Ok(@LNum(n)),
-            Err(e) => Err(e),
-        },
-        [_, _] => Err(TypeError),
         _ => Err(ArgNumError(2, Some(2), args.len())),
     }
 }
@@ -885,34 +917,25 @@ impl Runtime {
                     },
                 _ => Err(TypeError),
             },
-            PQuotient => do call_num_prim2(args) |&lhs, &rhs| {
+            PQuotient => do call_err2::<BigInt, BigInt, BigInt>(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
-                    match (get_int(&lhs), get_int(&rhs)) {
-                        (Some(l), Some(r)) => Ok(from_bigint(l / r)),
-                        _ => Err(TypeError),
-                    }
+                    Ok(lhs / rhs)
                 }
             },
-            PRemainder => do call_num_prim2(args) |&lhs, &rhs| {
+            PRemainder => do call_err2::<BigInt, BigInt, BigInt>(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
-                    match (get_int(&lhs), get_int(&rhs)) {
-                        (Some(l), Some(r)) => Ok(from_bigint(l % r)),
-                        _ => Err(TypeError),
-                    }
+                    Ok(lhs % rhs)
                 }
             },
-            PModulo => do call_num_prim2(args) |&lhs, &rhs| {
+            PModulo => do call_err2::<BigInt, BigInt, BigInt>(args) |&lhs, &rhs| {
                 if rhs.is_zero() {
                     Err(DivideByZeroError)
                 } else {
-                    match (get_int(&lhs), get_int(&rhs)) {
-                        (Some(l), Some(r)) => Ok(from_bigint(modulo(l, r))),
-                        _ => Err(TypeError),
-                    }
+                    Ok(modulo(lhs, rhs))
                 }
             },
             PFloor => do call_real_prim1(args) |&f| { f.floor() },
@@ -928,7 +951,7 @@ impl Runtime {
             PAcos => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.acos() },
             PAtan => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.atan() },
             PSqrt => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sqrt() },
-            PExpt => do call_num_prim2(args) |f, r| { Ok(f.pow(r)) },
+            PExpt => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, r| { x.pow(r) },
             PMakeRectangular => do call_real_prim2(args) |rx, ry| {
                 coerce(rx, ry, |&a, &b| { exact(a, b) }, |a, b| { inexact(a, b) })
             },
