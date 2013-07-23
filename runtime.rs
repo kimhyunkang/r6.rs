@@ -508,28 +508,6 @@ fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
     map
 }
 
-priv fn call_prim1(args: &[@RDatum],
-                op: &fn(@RDatum) -> Result<@RDatum, RuntimeError>)
-    -> Result<@RDatum, RuntimeError>
-{
-    if args.len() == 1 {
-        op(args[0])
-    } else {
-        Err(ArgNumError(1, Some(1), args.len()))
-    }
-}
-
-priv fn call_prim2(args: &[@RDatum],
-                op: &fn(@RDatum, @RDatum) -> Result<@RDatum, RuntimeError>)
-    -> Result<@RDatum, RuntimeError>
-{
-    if args.len() == 2 {
-        op(args[0], args[1])
-    } else {
-        Err(ArgNumError(2, Some(2), args.len()))
-    }
-}
-
 priv fn typecheck<A: DatumConv>(args: &[@RDatum]) -> Result<@RDatum, RuntimeError>
 {
     match args {
@@ -1291,16 +1269,17 @@ impl Runtime {
             PDenominator => do call_tc1::<Rational, BigInt>(args) |x| { x.denominator().clone() },
             PCar => do call_tc1::<(@RDatum, @RDatum), @RDatum>(args) |&(h, _)| { h },
             PCdr => do call_tc1::<(@RDatum, @RDatum), @RDatum>(args) |&(_, t)| { t },
-            PCons => do call_prim2(args) |arg1, arg2| { Ok(@LCons(arg1, arg2)) },
-            PEqv => do call_prim2(args) |arg1, arg2| {
-                let b =
+            PCons => match args {
+                [arg0, arg1] => Ok(@LCons(arg0, arg1)),
+                _ => Err(ArgNumError(2, Some(2), args.len())),
+            },
+            PEqv => do call_tc2::<@RDatum, @RDatum, bool>(args) |&arg1, &arg2| {
                 match (arg1, arg2) {
                     (@LCons(_, _), @LCons(_, _)) => managed::ptr_eq(arg1, arg2),
                     (@LString(_), @LString(_)) => managed::ptr_eq(arg1, arg2),
                     (@LExt(_), @LExt(_)) => managed::ptr_eq(arg1, arg2),
                     _ => arg1 == arg2,
-                };
-                Ok(@LBool(b))
+                }
             },
             PEqual => do call_tc2::<@RDatum, @RDatum, bool>(args) |&a, &b| { a == b },
             PNumber => typecheck::<LNumeric>(args),
