@@ -363,6 +363,25 @@ impl DatumConv for GetList {
     }
 }
 
+impl DatumConv for ~[@RDatum] {
+    #[inline]
+    fn from_datum<R>(datum: @RDatum, op: &fn(&~[@RDatum]) -> R) -> Option<R> {
+        match datum {
+            @LVector(ref v) => Some(op(v)),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    fn move_datum(x: ~[@RDatum]) -> @RDatum {
+        @LVector(x)
+    }
+
+    fn typename() -> ~str {
+        ~"vector"
+    }
+}
+
 impl DatumConv for ~str {
     fn from_datum<R>(datum: @RDatum, op: &fn(&~str) -> R) -> Option<R> {
         match datum {
@@ -542,6 +561,22 @@ priv fn call_vargs<A: DatumConv, R: DatumConv> (args: &[@RDatum], op: &fn(&[A]) 
 
     let res:@RDatum = DatumConv::move_datum(op(vec));
     Ok(res)
+}
+
+priv fn call_err1<A: DatumConv, R: DatumConv> (
+        args: &[@RDatum], op: &fn(&A) -> Result<R, RuntimeError>
+    ) -> Result<@RDatum, RuntimeError>
+{
+    match args {
+        [arg] => {
+            match DatumConv::from_datum(arg, op) {
+                Some(Ok(x)) => Ok(DatumConv::move_datum(x)),
+                Some(Err(e)) => Err(e),
+                None => Err(TypeError),
+            }
+        },
+        _ => Err(ArgNumError(1, Some(1), args.len())),
+    }
 }
 
 priv fn call_err2<A: DatumConv, B: DatumConv, R: DatumConv> (
@@ -1297,35 +1332,16 @@ impl Runtime {
                 _ => Err(ArgNumError(1, Some(2), args.len())),
             },
             PVector => Ok(@LVector(args.to_owned())),
-            PVectorLength => match args {
-                [@LVector(ref v)] => Ok(@LNum(from_uint(v.len()))),
-                [_] => Err(TypeError),
-                _ => Err(ArgNumError(1, Some(1), args.len())),
+            PVectorLength => do call_tc1::<~[@RDatum], uint>(args) |v| { v.len() },
+            PVectorRef => do call_err2::<~[@RDatum], uint, @RDatum>(args) |v, &idx| {
+                if idx < v.len() { Ok(v[idx]) } else { Err(RangeError) }
             },
-            PVectorRef => match args {
-                [@LVector(ref v), @LNum(ref k)] => match get_uint(k) {
-                    Some(i) =>
-                        if i < v.len() {
-                            Ok(v[i])
-                        } else {
-                            Err(RangeError)
-                        },
+            PVectorList => do call_tc1::<~[@RDatum], @RDatum>(args) |&v| { LDatum::from_list(v) },
+            PListVector => do call_err1::<@RDatum, ~[@RDatum]>(args) |&l| {
+                match l.to_list() {
+                    Some(v) => Ok(v),
                     None => Err(TypeError),
-                },
-                [_, _] => Err(TypeError),
-                _ => Err(ArgNumError(2, Some(2), args.len())),
-            },
-            PVectorList => match args {
-                [@LVector(ref v)] => Ok(LDatum::from_list(*v)),
-                [_] => Err(TypeError),
-                _ => Err(ArgNumError(1, Some(1), args.len())),
-            },
-            PListVector => match args {
-                [arg] => match arg.to_list() {
-                    Some(v) => Ok(@LVector(v)),
-                    None => Err(TypeError),
-                },
-                _ => Err(ArgNumError(1, Some(1), args.len())),
+                }
             },
             PNull => typecheck::<()>(args),
             PPair => typecheck::<(@RDatum, @RDatum)>(args),
