@@ -200,14 +200,15 @@ impl Parser {
                 do self.parse_number("").chain |n| {
                     Ok(LNum(n))
                 },
-            '(' => {
+            '(' | '[' => {
+                    let delim = if c == '(' { ')' } else { ']' };
                     self.consume();
                     self.consume_whitespace();
-                    match self.try_consume([')']) {
+                    match self.try_consume([delim]) {
                         Some(_) => Ok(LNil),
                         None => match self.parse_datum() {
                             Err(e) => Err(e),
-                            Ok(head) => self.parse_list(@head),
+                            Ok(head) => self.parse_list(@head, delim),
                         },
                     }
                 },
@@ -357,17 +358,19 @@ impl Parser {
                 do self.parse_number(~"#" + str::from_char(c)).chain |n| {
                     Ok(LNum(n))
                 },
-            '(' =>
-                match self.parse_vector() {
+            '(' | '[' => {
+                let delim = if c == '(' { ')' } else { ']' };
+                match self.parse_vector(delim) {
                     Ok(v) => Ok(LVector(v)),
                     Err(e) => Err(e),
-                },
+                }
+            },
             _ =>
                 Err(~"unexpected character: " + str::from_char(c)),
         }
     }
 
-    fn parse_vector<T>(&mut self) -> Result<~[@LDatum<T>], ~str> {
+    fn parse_vector<T>(&mut self, delim: char) -> Result<~[@LDatum<T>], ~str> {
         let mut vec = ~[];
 
         loop {
@@ -376,12 +379,11 @@ impl Parser {
                 return Err(~"parenthesis not closed");
             }
 
-            match self.lookahead() {
-                ')' => {
-                    self.consume();
-                    return Ok(vec)
-                },
-                _ => match self.parse_datum() {
+            if self.lookahead() == delim {
+                self.consume();
+                return Ok(vec)
+            } else {
+                match self.parse_datum() {
                     Err(e) => return Err(e),
                     Ok(x) => vec.push(@x),
                 }
@@ -389,13 +391,13 @@ impl Parser {
         }
     }
 
-    fn parse_list<T>(&mut self, head: @LDatum<T>) -> Result<LDatum<T>, ~str> {
+    fn parse_list<T>(&mut self, head: @LDatum<T>, delim: char) -> Result<LDatum<T>, ~str> {
         self.consume_whitespace();
         if(self.eof()) {
             Err(~"parenthesis not closed")
         } else {
             match self.lookahead() {
-                ')' => {
+                c if c == delim => {
                     self.consume();
                     Ok(LCons(head, @LNil))
                 },
@@ -407,14 +409,14 @@ impl Parser {
                                 Err(e) => Err(e),
                                 Ok(tail) => {
                                     self.consume_whitespace();
-                                    match self.try_consume([')']) {
+                                    match self.try_consume([delim]) {
                                         None => Err(~"RPAREN not found after DOT"),
                                         Some(_) => Ok(LCons(head, @tail)),
                                     }
                                 },
                             },
                         DDatum(tail1) => {
-                            match self.parse_list(@tail1) {
+                            match self.parse_list(@tail1, delim) {
                                 Ok(tail) => Ok(LCons(head, @tail)),
                                 Err(e) => Err(e),
                             }
@@ -425,7 +427,7 @@ impl Parser {
                 _ => match self.parse_datum() {
                     Err(e) => Err(e),
                     Ok(tail1) => {
-                        match self.parse_list(@tail1) {
+                        match self.parse_list(@tail1, delim) {
                             Ok(tail) => Ok(LCons(head, @tail)),
                             Err(e) => Err(e),
                         }
@@ -997,4 +999,10 @@ fn test_minus_num() {
 #[test]
 fn test_minus_rational() {
     test_expect(~"-7/2", &LNum( from_rational(&Rational::new_int(-7, 2)) ));
+}
+
+#[test]
+fn test_parse_bracket() {
+    test_expect_list(~"[]", ~[]);
+    test_expect_list(~"[a b 1]", ~[@LIdent(@"a"), @LIdent(@"b"), @LNum(from_int(1))]);
 }
