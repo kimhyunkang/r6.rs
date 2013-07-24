@@ -234,6 +234,12 @@ impl Rem<Rational, Rational> for Rational {
     }
 }
 
+impl Fractional for Rational {
+    fn recip(&self) -> Rational {
+        Rational::new(self.n.clone(), self.d.clone())
+    }
+}
+
 impl Num for Rational;
 
 impl ToStr for Rational {
