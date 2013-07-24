@@ -146,6 +146,8 @@ impl<T: Neg<T>> Neg<Cmplx<T>> for Cmplx<T> {
     }
 }
 
+impl<T: Num> Num for Cmplx<T> {}
+
 impl<T: Num> Fractional for Cmplx<T> {
     #[inline]
     fn recip(&self) -> Cmplx<T> {
