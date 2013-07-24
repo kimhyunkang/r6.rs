@@ -81,15 +81,15 @@ impl Round for Rational {
 
     fn trunc(&self) -> Rational {
         Rational {
-            d: IntConvertible::from_int::<BigInt>(self.to_float::<f64>().trunc() as int),
+            d: self.d / self.n,
             n: One::one(),
         }
     }
 
     fn fract(&self) -> Rational {
         Rational {
-            d: IntConvertible::from_int::<BigInt>(self.to_float::<f64>().fract() as int),
-            n: One::one(),
+            d: self.d % self.n,
+            n: self.n.clone(),
         }
     }
 }
