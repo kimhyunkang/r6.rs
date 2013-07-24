@@ -1,4 +1,5 @@
-use std::num::{Zero, One};
+use std::num::{Zero, One, FromStrRadix, ToStrRadix};
+use std::cmp::min;
 use extra::bigint::BigInt;
 
 pub fn big_pow(radix: &BigInt, pow: uint) -> BigInt {
@@ -20,7 +21,21 @@ pub fn big_pow(radix: &BigInt, pow: uint) -> BigInt {
     total
 }
 
-#[inline]
-pub fn bigint_to_f64(n: &BigInt) -> f64 {
-    FromStr::from_str::<f64>(n.to_str()).unwrap()
+pub fn bigint_to_float<T:Float + NumCast + Zero>(n: &BigInt) -> T {
+    if n.is_zero() {
+        return Zero::zero()
+    }
+
+    let mdigits = Float::mantissa_digits::<T>();
+    let neg = n.is_negative();
+    let repr = n.abs().to_str_radix(2);
+    let mantissa_repr = repr.slice(0, min(mdigits, repr.len()));
+    let u_mantissa:i64 = FromStrRadix::from_str_radix(mantissa_repr, 2).unwrap();
+    let i_mantissa = if neg {
+        -u_mantissa
+    } else {
+        u_mantissa
+    };
+    let exp = (repr.len() - mantissa_repr.len()) as int;
+    Float::ldexp(NumCast::from(i_mantissa), exp)
 }

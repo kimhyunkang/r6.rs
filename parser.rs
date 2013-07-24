@@ -71,14 +71,14 @@ priv fn build_exact(sign: bool, radix: uint, &part: &PResult) -> Result<Rational
 priv fn build_inexact(sign: bool, radix: uint, &part: &PResult) -> Result<f64, ~str> {
     match part {
         PInt(zs) => 
-            Ok(bigint_to_f64(&s_to_int(zs, sign, radix))),
+            Ok(bigint_to_float(&s_to_int(zs, sign, radix))),
         PRational(ds, ns) => {
             let d:BigInt = s_to_int(ds, sign, radix);
             let n:BigInt = s_to_int(ns, sign, radix);
             if n.is_zero() {
                 Err(~"divide by zero")
             } else {
-                Ok(bigint_to_f64(&d) / bigint_to_f64(&n))
+                Ok(bigint_to_float::<f64>(&d) / bigint_to_float::<f64>(&n))
             }
         },
         PFloat(i, f, e) => {

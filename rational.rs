@@ -1,5 +1,5 @@
 use std::num::{One, Zero, IntConvertible, ToStrRadix};
-use bigint_helper::bigint_to_f64;
+use bigint_helper::bigint_to_float;
 use extra::bigint::BigInt;
 
 pub struct Rational {
@@ -38,8 +38,8 @@ impl Rational {
     }
 
     pub fn to_f64(&self) -> f64 {
-        let d = bigint_to_f64(&self.d);
-        let n = bigint_to_f64(&self.n);
+        let d:f64 = bigint_to_float(&self.d);
+        let n:f64 = bigint_to_float(&self.n);
         d / n
     }
 }
