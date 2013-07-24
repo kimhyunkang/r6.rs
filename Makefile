@@ -17,7 +17,7 @@ complex-test: complex-tests
 ${LIB}: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs
 	rustc $< --lib -Z debug-info
 
-parser-tests: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs numeric.rs
+parser-tests: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs numeric.rs real.rs
 	rustc $< --test -o $@
 
 eval-tests: eval_test.rs ${LIB}

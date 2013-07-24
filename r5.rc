@@ -13,6 +13,7 @@ pub mod primitive;
 pub mod datum;
 pub mod bigint_helper;
 pub mod rational;
+pub mod real;
 pub mod numeric;
 pub mod parser;
 pub mod macro;
