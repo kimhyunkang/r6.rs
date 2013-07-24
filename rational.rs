@@ -37,9 +37,9 @@ impl Rational {
         &self.n
     }
 
-    pub fn to_f64(&self) -> f64 {
-        let d:f64 = bigint_to_float(&self.d);
-        let n:f64 = bigint_to_float(&self.n);
+    pub fn to_float<T:Float + NumCast + Zero>(&self) -> T {
+        let d:T = bigint_to_float(&self.d);
+        let n:T = bigint_to_float(&self.n);
         d / n
     }
 }
@@ -61,21 +61,21 @@ impl Round for Rational {
 
     fn round(&self) -> Rational {
         Rational {
-            d: IntConvertible::from_int::<BigInt>(self.to_f64().round() as int),
+            d: IntConvertible::from_int::<BigInt>(self.to_float::<f64>().round() as int),
             n: One::one(),
         }
     }
 
     fn trunc(&self) -> Rational {
         Rational {
-            d: IntConvertible::from_int::<BigInt>(self.to_f64().trunc() as int),
+            d: IntConvertible::from_int::<BigInt>(self.to_float::<f64>().trunc() as int),
             n: One::one(),
         }
     }
 
     fn fract(&self) -> Rational {
         Rational {
-            d: IntConvertible::from_int::<BigInt>(self.to_f64().fract() as int),
+            d: IntConvertible::from_int::<BigInt>(self.to_float::<f64>().fract() as int),
             n: One::one(),
         }
     }

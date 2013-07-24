@@ -34,7 +34,8 @@ impl LNumeric {
 
     pub fn to_inexact(&self) -> Cmplx<f64> {
         match *self {
-            NExact(Cmplx { re: ref re, im: ref im }) => Cmplx {re: re.to_f64(), im: im.to_f64()},
+            NExact(Cmplx { re: ref re, im: ref im }) =>
+                Cmplx {re: re.to_float::<f64>(), im: im.to_float::<f64>()},
             NInexact(cmplx) => cmplx
         }
     }
@@ -400,7 +401,7 @@ pub enum LReal {
 impl LReal {
     pub fn to_inexact(&self) -> f64 {
         match self {
-            &NRational(ref x) => x.to_f64(),
+            &NRational(ref x) => x.to_float::<f64>(),
             &NFloat(x) => x,
         }
     }
@@ -412,8 +413,8 @@ pub fn coerce<T>(a: &LReal, b: &LReal,
 {
     match (a, b) {
         (&NRational(ref x), &NRational(ref y)) => op_r(x, y),
-        (&NRational(ref x), &NFloat(y)) => op_f(x.to_f64(), y),
-        (&NFloat(x), &NRational(ref y)) => op_f(x, y.to_f64()),
+        (&NRational(ref x), &NFloat(y)) => op_f(x.to_float::<f64>(), y),
+        (&NFloat(x), &NRational(ref y)) => op_f(x, y.to_float::<f64>()),
         (&NFloat(x), &NFloat(y)) => op_f(x, y),
     }
 }
@@ -424,8 +425,8 @@ pub fn coerce_build(a: &LReal, b: &LReal,
 {
     match (a, b) {
         (&NRational(ref x), &NRational(ref y)) => NRational(op_r(x, y)),
-        (&NRational(ref x), &NFloat(y)) => NFloat(op_f(x.to_f64(), y)),
-        (&NFloat(x), &NRational(ref y)) => NFloat(op_f(x, y.to_f64())),
+        (&NRational(ref x), &NFloat(y)) => NFloat(op_f(x.to_float::<f64>(), y)),
+        (&NFloat(x), &NRational(ref y)) => NFloat(op_f(x, y.to_float::<f64>())),
         (&NFloat(x), &NFloat(y)) => NFloat(op_f(x, y)),
     }
 }
