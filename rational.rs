@@ -189,10 +189,7 @@ impl Add<Rational, Rational> for Rational {
         let g = self.n.gcd(&rhs.n);
         let ln = self.n / g;
         let rn = rhs.n / g;
-        Rational {
-            d: self.d * rn + rhs.d * ln,
-            n: self.n * rn,
-        }
+        Rational::new(self.d * rn + rhs.d * ln, self.n * rn)
     }
 }
 
@@ -201,10 +198,7 @@ impl Sub<Rational, Rational> for Rational {
         let g = self.n.gcd(&rhs.n);
         let ln = self.n / g;
         let rn = rhs.n / g;
-        Rational {
-            d: self.d * rn - rhs.d * ln,
-            n: self.n * rn,
-        }
+        Rational::new(self.d * rn - rhs.d * ln, self.n * rn)
     }
 }
 
