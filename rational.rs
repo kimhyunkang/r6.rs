@@ -1,5 +1,5 @@
 use std::num::{One, Zero, IntConvertible, ToStrRadix};
-use bigint_helper::bigint_to_float;
+use bigint_helper::*;
 use extra::bigint::BigInt;
 
 pub struct Rational {
@@ -41,6 +41,19 @@ impl Rational {
         let d:T = bigint_to_float(&self.d);
         let n:T = bigint_to_float(&self.n);
         d / n
+    }
+
+    pub fn from_float<T:Float>(f: T) -> Rational {
+        match float_disassemble(f) {
+            None => fail!(~"f is not normal float"),
+            Some((mantissa, exp)) => if exp < 0 {
+                    let n = One::one::<BigInt>() << (-exp as uint);
+                    Rational::new(mantissa, n)
+                } else {
+                    let d = mantissa << (exp as uint);
+                    Rational::new(d, One::one())
+                }
+        }
     }
 }
 

@@ -39,6 +39,14 @@ impl LNumeric {
             NInexact(cmplx) => cmplx
         }
     }
+
+    pub fn to_exact(&self) -> Cmplx<Rational> {
+        match *self {
+            NExact(ref cmplx) => cmplx.clone(),
+            NInexact(Cmplx { re: re, im: im }) =>
+                Cmplx {re: Rational::from_float(re), im: Rational::from_float(im)},
+        }
+    }
 }
 
 pub fn to_str(&n: &LNumeric) -> ~str {
