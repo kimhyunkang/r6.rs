@@ -270,9 +270,29 @@ macro_rules! trans(
     )
 )
 
+pub fn f64_to_str(f: f64) -> ~str {
+    if f.fract().is_zero() {
+        f.to_str() + ".0"
+    } else {
+        f.to_str()
+    }
+}
+
+pub fn f64_to_str_radix(f: f64, radix: uint) -> ~str {
+    if f.fract().is_zero() {
+        f.to_str_radix(radix) + ".0"
+    } else {
+        f.to_str_radix(radix)
+    }
+}
+
 impl ToStr for LReal {
     fn to_str(&self) -> ~str {
-        meth!(to_str)
+        match self {
+            &RInt(ref x) => x.to_str(),
+            &RRat(ref x) => x.to_str(),
+            &Rf64(ref x) => f64_to_str(*x),
+        }
     }
 }
 
@@ -281,7 +301,7 @@ impl ToStrRadix for LReal {
         match self {
             &RInt(ref x) => x.to_str_radix(radix),
             &RRat(ref x) => x.to_str_radix(radix),
-            &Rf64(ref x) => x.to_str_radix(radix),
+            &Rf64(ref x) => f64_to_str_radix(*x, radix),
         }
     }
 }

@@ -98,7 +98,11 @@ impl ToStr for LNumeric {
         match *self {
             NReal(ref r) => r.to_str(),
             NExact(ref c) => c.to_str(),
-            NInexact(ref c) => c.to_str(),
+            NInexact(ref c) => if c.im.is_negative() {
+                fmt!("%s%si", f64_to_str(c.re), f64_to_str(c.im))
+            } else {
+                fmt!("%s+%si", f64_to_str(c.re), f64_to_str(c.im))
+            },
         }
     }
 }
@@ -108,7 +112,11 @@ impl ToStrRadix for LNumeric {
         match *self {
             NReal(ref r) => r.to_str_radix(radix),
             NExact(ref c) => c.to_str_radix(radix),
-            NInexact(ref c) => c.to_str_radix(radix),
+            NInexact(ref c) => if c.im.is_negative() {
+                fmt!("%s%si", f64_to_str_radix(c.re, radix), f64_to_str_radix(c.im, radix))
+            } else {
+                fmt!("%s+%si", f64_to_str_radix(c.re, radix), f64_to_str_radix(c.im, radix))
+            },
         }
     }
 }
