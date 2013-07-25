@@ -1,13 +1,5 @@
 * r5rs
 
-numerical tower update
-  int
-  BigInt
-  Rational
-  f64
-  Cmplx<Rational>
-  Cmplx<f64>
-
 vector and string mutation
 
 compiled code
