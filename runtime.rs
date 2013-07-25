@@ -551,6 +551,7 @@ fn load_prelude() -> HashMap<@str, Either<@RDatum, PrimSyntax>> {
 
     map.insert("pi".to_managed(), Left(@LNum(inexact(Real::pi(), 0f64))));
     map.insert(@"eq?", Left(@LExt(RPrim(PEqv))));
+    map.insert(@"complex?", Left(@LExt(RPrim(PNumber))));
     map
 }
 
