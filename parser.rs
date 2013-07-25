@@ -3,7 +3,7 @@ use std::num;
 use std::f64;
 use std::str;
 use std::vec;
-use std::num::{Zero, One, IntConvertible, FromStrRadix};
+use std::num::{Zero, One, FromStrRadix};
 use extra::bigint::BigInt;
 use bigint_helper::*;
 use rational::Rational;
@@ -53,10 +53,10 @@ priv fn build_exact(sign: bool, radix: uint, &part: &PResult) -> Result<Rational
                 s_to_int(e, true, 10)
             };
 
-            let _10 = IntConvertible::from_int(10);
-            let n = big_pow(&_10, f.len());
+            let _10 = BigInt::from_uint(10);
+            let n = pow_uint(&_10, f.len());
             let d = s_to_int(i + f, sign, 10);
-            let p = big_pow(&_10, num::abs(exp) as uint);
+            let p = pow_uint(&_10, num::abs(exp) as uint);
 
             if n.is_zero() {
                 Err(~"divide by zero")

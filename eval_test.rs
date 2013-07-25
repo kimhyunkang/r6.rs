@@ -462,3 +462,11 @@ fn char_ci_cmp_test() {
 fn string_append_test() {
     eval_test!("(string-append \"r5\" \".\" \"rs\")", "\"r5.rs\"");
 }
+
+#[test]
+fn expt_test() {
+    eval_test!("(expt 3 2)", "9");
+    eval_test!("(expt 3.0 2)", "9.0");
+    eval_test!("(expt 1/2 -2)", "4");
+    eval_test!("(expt 0.5 -2)", "4.0");
+}

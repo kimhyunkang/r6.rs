@@ -3,9 +3,9 @@ use std::cmp::min;
 use std::cast;
 use extra::bigint::BigInt;
 
-pub fn big_pow(radix: &BigInt, pow: uint) -> BigInt {
-    let _0: BigInt = Zero::zero();
-    let _1: BigInt = One::one();
+pub fn pow_uint<T:Clone + Zero + One + Div<T,T> + Mul<T, T>>(radix: &T, pow: uint) -> T {
+    let _0 = Zero::zero();
+    let _1 = One::one();
 
     if pow   == 0u { return _1; }
     if radix.is_zero() { return _0; }

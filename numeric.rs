@@ -4,6 +4,7 @@ use extra::bigint::BigInt;
 use complex::Cmplx;
 use real::*;
 use rational::Rational;
+use bigint_helper::pow_uint;
 
 #[deriving(Eq, Clone)]
 pub enum LNumeric {
@@ -296,7 +297,23 @@ impl Exponential for LNumeric {
 
 impl Algebraic for LNumeric {
     #[inline]
-    fn pow(&self, other: &LNumeric) -> LNumeric { trans_numeric!(pow, other) }
+    fn pow(&self, other: &LNumeric) -> LNumeric {
+        let max = IntConvertible::from_int(Bounded::max_value());
+        match other {
+            &NReal(RInt(ref n)) if n.abs() <= max => {
+                if n.is_negative() {
+                    let r = n.neg().to_int() as uint;
+                    pow_uint(self, r).recip()
+                } else {
+                    pow_uint(self, n.to_int() as uint)
+                }
+            },
+            _ => coerce_icmplx(self, other,
+                            |x, y| { NReal(x.pow(y)) },
+                            |x, y| { NInexact(x.pow(y)) })
+        }
+    }
+
     #[inline]
     fn hypot(&self, other: &LNumeric) -> LNumeric { trans_numeric!(hypot, other) }
     #[inline]
