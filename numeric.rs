@@ -37,7 +37,7 @@ impl LNumeric {
         }
     }
 
-    priv fn to_inexact(&self) -> Cmplx<f64> {
+    pub fn to_icmplx(&self) -> Cmplx<f64> {
         match *self {
             NReal(ref r) => Cmplx {re: r.to_f64(), im: 0f64},
             NExact(Cmplx { re: ref re, im: ref im }) =>
@@ -46,14 +46,28 @@ impl LNumeric {
         }
     }
 
-    priv fn to_exact(&self) -> Cmplx<Rational> {
+    pub fn to_exact(&self) -> LNumeric {
         match *self {
-            NReal(RInt(ref i)) => Cmplx { re: Rational::from_bigint(i.clone()), im: Zero::zero() },
-            NReal(RRat(ref r)) => Cmplx { re: r.clone(), im: Zero::zero() },
-            NReal(Rf64(f)) => Cmplx { re: Rational::from_float(f), im: Zero::zero() },
-            NExact(ref cmplx) => cmplx.clone(),
-            NInexact(Cmplx { re: re, im: im }) =>
-                Cmplx {re: Rational::from_float(re), im: Rational::from_float(im)},
+            NReal(ref r) => NReal(r.to_exact()),
+            NExact(ref ecmplx) => NExact(ecmplx.clone()),
+            NInexact(ref c) => {
+                let re = Rational::from_float(c.re);
+                let im = Rational::from_float(c.im);
+                if im.is_zero() {
+                    NReal(LReal::from_rational(im))
+                } else {
+                    NExact( Cmplx { re: re, im: im } )
+                }
+            }
+        }
+    }
+
+    pub fn to_inexact(&self) -> LNumeric {
+        match *self {
+            NReal(ref r) => NReal(Rf64(r.to_f64())),
+            NExact(ref ecmplx) => NInexact( Cmplx { re: ecmplx.re.to_float(),
+                                                    im: ecmplx.im.to_float() } ),
+            NInexact(_) => self.clone(),
         }
     }
 }
@@ -74,7 +88,7 @@ impl ApproxEq<f64> for LNumeric {
     fn approx_eq_eps(&self, other: &LNumeric, approx_epsilon: &f64) -> bool
     {
         let delta = *self - *other;
-        let delta2 = delta.to_inexact().norm();
+        let delta2 = delta.to_icmplx().norm();
         delta2 < *approx_epsilon
     }
 }

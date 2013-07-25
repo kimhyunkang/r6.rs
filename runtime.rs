@@ -1309,10 +1309,10 @@ impl Runtime {
                 }
             },
             PMagnitude => do call_tc1::<LNumeric, f64>(args) |x| {
-                x.to_inexact().to_polar().first()
+                x.to_icmplx().norm()
             },
             PAngle => do call_tc1::<LNumeric, f64>(args) |x| {
-                x.to_inexact().to_polar().second()
+                x.to_icmplx().arg()
             },
             PNumerator => do call_tc1::<Rational, BigInt>(args) |x| { x.numerator().clone() },
             PDenominator => do call_tc1::<Rational, BigInt>(args) |x| { x.denominator().clone() },
@@ -1336,8 +1336,8 @@ impl Runtime {
             PInteger => typecheck::<BigInt>(args),
             PExact => typecheck::<Cmplx<Rational>>(args),
             PInexact => typecheck::<Cmplx<f64>>(args),
-            PExactInexact => do call_tc1::<LNumeric, Cmplx<f64>>(args) |x| { x.to_inexact() },
-            PInexactExact => do call_tc1::<LNumeric, Cmplx<Rational>>(args) |x| { x.to_exact() },
+            PExactInexact => do call_tc1::<LNumeric, LNumeric>(args) |x| { x.to_inexact() },
+            PInexactExact => do call_tc1::<LNumeric, LNumeric>(args) |x| { x.to_exact() },
             PNumberString => match args.len() {
                 1 => do call_tc1::<LNumeric, ~str>(args) |x| { x.to_str() },
                 2 => do call_err2::<LNumeric, uint, ~str>(args) |&x, &radix| {

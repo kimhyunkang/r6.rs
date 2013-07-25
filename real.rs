@@ -65,6 +65,21 @@ impl LReal {
         }
     }
 
+    pub fn to_exact(&self) -> LReal {
+        match self {
+            &RInt(_) => self.clone(),
+            &RRat(_) => self.clone(),
+            &Rf64(x) => {
+                let rat = Rational::from_float(x);
+                if *rat.numerator() == One::one() {
+                    RInt(rat.denominator().clone())
+                } else {
+                    RRat(rat)
+                }
+            }
+        }
+    }
+
     pub fn from_rational(rat: Rational) -> LReal {
         if *rat.numerator() == One::one() {
             RInt(rat.denominator().clone())

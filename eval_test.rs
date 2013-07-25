@@ -330,6 +330,7 @@ fn make_complex_test() {
 #[test]
 fn exact_inexact_test() {
     eval_test!("(exact->inexact 1+2i)", "1.0+2.0i");
+    eval_test!("(inexact->exact 2.0+0.5i)", "2+1/2i");
 }
 
 #[test]
