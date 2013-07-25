@@ -386,13 +386,9 @@ impl DatumConv for () {
     }
 }
 
-struct GetList<T> {
-    list: ~[T]
-}
-
-impl<T: DatumConv> DatumConv for GetList<T> {
+impl<T: DatumConv> DatumConv for ~[T] {
     #[inline]
-    fn from_datum<R>(datum: @RDatum, op: &fn(&GetList<T>) -> R) -> Option<R> {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&~[T]) -> R) -> Option<R> {
         match datum.to_list() {
             Some(l) => {
                 let mut idx = 0u;
@@ -407,16 +403,16 @@ impl<T: DatumConv> DatumConv for GetList<T> {
                     idx += 1;
                 }
 
-                return Some(op(&GetList { list: list }))
+                return Some(op(&list))
             }
             _ => None,
         }
     }
 
     #[inline]
-    fn move_datum(x: GetList<T>) -> @RDatum {
+    fn move_datum(x: ~[T]) -> @RDatum {
         let mut bottom = @LNil;
-        do x.list.consume_reverse |_, a| {
+        do x.consume_reverse |_, a| {
             bottom = @LCons(DatumConv::move_datum(a), bottom);
         };
         bottom
@@ -1220,8 +1216,8 @@ impl Runtime {
                 [arg] => self.eval(arg),
                 _ => Err(ArgNumError(1, Some(1), args.len())),
             },
-            PApply => do call_err2::<RuntimeData, GetList<@RDatum>, @RDatum>(args) |f, l| {
-                self.apply(f, l.list)
+            PApply => do call_err2::<RuntimeData, ~[@RDatum], @RDatum>(args) |f, &l| {
+                self.apply(f, l)
             },
             PBegin => if args.len() == 0 {
                     Ok(@LExt(RBot))
@@ -1516,11 +1512,11 @@ impl Runtime {
                 n => Err(ArgNumError(2, Some(3), n)),
             },
             PStringAppend => do call_vargs::<~str, ~str>(args) |strs| { strs.concat() },
-            PStringList => do call_tc1::<~str, GetList<char>>(args) |&s| {
-                GetList { list: s.iter().collect() }
+            PStringList => do call_tc1::<~str, ~[char]>(args) |&s| {
+                s.iter().collect()
             },
-            PListString => do call_tc1::<GetList<char>, ~str>(args) |cs| {
-                str::from_chars(cs.list)
+            PListString => do call_tc1::<~[char], ~str>(args) |&cs| {
+                str::from_chars(cs)
             },
             PSymbol => typecheck::<@str>(args),
             PSymbolString => do call_tc1::<@str, ~str>(args) |&s| { s.to_owned() },
