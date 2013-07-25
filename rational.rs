@@ -261,3 +261,18 @@ impl ToStrRadix for Rational {
         }
     }
 }
+
+#[test]
+fn from_float_test() {
+    let ix = 0.5f64;
+    let ex = Rational::new_int(1, 2);
+    assert_eq!(Rational::from_float(ix), ex)
+
+    let ix = 1.0f64;
+    let ex = Rational::new_int(1, 1);
+    assert_eq!(Rational::from_float(ix), ex)
+
+    let ix = 0.75f64;
+    let ex = Rational::new_int(3, 4);
+    assert_eq!(Rational::from_float(ix), ex)
+}
