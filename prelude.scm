@@ -103,9 +103,9 @@
         null
         (let ((h (car lss))
               (t (cdr lss)))
-          (if (null? h)
-              (apply append t)
-              (cons (car h) (apply append (cons (cdr h) t)))
+          (cond ((null? t) h)
+                ((null? h) (apply append t))
+                (else (cons (car h) (apply append (cons (cdr h) t))))
           )
         )
     )
