@@ -1449,6 +1449,16 @@ impl Runtime {
             PVectorRef => do call_err2::<@mut ~[@RDatum], uint, @RDatum>(args) |v, &idx| {
                 if idx < v.len() { Ok(v[idx]) } else { Err(RangeError) }
             },
+            PVectorSet => do call_err3::<@mut ~[@RDatum], uint, @RDatum, ()>(args) |v, &idx, &x| {
+                if idx < v.len() { Ok(v[idx] = x) } else { Err(RangeError) }
+            },
+            PVectorFill => do call_tc2::<@mut ~[@RDatum], @RDatum, ()>(args) |v, &x| {
+                let mut i = 0u;
+                while i < v.len() {
+                    v[i] = x;
+                    i += 1;
+                }
+            },
             PVectorList => do call_tc1::<@mut ~[@RDatum], @RDatum>(args) |&v| {
                 LDatum::from_list(*v)
             },

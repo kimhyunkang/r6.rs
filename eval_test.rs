@@ -378,6 +378,24 @@ fn vector_conversion_test() {
 }
 
 #[test]
+fn vector_set_test() {
+    let s = "(let ((vec (vector 0 '(2 2 2 2) \"Anna\")))\
+                (vector-set! vec 1 '(\"Sue\" \"Sue\"))\
+                vec)";
+    let expected = "#(0 (\"Sue\" \"Sue\") \"Anna\")";
+    eval_test!(s, expected)
+}
+
+#[test]
+fn vector_fill_test() {
+    let s = "(let ((vec (make-vector 3)))\
+                (vector-fill! vec 'a)\
+                vec)";
+    let expected = "#(a a a)";
+    eval_test!(s, expected)
+}
+
+#[test]
 fn symbol_conversion_test() {
     eval_test!("(symbol->string 'str)", "\"str\"");
     eval_test!("(string->symbol \"str\")", "str");
