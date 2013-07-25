@@ -64,6 +64,33 @@
           (else (member obj (cdr x))))
   )
 
+  (define (assq obj alist)
+    (if (null? alist)
+        #f
+        (let ((p (car alist)))
+          (if (eq? obj (car p))
+              p
+              (assq obj (cdr alist)))))
+  )
+
+  (define (assv obj alist)
+    (if (null? alist)
+        #f
+        (let ((p (car alist)))
+          (if (eqv? obj (car p))
+              p
+              (assv obj (cdr alist)))))
+  )
+
+  (define (assoc obj alist)
+    (if (null? alist)
+        #f
+        (let ((p (car alist)))
+          (if (equal? obj (car p))
+              p
+              (assoc obj (cdr alist)))))
+  )
+
   (define null '())
 
   (define (caar x) (car (car x)))
