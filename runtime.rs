@@ -1265,6 +1265,15 @@ impl Runtime {
                 },
                 _ => Err(TypeError),
             },
+            PForEach => match args {
+                [] => Err(ArgNumError(2, None, 0)),
+                [@LExt(ref f), ..list] => do transpose(list).chain |trans| {
+                    result::map_vec(trans, |&l| { self.apply(f, l) }).map(|_| {
+                        @LExt(RBot)
+                    })
+                },
+                _ => Err(TypeError),
+            },
             PBegin => if args.len() == 0 {
                     Ok(@LExt(RBot))
                 } else {
