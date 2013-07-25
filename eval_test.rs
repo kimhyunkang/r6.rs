@@ -126,7 +126,23 @@ fn lexical_scoping_test() {
 }
 
 #[test]
+fn eq_test() {
+    eval_test!("(eq? 'a 'a)", "#t")
+    eval_test!("(eq? '(a) '(a))", "#f")
+    eval_test!("(eq? '() '())", "#t")
+    eval_test!("(eq? car car)", "#t")
+    eval_test!("(let ((x '(a))) (eq? x x))", "#t");
+    eval_test!("(let ((x '#())) (eq? x x))", "#t");
+    eval_test!("(let ((p (lambda (x) x))) (eq? p p))", "#t");
+}
+
+#[test]
 fn eqv_test() {
+    eval_test!("(eqv? 'a 'a)", "#t");
+    eval_test!("(eqv? 'a 'b)", "#f");
+    eval_test!("(eqv? 2 2)", "#t");
+    eval_test!("(eqv? (cons 1 2) (cons 1 2))", "#f");
+    eval_test!("(eqv? (lambda () 1) (lambda () 2))", "#f");
     eval_test!("(eqv? 3 (+ 1 2))", "#t");
     eval_test!("(eqv? #f #f)", "#t");
     eval_test!("(eqv? #\\a #\\a)", "#t");
