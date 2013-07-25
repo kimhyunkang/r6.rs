@@ -46,6 +46,24 @@
         (list-ref (cdr x) (- k 1)))
   )
 
+  (define (memq obj x)
+    (cond ((null? x) #f)
+          ((eq? obj (car x)) x)
+          (else (memq obj (cdr x))))
+  )
+
+  (define (memv obj x)
+    (cond ((null? x) #f)
+          ((eqv? obj (car x)) x)
+          (else (memv obj (cdr x))))
+  )
+
+  (define (member obj x)
+    (cond ((null? x) #f)
+          ((equal? obj (car x)) x)
+          (else (member obj (cdr x))))
+  )
+
   (define null '())
 
   (define (caar x) (car (car x)))
