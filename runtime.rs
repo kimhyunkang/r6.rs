@@ -1345,7 +1345,11 @@ impl Runtime {
             PTan => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.tan() },
             PAsin => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.asin() },
             PAcos => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.acos() },
-            PAtan => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.atan() },
+            PAtan => match args.len() {
+                1 => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.atan() },
+                2 => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, y| { x.atan2(y) },
+                n => Err(ArgNumError(1, Some(2), args.len())),
+            },
             PSqrt => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sqrt() },
             PExpt => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, r| { x.pow(r) },
             PMakeRectangular => do call_tc2::<LReal, LReal, LNumeric>(args) |rx, ry| {
