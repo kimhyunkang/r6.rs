@@ -3,7 +3,7 @@ LIB=libr5-84d4359e9b178dfc-0.0.1.dylib
 repl: repl.rs ${LIB}
 	rustc $< -L .
 
-test: parser-test eval-test complex-test
+test: parser-test eval-test
 
 parser-test: parser-tests
 	./parser-tests
@@ -11,20 +11,14 @@ parser-test: parser-tests
 eval-test: eval-tests
 	./eval-tests
 
-complex-test: complex-tests
-	./complex-tests
-
 ${LIB}: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs
 	rustc $< --lib -Z debug-info
 
-parser-tests: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs numeric.rs real.rs
+parser-tests: r5.rc parser.rs rational.rs datum.rs runtime.rs macro.rs stack.rs numeric.rs real.rs complex.rs
 	rustc $< --test -o $@
 
 eval-tests: eval_test.rs ${LIB}
 	rustc $< --test -L . -o $@
-
-complex-tests: complex.rs
-	rustc $< --test -o $@
 
 clean:
 	rm -rf *-tests *.dSYM *.dylib repl

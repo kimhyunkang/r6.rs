@@ -1,9 +1,15 @@
-use std::num::{Zero, One};
+use std::num::{Zero, One, ToStrRadix};
 
 #[deriving(Eq, Clone)]
 pub struct Cmplx<T> {
     pub re: T,
     pub im: T,
+}
+
+impl<T> Cmplx<T> {
+    pub fn type_map<R>(&self, op: &fn(&T) -> R) -> Cmplx<R> {
+        Cmplx { re: op(&self.re), im: op(&self.im) }
+    }
 }
 
 impl<T: Num> Cmplx<T> {
@@ -67,6 +73,28 @@ impl<T: Algebraic + Trigonometric + Num> Cmplx<T> {
     #[inline]
     pub fn from_polar(norm: T, arg: T) -> Cmplx<T> {
         Cmplx { re: norm * arg.cos(), im: norm * arg.sin() }
+    }
+}
+
+impl<T: ToStr + Signed> ToStr for Cmplx<T> {
+    #[inline]
+    pub fn to_str(&self) -> ~str {
+        if self.im.is_negative() {
+            fmt!("%s%si", self.re.to_str(), self.im.to_str())
+        } else {
+            fmt!("%s+%si", self.re.to_str(), self.im.to_str())
+        }
+    }
+}
+
+impl<T: ToStrRadix + Signed> ToStrRadix for Cmplx<T> {
+    #[inline]
+    pub fn to_str_radix(&self, radix: uint) -> ~str {
+        if self.im.is_negative() {
+            fmt!("%s%si", self.re.to_str_radix(radix), self.im.to_str_radix(radix))
+        } else {
+            fmt!("%s+%si", self.re.to_str_radix(radix), self.im.to_str_radix(radix))
+        }
     }
 }
 

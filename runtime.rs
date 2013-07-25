@@ -9,11 +9,13 @@ use std::num::{One, Zero, ToStrRadix, IntConvertible};
 use std::hashmap::HashMap;
 use std::managed;
 use bounded_iterator::BoundedIterator;
+use bigint_helper::modulo;
 use extra::bigint::BigInt;
 use extra::complex::Cmplx;
 use datum::*;
 use primitive::*;
 use numeric::*;
+use real::*;
 use rational::Rational;
 use stack::*;
 use parser::Parser;
@@ -236,16 +238,13 @@ impl DatumConv for Cmplx<Rational> {
 impl DatumConv for LReal {
     fn from_datum<R>(datum: @RDatum, op: &fn(&LReal) -> R) -> Option<R> {
         match datum {
-            @LNum(ref n) => match get_real(n) {
-                Some(ref r) => Some(op(r)),
-                None => None,
-            },
+            @LNum(NReal(ref r)) => Some(op(r)),
             _ => None,
         }
     }
 
     fn move_datum(x: LReal) -> @RDatum {
-        @LNum(from_real(&x))
+        @LNum(NReal(x))
     }
 
     fn typename() -> ~str {
@@ -264,7 +263,7 @@ impl DatumConv for Rational {
     }
 
     fn move_datum(x: Rational) -> @RDatum {
-        @LNum(from_rational(&x))
+        @LNum(from_rational(x))
     }
 
     fn typename() -> ~str {
@@ -276,13 +275,8 @@ impl DatumConv for BigInt {
     fn from_datum<R>(datum: @RDatum, op: &fn(&BigInt) -> R) -> Option<R> {
         match datum {
             @LNum(ref n) => match *n {
-                NExact( Cmplx{ re: ref re, im: ref im } ) =>
-                    if im.is_zero() && *re.numerator() == One::one() {
-                        Some(op(re.denominator()))
-                    } else {
-                        None
-                    },
-                NInexact(_) => None,
+                NReal(RInt(ref n)) => Some(op(n)),
+                _ => None,
             },
             _ => None,
         }
@@ -301,11 +295,10 @@ impl DatumConv for uint {
     fn from_datum<R>(datum: @RDatum, op: &fn(&uint) -> R) -> Option<R> {
         let max_int:BigInt = IntConvertible::from_int(Bounded::max_value::<int>());
         match datum {
-            @LNum(NExact( Cmplx{ re: ref re, im: ref im } )) =>
-                if im.is_zero() && !re.is_negative() && *re.numerator() == One::one() {
-                    let d = re.denominator();
-                    if *d <= max_int {
-                        Some(op(&(d.to_int() as uint)))
+            @LNum(NReal(RInt(ref n))) =>
+                if !n.is_negative() {
+                    if *n <= max_int {
+                        Some(op(&(n.to_int() as uint)))
                     } else {
                         None
                     }
@@ -510,6 +503,7 @@ enum RuntimeError {
     ParseError(uint, uint, ~str),
     RangeError,
     IOError(~str),
+    PrimitiveError(~str),
 }
 
 impl ToStr for RuntimeError {
@@ -541,6 +535,7 @@ priv fn err_to_str(&err: &RuntimeError) -> ~str {
         ParseError(line, col, reason) => fmt!("failed to parse: %u:%u: %s", line, col, reason),
         RangeError => ~"index out of range", 
         IOError(e) => fmt!("io error: %s", e),
+        PrimitiveError(e) => e,
     }
 }
 
@@ -1295,21 +1290,26 @@ impl Runtime {
             PSqrt => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sqrt() },
             PExpt => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, r| { x.pow(r) },
             PMakeRectangular => do call_tc2::<LReal, LReal, LNumeric>(args) |rx, ry| {
-                coerce(rx, ry, |&a, &b| { exact(a, b) }, |a, b| { inexact(a, b) })
+                coerce_real(rx, ry, |&a, &b| { exact(Rational::from_bigint(a),
+                                                    Rational::from_bigint(b)) },
+                                    |&a, &b| { exact(a, b) },
+                                    |&a, &b| { inexact(a, b) })
             },
             PMakePolar => do call_tc2::<LReal, LReal, LNumeric>(args) |rx, ry| {
-                polar(rx.to_inexact(), ry.to_inexact())
+                polar(rx.to_f64(), ry.to_f64())
             },
-            PRealPart => do call_tc1::<LNumeric, LNumeric>(args) |&x|  {
+            PRealPart => do call_err1::<LNumeric, LReal>(args) |&x|  {
                 match x {
-                    NExact( Cmplx { re: ref re, im: _ } ) => from_rational(re),
-                    NInexact( Cmplx { re: re, im: _ } ) => from_f64(re),
+                    NExact( Cmplx { re: ref re, im: _ } ) => Ok(LReal::from_rational(re.clone())),
+                    NInexact( Cmplx { re: re, im: _ } ) => Ok(Rf64(re)),
+                    _ => Err(TypeError),
                 }
             },
-            PImagPart => do call_tc1::<LNumeric, LNumeric>(args) |&x|  {
+            PImagPart => do call_err1::<LNumeric, LReal>(args) |&x|  {
                 match x {
-                    NExact( Cmplx { re: _, im: ref im } ) => from_rational(im),
-                    NInexact( Cmplx { re: _, im: im } ) => from_f64(im),
+                    NExact( Cmplx { re: _, im: ref im } ) => Ok(LReal::from_rational(im.clone())),
+                    NInexact( Cmplx { re: _, im: im } ) => Ok(Rf64(im)),
+                    _ => Err(TypeError)
                 }
             },
             PMagnitude => do call_tc1::<LNumeric, f64>(args) |x| {
@@ -1337,15 +1337,7 @@ impl Runtime {
             PEqual => do call_tc2::<@RDatum, @RDatum, bool>(args) |&a, &b| { a == b },
             PNumber => typecheck::<LNumeric>(args),
             PReal => typecheck::<LReal>(args),
-            PInteger => do call_tc1::<@RDatum, bool>(args) |&arg| {
-                match arg {
-                    @LNum(NExact(Cmplx { re: ref re, im: ref im })) =>
-                        *re.numerator() == One::one() && *im.numerator() == One::one(),
-                    @LNum(NInexact(Cmplx { re: re, im: im })) =>
-                        re.round() == re && im.round() == im,
-                    _ => false,
-                }
-            },
+            PInteger => typecheck::<BigInt>(args),
             PExact => typecheck::<Cmplx<Rational>>(args),
             PInexact => typecheck::<Cmplx<f64>>(args),
             PExactInexact => do call_tc1::<LNumeric, Cmplx<f64>>(args) |x| { x.to_inexact() },
@@ -1354,11 +1346,19 @@ impl Runtime {
                 1 => do call_tc1::<LNumeric, ~str>(args) |x| { x.to_str() },
                 2 => do call_err2::<LNumeric, uint, ~str>(args) |&x, &radix| {
                         match x {
+                            NReal(Rf64(ref f)) => if radix == 10 {
+                                    Ok(f.to_str())
+                                } else {
+                                    Err(PrimitiveError(~"number->string is not allowed\
+                                    for inexact number with radix"))
+                                },
+                            NReal(ref n) => Ok(n.to_str_radix(radix)),
                             NExact(ref n) => Ok(n.to_str_radix(radix)),
                             _ => if radix == 10 {
                                 Ok(x.to_str())
                             } else {
-                                Err(TypeError)
+                                Err(PrimitiveError(~"number->string is not allowed\
+                                for inexact number with radix"))
                             },
                         }
                 },

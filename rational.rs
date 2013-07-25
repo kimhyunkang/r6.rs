@@ -22,6 +22,10 @@ impl Rational {
         }
     }
 
+    pub fn from_bigint(d: BigInt) -> Rational {
+        Rational { d: d, n: One::one() }
+    }
+
     pub fn new_int(new_d: int, new_n: int) -> Rational {
         let d = IntConvertible::from_int::<BigInt>(new_d);
         let n = IntConvertible::from_int::<BigInt>(new_n);

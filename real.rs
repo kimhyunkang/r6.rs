@@ -1,4 +1,4 @@
-use std::num::{Zero, One};
+use std::num::{Zero, One, ToStrRadix};
 use extra::bigint::BigInt;
 use rational::Rational;
 use bigint_helper::*;
@@ -57,10 +57,33 @@ impl LReal {
         }
     }
 
+    pub fn to_rational(&self) -> Rational {
+        match self {
+            &RInt(ref x) => Rational::from_bigint(x.clone()),
+            &RRat(ref x) => x.clone(),
+            &Rf64(ref x) => Rational::from_float(*x),
+        }
+    }
+
+    pub fn from_rational(rat: Rational) -> LReal {
+        if *rat.numerator() == One::one() {
+            RInt(rat.denominator().clone())
+        } else {
+            RRat(rat)
+        }
+    }
+
     pub fn is_exact(&self) -> bool {
         match self {
             &Rf64(_) => false,
             _ => true,
+        }
+    }
+
+    pub fn is_inexact(&self) -> bool {
+        match self {
+            &Rf64(_) => true,
+            _ => false,
         }
     }
 }
@@ -180,7 +203,30 @@ macro_rules! impl_op(
 impl_op!(Add<LReal, LReal>, add)
 impl_op!(Sub<LReal, LReal>, sub)
 impl_op!(Mul<LReal, LReal>, mul)
-impl_op!(Div<LReal, LReal>, div)
+
+impl Div<LReal, LReal> for LReal {
+    #[inline]
+    fn div(&self, other: &LReal) -> LReal {
+        coerce_real(self, other,
+                    |x, y| {
+                        let rat = Rational::new(x.clone(), y.clone());
+                        if *rat.numerator() == One::one() {
+                            RInt(rat.denominator().clone())
+                        } else {
+                            RRat(rat)
+                        }
+                    },
+                    |x, y| {
+                        let rat = x.div(y);
+                        if *rat.numerator() == One::one() {
+                            RInt(rat.denominator().clone())
+                        } else {
+                            RRat(rat)
+                        }
+                    },
+                    |x, y| { Rf64(x.div(y)) })
+    }
+}
 
 impl Num for LReal {}
 
@@ -208,6 +254,22 @@ macro_rules! trans(
         }
     )
 )
+
+impl ToStr for LReal {
+    fn to_str(&self) -> ~str {
+        meth!(to_str)
+    }
+}
+
+impl ToStrRadix for LReal {
+    fn to_str_radix(&self, radix: uint) -> ~str {
+        match self {
+            &RInt(ref x) => x.to_str_radix(radix),
+            &RRat(ref x) => x.to_str_radix(radix),
+            &Rf64(ref x) => x.to_str_radix(radix),
+        }
+    }
+}
 
 impl Neg<LReal> for LReal {
     #[inline]
@@ -272,23 +334,20 @@ impl Signed for LReal {
 macro_rules! impl_round (
     ($op:ident) => (
         {
-            let r = match self {
-                &RInt(ref x) => x.clone(),
+            match self {
+                &RInt(ref x) => RInt(x.clone()),
                 &RRat(ref x) => {
                     let rat = x.$op();
-                    rat.denominator().clone()
+                    RInt(rat.denominator().clone())
                 },
-                &Rf64(ref x) => {
-                    let rat =Rational::from_float(*x).$op();
-                    rat.denominator().clone()
-                },
-            };
-            RInt(r)
+                &Rf64(ref x) => Rf64(x.$op()),
+            }
         }
     )
 )
 
 impl Fractional for LReal {
+    #[inline]
     fn recip(&self) -> LReal {
         match self {
             &RInt(ref x) => if *x == One::one::<BigInt>() || *x == -One::one::<BigInt>() {
@@ -310,22 +369,19 @@ impl Fractional for LReal {
 }
 
 impl Round for LReal {
-    fn floor(&self) -> LReal {
-        impl_round!(floor)
-    }
+    #[inline]
+    fn floor(&self) -> LReal { impl_round!(floor) }
 
-    fn ceil(&self) -> LReal {
-        impl_round!(ceil)
-    }
+    #[inline]
+    fn ceil(&self) -> LReal { impl_round!(ceil) }
 
-    fn round(&self) -> LReal {
-        impl_round!(round)
-    }
+    #[inline]
+    fn round(&self) -> LReal { impl_round!(round) }
 
-    fn trunc(&self) -> LReal {
-        impl_round!(trunc)
-    }
+    #[inline]
+    fn trunc(&self) -> LReal { impl_round!(trunc) }
 
+    #[inline]
     fn fract(&self) -> LReal {
         match self {
             &RInt(_) => RInt(Zero::zero()),
@@ -348,40 +404,72 @@ macro_rules! impl_f64_binop (
 )
 
 impl Exponential for LReal {
+    #[inline]
     fn exp(&self) -> LReal { impl_f64!(exp) }
+    #[inline]
     fn exp2(&self) -> LReal { impl_f64!(exp2) }
+    #[inline]
     fn ln(&self) -> LReal { impl_f64!(ln) }
+    #[inline]
     fn log(&self, other: &LReal) -> LReal { impl_f64_binop!(log) }
+    #[inline]
     fn log2(&self) -> LReal { impl_f64!(log2) }
+    #[inline]
     fn log10(&self) -> LReal { impl_f64!(log10) }
 }
 
 impl Algebraic for LReal {
+    #[inline]
     fn pow(&self, other: &LReal) -> LReal { impl_f64_binop!(pow) }
+    #[inline]
     fn sqrt(&self) -> LReal { impl_f64!(sqrt) }
+    #[inline]
     fn rsqrt(&self) -> LReal { impl_f64!(rsqrt) }
+    #[inline]
     fn cbrt(&self) -> LReal { impl_f64!(cbrt) }
+    #[inline]
     fn hypot(&self, other: &LReal) -> LReal { impl_f64_binop!(hypot) }
 }
 
 impl Trigonometric for LReal {
+    #[inline]
     fn sin(&self) -> LReal { impl_f64!(sin) }
+    #[inline]
     fn cos(&self) -> LReal { impl_f64!(cos) }
+    #[inline]
     fn tan(&self) -> LReal { impl_f64!(tan) }
+    #[inline]
     fn asin(&self) -> LReal { impl_f64!(asin) }
+    #[inline]
     fn acos(&self) -> LReal { impl_f64!(acos) }
+    #[inline]
     fn atan(&self) -> LReal { impl_f64!(atan) }
+    #[inline]
     fn atan2(&self, other: &LReal) -> LReal { impl_f64_binop!(atan2) }
+    #[inline]
     fn sin_cos(&self) -> (LReal, LReal) {
         (self.sin(), self.cos())
     }
 }
 
 impl Hyperbolic for LReal {
+    #[inline]
     fn sinh(&self) -> LReal { impl_f64!(sinh) }
+    #[inline]
     fn cosh(&self) -> LReal { impl_f64!(cosh) }
+    #[inline]
     fn tanh(&self) -> LReal { impl_f64!(tanh) }
+    #[inline]
     fn asinh(&self) -> LReal { impl_f64!(asinh) }
+    #[inline]
     fn acosh(&self) -> LReal { impl_f64!(acosh) }
+    #[inline]
     fn atanh(&self) -> LReal { impl_f64!(atanh) }
+}
+
+#[test]
+fn from_rational_test() {
+    let x = LReal::from_rational( Rational::new_int(3, 1) );
+    let y = RInt(BigInt::from_uint(3));
+    assert_eq!(x, y);
 }

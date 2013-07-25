@@ -62,3 +62,24 @@ pub fn float_disassemble<T:Float>(f: T) -> Option<(BigInt, int)> {
         Some((mantissa, exp))
     }
 }
+
+pub fn modulo(l: BigInt, r: BigInt) -> BigInt
+{
+    let q = l % r;
+    if q.is_negative() {
+        if r < q {
+            q
+        } else {
+            q + r
+        }
+    } else if q.is_positive() {
+        if q < r {
+            q
+        } else {
+            q + r
+        }
+    } else {
+        q
+    }
+}
+

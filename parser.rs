@@ -8,6 +8,7 @@ use extra::bigint::BigInt;
 use bigint_helper::*;
 use rational::Rational;
 use numeric::*;
+use real::*;
 use datum::*;
 
 #[cfg(test)]
@@ -95,6 +96,21 @@ priv fn is_pfloat(&pres: &PResult) -> bool {
     }
 }
 
+priv fn build_real(exactness: Option<bool>, radix: uint, rsign: bool, rpart: &PResult)
+    -> Result<LReal, ~str>
+{
+    match (exactness, rpart) {
+        (Some(false), _) | (None, &PFloat(_, _, _)) =>
+            do build_inexact(rsign, radix, rpart).map |&f| {
+                Rf64(f)
+            },
+        _ =>
+            do build_exact(rsign, radix, rpart).map |&r| {
+                LReal::from_rational(r)
+            },
+    }
+}
+
 priv fn build_complex(exactness: Option<bool>,
                     radix: uint,
                     rsign: bool,
@@ -104,8 +120,12 @@ priv fn build_complex(exactness: Option<bool>,
     if exactness == Some(true) || 
             (exactness == None && !is_pfloat(rpart) && !is_pfloat(ipart)) {
         do build_exact(rsign, radix, rpart).chain |re| {
-            do build_exact(isign, radix, ipart).chain |im| {
-                Ok(exact(re.clone(), im.clone()))
+            match *ipart {
+                PInt(~"0") | PRational(~"0", _) | PFloat(~"0", ~"0", _) =>
+                    Ok(NReal(LReal::from_rational(re))),
+                _ => do build_exact(isign, radix, ipart).chain |im| {
+                    Ok(exact(re.clone(), im.clone()))
+                },
             }
         }
     } else {
@@ -545,8 +565,7 @@ impl Parser {
                                 None => Err(~"invalid complex literal"),
                             }
                         },
-                        None => 
-                            build_complex(exactness, r, rsign, &rpart, true, &PInt(~"0"))
+                        None => do build_real(exactness, r, rsign, &rpart).map |&r| { NReal(r) },
                     },
             }
         }
@@ -822,7 +841,7 @@ fn expect_rational(src: ~str, d:int, n: int) {
     do io::with_str_reader(src) |rdr| {
         let mut parser = Parser(rdr);
         let val = parser.parse();
-        let expected: LDatum<()> = LNum(from_rational(&Rational::new_int(d, n)));
+        let expected: LDatum<()> = LNum(from_rational(Rational::new_int(d, n)));
         assert_eq!(val, Ok(expected));
     }
 }
@@ -998,7 +1017,7 @@ fn test_minus_num() {
 
 #[test]
 fn test_minus_rational() {
-    test_expect(~"-7/2", &LNum( from_rational(&Rational::new_int(-7, 2)) ));
+    test_expect(~"-7/2", &LNum( from_rational(Rational::new_int(-7, 2)) ));
 }
 
 #[test]
