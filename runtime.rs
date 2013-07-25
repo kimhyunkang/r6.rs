@@ -1348,7 +1348,7 @@ impl Runtime {
             PAtan => match args.len() {
                 1 => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.atan() },
                 2 => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, y| { x.atan2(y) },
-                n => Err(ArgNumError(1, Some(2), args.len())),
+                n => Err(ArgNumError(1, Some(2), n)),
             },
             PSqrt => do call_tc1::<LNumeric, LNumeric>(args) |&x| { x.sqrt() },
             PExpt => do call_tc2::<LNumeric, LNumeric, LNumeric>(args) |x, r| { x.pow(r) },
