@@ -34,6 +34,18 @@
     )
   )
 
+  (define (list-tail x k)
+    (if (zero? k)
+        x
+        (list-tail (cdr x) (- k 1)))
+  )
+
+  (define (list-ref x k)
+    (if (zero? k)
+        (car x)
+        (list-ref (cdr x) (- k 1)))
+  )
+
   (define null '())
 
   (define (caar x) (car (car x)))
