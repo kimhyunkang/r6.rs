@@ -175,21 +175,13 @@ impl Orderable for LReal {
     /// Returns `NaN` if either of the numbers are `NaN`.
     #[inline]
     fn min(&self, other: &LReal) -> LReal {
-        if (*self < *other) {
-            self.clone()
-        } else {
-            other.clone()
-        }
+        impl_coerce_trans!(min)
     }
 
     /// Returns `NaN` if either of the numbers are `NaN`.
     #[inline]
     fn max(&self, other: &LReal) -> LReal {
-        if (*self > *other) {
-            self.clone()
-        } else {
-            other.clone()
-        }
+        impl_coerce_trans!(max)
     }
 
     /// Returns the number constrained within the range `mn <= self <= mx`.

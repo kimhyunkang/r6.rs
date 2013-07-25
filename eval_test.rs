@@ -475,3 +475,11 @@ fn expt_test() {
 fn map_test() {
     eval_test!("(map + '(1 2 3) '(2 3 4))", "(3 5 7)");
 }
+
+#[test]
+fn min_max_test() {
+    eval_test!("(max 3 4)", "4");
+    eval_test!("(max 3.9 4)", "4.0");
+    eval_test!("(min 3 4)", "3");
+    eval_test!("(min 3.9 4)", "3.9");
+}

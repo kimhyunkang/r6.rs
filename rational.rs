@@ -188,6 +188,32 @@ impl Ord for Rational {
     }
 }
 
+impl Orderable for Rational {
+    fn min(&self, other: &Rational) -> Rational {
+        if *self < *other {
+            self.clone()
+        } else {
+            other.clone()
+        }
+    }
+
+    fn max(&self, other: &Rational) -> Rational {
+        if *self < *other {
+            other.clone()
+        } else {
+            self.clone()
+        }
+    }
+
+    fn clamp(&self, mn: &Rational, mx: &Rational) -> Rational {
+        cond!(
+            (!(*self <= *mx)) { mx.clone() }
+            (!(*self >= *mn)) { mn.clone() }
+            _                 { self.clone() }
+        )
+    }
+}
+
 impl Add<Rational, Rational> for Rational {
     fn add(&self, rhs: &Rational) -> Rational {
         let g = self.n.gcd(&rhs.n);
