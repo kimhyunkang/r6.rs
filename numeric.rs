@@ -322,9 +322,19 @@ impl Algebraic for LNumeric {
     }
 
     #[inline]
-    fn hypot(&self, other: &LNumeric) -> LNumeric { trans_numeric!(hypot, other) }
+    fn sqrt(&self) -> LNumeric {
+        match self {
+            &NReal(ref r) => if r.is_negative() {
+                NInexact( Cmplx { re: Zero::zero(), im: r.to_f64().abs().sqrt() } )
+            } else {
+                NReal(r.sqrt())
+            },
+            _ => NInexact(self.to_icmplx().sqrt())
+        }
+    }
+
     #[inline]
-    fn sqrt(&self) -> LNumeric { trans_numeric!(sqrt) }
+    fn hypot(&self, other: &LNumeric) -> LNumeric { trans_numeric!(hypot, other) }
     #[inline]
     fn rsqrt(&self) -> LNumeric { trans_numeric!(rsqrt) }
     #[inline]

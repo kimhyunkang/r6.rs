@@ -498,3 +498,9 @@ fn gcd_test() {
     eval_test!("(lcm 32 -36)", "288");
     eval_test!("(lcm)", "1");
 }
+
+#[test]
+fn sqrt_test() {
+    eval_test!("(sqrt 16)", "4.0");
+    eval_test!("(sqrt -16)", "0.0+4.0i");
+}
