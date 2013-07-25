@@ -1326,6 +1326,12 @@ impl Runtime {
                     Ok(modulo(lhs, rhs))
                 }
             },
+            PGCD => do call_foldl::<BigInt>(args, &Zero::zero()) |lhs, rhs| {
+                Ok(lhs.gcd(rhs))
+            },
+            PLCM => do call_foldl::<BigInt>(args, &One::one()) |lhs, rhs| {
+                Ok(lhs.lcm(rhs))
+            },
             PFloor => do call_tc1::<LReal, LReal>(args) |&x| { x.floor() },
             PCeiling => do call_tc1::<LReal, LReal>(args) |&x| { x.ceil() },
             PRound => do call_tc1::<LReal, LReal>(args) |&x| { x.round() },

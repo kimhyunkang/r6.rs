@@ -490,3 +490,11 @@ fn abs_test() {
     eval_test!("(abs -3)", "3");
     eval_test!("(abs 3+4i)", "5.0");
 }
+
+#[test]
+fn gcd_test() {
+    eval_test!("(gcd 32 -36)", "4");
+    eval_test!("(gcd)", "0");
+    eval_test!("(lcm 32 -36)", "288");
+    eval_test!("(lcm)", "1");
+}
