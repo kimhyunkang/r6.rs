@@ -245,6 +245,11 @@ fn let_test() {
 }
 
 #[test]
+fn let_loop_test() {
+    eval_test!("(let loop ((f 1) (n 4)) (if (> n 0) (loop (* f n) (- n 1)) f))", "24");
+}
+
+#[test]
 fn not_test() {
     eval_test!("(not #t)", "#f");
     eval_test!("(not #f)", "#t");

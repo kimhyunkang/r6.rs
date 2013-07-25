@@ -891,6 +891,43 @@ impl Runtime {
         }
     }
 
+    fn syn_let_loop(&mut self, loop_name: @str, bindings: &RDatum, body: &[@RDatum])
+        -> Result<@RDatum, RuntimeError>
+    {
+        match get_bindings(bindings) {
+            Err(e) => Err(BadSyntax(SynLet, e)),
+            Ok(b) => {
+                let mut arg_frame = HashMap::new();
+                let mut anames = ~[];
+                let mut err:Option<RuntimeError> = None;
+                do b.each |&(name, expr)| {
+                    anames.push(name);
+                    match self.eval(expr) {
+                        Ok(val) => {
+                            arg_frame.insert(name, val);
+                            true
+                        }
+                        Err(e) => {
+                            err = Some(e);
+                            false
+                        }
+                    }
+                };
+                match err {
+                    Some(e) => Err(e),
+                    None => {
+                        let loop_env = @mut push(self.env, HashMap::new());
+                        let loop_lambda = @LExt(RProc(anames, None, body.to_owned(), loop_env));
+                        do loop_env.mut_top |frame| {
+                            frame.insert(loop_name, loop_lambda);
+                        }
+                        self.local_eval(arg_frame, loop_env, body)
+                    },
+                }
+            }
+        }
+    }
+
     fn syn_let(&mut self, bindings: &RDatum, body: &[@RDatum]) -> Result<@RDatum, RuntimeError> {
         match get_bindings(bindings) {
             Err(e) => Err(BadSyntax(SynLet, e)),
@@ -1091,11 +1128,14 @@ impl Runtime {
                         },
                     }
                 },
-            SynLet => if args.len() < 2 {
-                    Err(BadSyntax(SynLet, ~"no body given"))
-                } else {
-                    self.syn_let(args[0], args.slice(1, args.len()))
+            SynLet => match args {
+                [arg0, ..body] => match arg0 {
+                    @LIdent(loop_name) =>
+                        self.syn_let_loop(loop_name, body[0], body.slice(1, body.len())),
+                    _ => self.syn_let(arg0, body),
                 },
+                _ => Err(BadSyntax(SynLet, ~"no body given")),
+            },
             SynLetRec => if args.len() < 2 {
                     Err(BadSyntax(SynLetRec, ~"no body given"))
                 } else {
