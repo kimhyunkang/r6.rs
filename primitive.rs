@@ -5,6 +5,7 @@ use std::cast;
 pub enum PFunc {
     PEval,
     PApply,
+    PMap,
     PBegin,
     PAdd,
     PSub,
@@ -152,6 +153,7 @@ pub fn proc_to_str(&prim: &PFunc) -> @str {
     match prim {
         PEval => @"eval",
         PApply => @"apply",
+        PMap => @"map",
         PBegin => @"begin",
         PAdd => @"+",
         PSub => @"-",

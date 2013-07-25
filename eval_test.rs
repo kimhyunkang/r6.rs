@@ -470,3 +470,8 @@ fn expt_test() {
     eval_test!("(expt 1/2 -2)", "4");
     eval_test!("(expt 0.5 -2)", "4.0");
 }
+
+#[test]
+fn map_test() {
+    eval_test!("(map + '(1 2 3) '(2 3 4))", "(3 5 7)");
+}

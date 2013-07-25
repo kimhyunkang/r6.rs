@@ -750,6 +750,43 @@ priv fn call_err3<A: DatumConv, B: DatumConv, C: DatumConv, R: DatumConv> (
     }
 }
 
+priv fn transpose(args: &[@RDatum]) -> Result<~[~[@RDatum]], RuntimeError>
+{
+    if args.len() == 0 {
+        return Err(ArgNumError(2, None, 1))
+    }
+    let mut ptrs: ~[@RDatum] = do args.map |&arg| { arg };
+    let mut trans = ~[];
+    loop {
+        match ptrs[0] {
+            @LNil => if ptrs.each(|&arg| {*arg == LNil}) {
+                    return Ok(trans)
+                } else {
+                    return Err(PrimitiveError(~"length of args are not equal"))
+                },
+            @LCons(_, _) => {
+                let mut i = 0u;
+                let mut line = vec::with_capacity(args.len());
+                while i < ptrs.len() {
+                    match ptrs[i] {
+                        @LCons(h, t) => {
+                            line.push(h);
+                            ptrs[i] = t;
+                        },
+                        @LNil => 
+                            return Err(PrimitiveError(~"length of args are not equal")),
+                        _ => 
+                            return Err(PrimitiveError(~"non-list argument")),
+                    }
+                    i += 1
+                }
+                trans.push(line)
+            },
+            _ => return Err(NotList),
+        }
+    }
+}
+
 #[inline]
 priv fn ci_cmp(a: char, b: char, op: &fn(u8, u8) -> bool) -> bool
 {
@@ -1218,6 +1255,15 @@ impl Runtime {
             },
             PApply => do call_err2::<RuntimeData, ~[@RDatum], @RDatum>(args) |f, &l| {
                 self.apply(f, l)
+            },
+            PMap => match args {
+                [] => Err(ArgNumError(2, None, 0)),
+                [@LExt(ref f), ..list] => do transpose(list).chain |trans| {
+                    result::map_vec(trans, |&l| { self.apply(f, l) }).map(|&res| {
+                        LDatum::from_list(res)
+                    })
+                },
+                _ => Err(TypeError),
             },
             PBegin => if args.len() == 0 {
                     Ok(@LExt(RBot))
