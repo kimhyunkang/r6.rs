@@ -265,6 +265,13 @@ impl Fractional for LNumeric {
     }
 }
 
+pub fn numeric_abs(n: &LNumeric) -> LReal {
+    match n {
+        &NReal(ref x) => x.abs(),
+        _ => Rf64(n.to_icmplx().norm()),
+    }
+}
+
 macro_rules! trans_numeric(
     ($op:ident) => (
         match self {

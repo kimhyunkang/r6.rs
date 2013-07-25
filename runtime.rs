@@ -1417,6 +1417,7 @@ impl Runtime {
             },
             PMin => do call_tc2::<LReal, LReal, LReal>(args) |x, y| { x.min(y) },
             PMax => do call_tc2::<LReal, LReal, LReal>(args) |x, y| { x.max(y) },
+            PAbs => do call_tc1::<LNumeric, LReal>(args) |x| { numeric_abs(x) },
             PEQ => do call_bfoldl::<LNumeric>(args) |&lhs, &rhs| { lhs == rhs },
             PGT => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs > rhs },
             PLT => do call_bfoldl::<LReal>(args) |&lhs, &rhs| { lhs < rhs },

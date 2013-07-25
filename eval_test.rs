@@ -483,3 +483,10 @@ fn min_max_test() {
     eval_test!("(min 3 4)", "3");
     eval_test!("(min 3.9 4)", "3.9");
 }
+
+#[test]
+fn abs_test() {
+    eval_test!("(abs 3/4)", "3/4");
+    eval_test!("(abs -3)", "3");
+    eval_test!("(abs 3+4i)", "5.0");
+}
