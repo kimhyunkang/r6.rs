@@ -427,9 +427,9 @@ impl<T: DatumConv> DatumConv for GetList<T> {
     }
 }
 
-impl DatumConv for ~[@RDatum] {
+impl DatumConv for @mut ~[@RDatum] {
     #[inline]
-    fn from_datum<R>(datum: @RDatum, op: &fn(&~[@RDatum]) -> R) -> Option<R> {
+    fn from_datum<R>(datum: @RDatum, op: &fn(&@mut ~[@RDatum]) -> R) -> Option<R> {
         match datum {
             @LVector(ref v) => Some(op(v)),
             _ => None,
@@ -437,7 +437,7 @@ impl DatumConv for ~[@RDatum] {
     }
 
     #[inline]
-    fn move_datum(x: ~[@RDatum]) -> @RDatum {
+    fn move_datum(x: @mut ~[@RDatum]) -> @RDatum {
         @LVector(x)
     }
 
@@ -1433,7 +1433,7 @@ impl Runtime {
                     Some(k) => {
                         let mut v = ~[];
                         v.grow(k, &@LExt(RUndef));
-                        Ok(@LVector(v))
+                        Ok(@LVector(@mut v))
                     },
                     None => Err(TypeError),
                 },
@@ -1441,22 +1441,24 @@ impl Runtime {
                     Some(k) => {
                         let mut v = ~[];
                         v.grow(k, y);
-                        Ok(@LVector(v))
+                        Ok(@LVector(@mut v))
                     },
                     None => Err(TypeError),
                 },
                 [_] | [_, _] => Err(TypeError),
                 _ => Err(ArgNumError(1, Some(2), args.len())),
             },
-            PVector => Ok(@LVector(args.to_owned())),
-            PVectorLength => do call_tc1::<~[@RDatum], uint>(args) |v| { v.len() },
-            PVectorRef => do call_err2::<~[@RDatum], uint, @RDatum>(args) |v, &idx| {
+            PVector => Ok(@LVector(@mut args.to_owned())),
+            PVectorLength => do call_tc1::<@mut ~[@RDatum], uint>(args) |v| { v.len() },
+            PVectorRef => do call_err2::<@mut ~[@RDatum], uint, @RDatum>(args) |v, &idx| {
                 if idx < v.len() { Ok(v[idx]) } else { Err(RangeError) }
             },
-            PVectorList => do call_tc1::<~[@RDatum], @RDatum>(args) |&v| { LDatum::from_list(v) },
-            PListVector => do call_err1::<@RDatum, ~[@RDatum]>(args) |&l| {
+            PVectorList => do call_tc1::<@mut ~[@RDatum], @RDatum>(args) |&v| {
+                LDatum::from_list(*v)
+            },
+            PListVector => do call_err1::<@RDatum, @mut ~[@RDatum]>(args) |&l| {
                 match l.to_list() {
-                    Some(v) => Ok(v),
+                    Some(v) => Ok(@mut v),
                     None => Err(TypeError),
                 }
             },
@@ -1609,8 +1611,8 @@ impl Runtime {
                         },
                 },
             @LVector(ref v) => {
-                match result::map_vec(*v, |x| { self.recursive_qq(x) }) {
-                    Ok(qmap) => Ok(@LVector(qmap)),
+                match result::map_vec(**v, |x| { self.recursive_qq(x) }) {
+                    Ok(qmap) => Ok(@LVector(@mut qmap)),
                     Err(e) => Err(e),
                 }
             },

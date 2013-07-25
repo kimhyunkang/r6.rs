@@ -11,7 +11,7 @@ pub enum LDatum<T> {
     LNum(LNumeric),
     LCons(@LDatum<T>, @LDatum<T>),
     LNil,
-    LVector(~[@LDatum<T>]),
+    LVector(@mut ~[@LDatum<T>]),
     LExt(T),
 }
 
@@ -129,7 +129,7 @@ priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>, display: bool) {
         LNil => wr.write_str("()"),
         LVector(v) => {
             wr.write_str("#(");
-            match v {
+            match *v {
                 [] => (),
                 [head, .. tail] => {
                     write_ldatum(wr, head, display);

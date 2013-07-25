@@ -381,7 +381,7 @@ impl Parser {
             '(' | '[' => {
                 let delim = if c == '(' { ')' } else { ']' };
                 match self.parse_vector(delim) {
-                    Ok(v) => Ok(LVector(v)),
+                    Ok(v) => Ok(LVector(@mut v)),
                     Err(e) => Err(e),
                 }
             },
@@ -960,7 +960,7 @@ fn test_parse_list() {
 
 #[test]
 fn test_parse_vector() {
-    test_expect(~"#(a b 1)", &LVector(~[@LIdent(@"a"), @LIdent(@"b"), @LNum(from_int(1))]));
+    test_expect(~"#(a b 1)", &LVector(@mut ~[@LIdent(@"a"), @LIdent(@"b"), @LNum(from_int(1))]));
 }
 
 #[test]
