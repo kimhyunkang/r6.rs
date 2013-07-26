@@ -311,6 +311,7 @@ pub enum PrimSyntax {
     SynQuote,
     SynQQuote,
     SynUnquote,
+    SynUnquoteSplicing,
     SynAnd,
     SynOr,
 }
@@ -350,6 +351,7 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> @str {
         SynQuote => @"quote",
         SynQQuote => @"quasiquote",
         SynUnquote => @"unquote",
+        SynUnquoteSplicing => @"unquote-splicing",
         SynAnd => @"and",
         SynOr => @"or",
     }

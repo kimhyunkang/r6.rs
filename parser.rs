@@ -269,8 +269,13 @@ impl Parser {
             },
             ',' => {
                 self.consume();
-                do self.parse_datum().chain |v| {
-                    Ok(LCons(@LIdent(@"unquote"), @LCons(@v, @LNil)))
+                match self.try_consume(['@']) {
+                    Some(_) => do self.parse_datum().chain |v| {
+                        Ok(LCons(@LIdent(@"unquote-splicing"), @LCons(@v, @LNil)))
+                    },
+                    _ => do self.parse_datum().chain |v| {
+                        Ok(LCons(@LIdent(@"unquote"), @LCons(@v, @LNil)))
+                    },
                 }
             },
             _ =>

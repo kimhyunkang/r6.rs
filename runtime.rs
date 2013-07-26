@@ -1340,6 +1340,11 @@ impl Runtime {
                 } else {
                     Err(BadSyntax(SynUnquote, ~"bad number of arguments"))
                 },
+            SynUnquoteSplicing => if args.len() == 1 {
+                    self.unquote(&args[0])
+                } else {
+                    Err(BadSyntax(SynUnquote, ~"bad number of arguments"))
+                },
             SynAnd => self.syn_and(args),
             SynOr => self.syn_or(args),
         }
@@ -1855,12 +1860,28 @@ impl Runtime {
                         },
                     Some((Unquote, ref v)) => 
                         self.unquote(v),
-                    _ =>
-                        do self.recursive_qq(h).chain |qh| {
+                    _ => match h {
+                        &@LCons(ref hh, ref ht) => match is_quote(hh, ht) {
+                            Some((UnquoteSplicing, ref v)) => do self.unquote(v).chain |qa| {
+                                do self.recursive_qq(t).chain |qb| {
+                                    match qa.append(qb) {
+                                        Some(qs) => Ok(qs),
+                                        None => Err(BadSyntax(SynQQuote, ~"non-list splicing")),
+                                    }
+                                }
+                            },
+                            _ => do self.recursive_qq(h).chain |qh| {
+                                do self.recursive_qq(t).map |&qt| {
+                                    @LCons(qh, qt)
+                                }
+                            },
+                        },
+                        _ => do self.recursive_qq(h).chain |qh| {
                             do self.recursive_qq(t).map |&qt| {
                                 @LCons(qh, qt)
                             }
                         },
+                    }
                 },
             @LVector(ref v) => {
                 match result::map_vec(**v, |x| { self.recursive_qq(x) }) {

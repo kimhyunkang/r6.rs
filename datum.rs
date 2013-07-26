@@ -21,6 +21,7 @@ pub enum Quotation
     Quote,
     QuasiQuote,
     Unquote,
+    UnquoteSplicing,
 }
 
 impl<T: ToStr> ToStr for LDatum<T> {
@@ -44,6 +45,14 @@ impl<T> LDatum<T> {
         match list {
             [] => @LNil,
             [h, ..t] => @LCons(h, LDatum::from_list(t)),
+        }
+    }
+
+    pub fn append(&self, other: @LDatum<T>) -> Option<@LDatum<T>> {
+        match *self {
+            LNil => Some(other),
+            LCons(h, t) => do t.append(other).map |&ts| { @LCons(h, ts) },
+            _ => None,
         }
     }
 }
@@ -111,12 +120,13 @@ priv fn write_ldatum<T: ToStr>(wr: @io::Writer, &v: &LDatum<T>, display: bool) {
         LCons(ref head, ref tail) => {
             match is_quote(head, tail) {
                 Some((name, v)) => {
-                    let ch = match name {
-                        Quote => '\'',
-                        Unquote => ',',
-                        QuasiQuote => '`',
+                    let prefix = match name {
+                        Quote => "\'",
+                        Unquote => ",",
+                        UnquoteSplicing => ",@",
+                        QuasiQuote => "`",
                     };
-                    wr.write_char(ch);
+                    wr.write_str(prefix);
                     write_ldatum(wr, v, display);
                 },
                 None => {
@@ -157,6 +167,8 @@ pub fn is_quote<T>(&head: &@LDatum<T>, &tail: &@LDatum<T>) -> Option<(Quotation,
                         Some((QuasiQuote, v))
                     } else if name == @"unquote" {
                         Some((Unquote, v))
+                    } else if name == @"unquote-splicing" {
+                        Some((UnquoteSplicing, v))
                     } else {
                         None
                     },

@@ -24,7 +24,11 @@ macro_rules! eval_test (
             }
         };
 
+        let list_src = "(define (list . a) a)";
         let mut runtime = Runtime::new_std();
+        do io::with_str_reader(list_src) |rdr| {
+            runtime.load(rdr)
+        };
 
         let val = runtime.eval(expr);
 
@@ -544,4 +548,9 @@ fn do_test2() {
                     (sum 0 (+ sum (car x))))\
                     ((null? x) sum)))";
     eval_test!(s, "25")
+}
+
+#[test]
+fn unquote_splicing_test2() {
+    eval_test!("`(1 ,@(list 1 2) 4)", "(1 1 2 4)")
 }
