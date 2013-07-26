@@ -948,7 +948,7 @@ impl Runtime {
         -> Result<@RDatum, RuntimeError>
     {
         match get_bindings(bindings) {
-            Err(e) => Err(BadSyntax(SynLet, e)),
+            Err(e) => Err(BadSyntax(SynLetStar, e)),
             Ok(b) => {
                 let old_frame = self.env;
                 let mut err:Option<RuntimeError> = None;
@@ -989,7 +989,7 @@ impl Runtime {
     fn syn_letrec(&mut self, bindings: &RDatum, body: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         match get_bindings(bindings) {
-            Err(e) => Err(BadSyntax(SynLet, e)),
+            Err(e) => Err(BadSyntax(SynLetRec, e)),
             Ok(b) => {
                 let old_frame = self.env;
                 let mut arg_frame = HashMap::new();
