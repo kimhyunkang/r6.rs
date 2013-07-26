@@ -530,3 +530,18 @@ fn sqrt_test() {
 fn case_test() {
     eval_test!("(case (* 2 3) ((2 3 5 7) 'prime) ((1 4 6 8 9) 'composite))", "composite")
 }
+
+#[test]
+fn do_test() {
+    let s = "(do ((vec (make-vector 5)) (i 0 (+ i 1))) ((= i 5) vec) (vector-set! vec i i))";
+    eval_test!(s, "#(0 1 2 3 4)")
+}
+
+#[test]
+fn do_test2() {
+    let s = "(let ((x '(1 3 5 7 9)))\
+                (do ((x x (cdr x))\
+                    (sum 0 (+ sum (car x))))\
+                    ((null? x) sum)))";
+    eval_test!(s, "25")
+}

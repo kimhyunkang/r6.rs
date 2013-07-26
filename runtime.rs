@@ -1033,6 +1033,98 @@ impl Runtime {
         }
     }
 
+    fn do_loop(&mut self, inits: @RDatum, test: @RDatum, body: &[@RDatum])
+        -> Result<@RDatum, RuntimeError>
+    {
+        let (test_expr, ret_expr) =
+        match test.to_list() {
+            Some([t, r]) => (t, r),
+            _ => return Err(BadSyntax(SynDo, ~"invalid test expression")),
+        };
+
+        let mut bindings = ~[];
+        let mut init_list = ~[];
+        match inits.to_list() {
+            None => return Err(BadSyntax(SynDo, ~"non-list bindings")),
+            Some(bs) => {
+                let mut i = 0u;
+                while i < bs.len() {
+                    match bs[i].to_list() {
+                        Some([@LIdent(name), init]) => {
+                            bindings.push((name, None));
+                            init_list.push(init);
+                        },
+                        Some([@LIdent(name), init, step]) => {
+                            bindings.push((name, Some(step)));
+                            init_list.push(init);
+                        },
+                        _ =>
+                            return Err(BadSyntax(SynDo, ~"invalid bindings")),
+                    };
+                    i += 1;
+                }
+            },
+        };
+
+        let mut frame = HashMap::new();
+        let mut i = 0u;
+        while i < bindings.len() {
+            let (name, _) = bindings[i];
+            match self.eval(init_list[i]) {
+                Ok(datum) => frame.insert(name, datum),
+                Err(e) => return Err(e),
+            };
+            i += 1;
+        }
+
+        let old_env = self.env;
+        self.env = @mut push(self.env, frame);
+        let res = self.wrap_loop(test_expr, ret_expr, bindings, body);
+        self.env = old_env;
+        res
+    }
+
+    fn wrap_loop(&mut self, test_expr: @RDatum,
+                            ret_expr: @RDatum, 
+                            bindings: &[(@str, Option<@RDatum>)],
+                            body: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+    {
+        loop {
+            match self.eval(test_expr) {
+                Ok(@LBool(false)) => (),
+                _ => return self.eval(ret_expr),
+            }
+
+            let mut i = 0u;
+            while i < body.len() {
+                match self.eval(body[i]) {
+                    Ok(_) => (),
+                    Err(e) => return Err(e),
+                }
+                i += 1;
+            }
+
+            i = 0u;
+            let mut new_bindings = ~[];
+            while i < bindings.len() {
+                match bindings[i] {
+                    (name, Some(step)) => match self.eval(step) {
+                        Ok(datum) => new_bindings.push((name, datum)),
+                        Err(e) => return Err(e),
+                    },
+                    _ => (),
+                };
+                i += 1;
+            }
+
+            do self.env.mut_top |frame| {
+                for new_bindings.each |&(name, datum)| {
+                    frame.insert(name, datum);
+                }
+            }
+        }
+    }
+
     fn case(&mut self, expr: @RDatum, cases: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         let mut i = 0u;
@@ -1193,6 +1285,10 @@ impl Runtime {
                 } else {
                     self.syn_letstar(args[0], args.slice(1, args.len()))
                 },
+            SynDo => match args {
+                [inits, test, ..body] => self.do_loop(inits, test, body),
+                _ => Err(BadSyntax(SynDo, ~"invalid do-loop expression")),
+            },
             SynDefine => if args.len() < 2 {
                     Err(BadSyntax(SynDefine, ~"no body given"))
                 } else {
