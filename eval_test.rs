@@ -525,3 +525,8 @@ fn sqrt_test() {
     eval_test!("(sqrt 16)", "4.0");
     eval_test!("(sqrt -16)", "0.0+4.0i");
 }
+
+#[test]
+fn case_test() {
+    eval_test!("(case (* 2 3) ((2 3 5 7) 'prime) ((1 4 6 8 9) 'composite))", "composite")
+}

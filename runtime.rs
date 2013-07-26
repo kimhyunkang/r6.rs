@@ -815,6 +815,15 @@ priv fn read(rdr: @io::Reader) -> Result<@RDatum, RuntimeError>
     }
 }
 
+priv fn eqv(&arg1: &@RDatum, &arg2: &@RDatum) -> bool {
+    match (arg1, arg2) {
+        (@LCons(_, _), @LCons(_, _)) => managed::ptr_eq(arg1, arg2),
+        (@LString(_), @LString(_)) => managed::ptr_eq(arg1, arg2),
+        (@LExt(_), @LExt(_)) => managed::ptr_eq(arg1, arg2),
+        _ => arg1 == arg2,
+    }
+}
+
 priv fn get_syms(&arg: &@RDatum) -> Result<(~[@str], Option<@str>), ~str> {
     let mut iter = arg;
     let mut args : ~[@str] = ~[];
@@ -1024,6 +1033,50 @@ impl Runtime {
         }
     }
 
+    fn case(&mut self, expr: @RDatum, cases: &[@RDatum]) -> Result<@RDatum, RuntimeError>
+    {
+        let mut i = 0u;
+        let mut exprs = vec::with_capacity(cases.len());
+        let mut else_opt = None;
+        let switch = match self.eval(expr) {
+            Ok(x) => x,
+            Err(e) => return Err(e),
+        };
+
+        while i < cases.len() {
+            match cases[i].to_list() {
+                Some([@LIdent(els), expr]) if els.as_slice() == "else" => 
+                    if i == cases.len()-1 {
+                        else_opt = Some(expr);
+                    } else {
+                        return Err(BadSyntax(SynCase, ~"trailing cases after else"));
+                    },
+                Some([cases, expr]) => match cases.to_list() {
+                    Some(data) => exprs.push((data, expr)),
+                    None => return Err(BadSyntax(SynCase, ~"non-list cases")),
+                },
+                _ => return Err(BadSyntax(SynCase, ~"invalid case expression")),
+            }
+            i += 1;
+        }
+
+        let mut res = Ok(@LExt(RBot));
+
+        let expr_end = do exprs.each |&(data, expr)| {
+            if !data.iter().all(|datum| !eqv(datum, &switch)) {
+                res = self.eval(expr);
+                false
+            } else {
+                true
+            }
+        };
+
+        match else_opt {
+            Some(else_expr) if expr_end => self.eval(else_expr),
+            _ => res
+        }
+    }
+
     fn cond(&mut self, conds: &[@RDatum]) -> Result<@RDatum, RuntimeError>
     {
         let mut i = 0u;
@@ -1107,6 +1160,10 @@ impl Runtime {
                     Err(BadSyntax(SynIf, ~"bad number of arguments"))
                 },
             SynCond => self.cond(args),
+            SynCase => match args {
+                [] => Err(BadSyntax(SynCase, ~"no cases given")), 
+                [expr, .. cases] => self.case(expr, cases),
+            },
             SynLambda => if args.len() < 2 {
                     Err(BadSyntax(SynLambda, ~"no body given"))
                 } else {
@@ -1419,14 +1476,7 @@ impl Runtime {
                 [arg0, arg1] => Ok(@LCons(arg0, arg1)),
                 _ => Err(ArgNumError(2, Some(2), args.len())),
             },
-            PEqv => do call_tc2::<@RDatum, @RDatum, bool>(args) |&arg1, &arg2| {
-                match (arg1, arg2) {
-                    (@LCons(_, _), @LCons(_, _)) => managed::ptr_eq(arg1, arg2),
-                    (@LString(_), @LString(_)) => managed::ptr_eq(arg1, arg2),
-                    (@LExt(_), @LExt(_)) => managed::ptr_eq(arg1, arg2),
-                    _ => arg1 == arg2,
-                }
-            },
+            PEqv => call_tc2::<@RDatum, @RDatum, bool>(args, eqv),
             PEqual => do call_tc2::<@RDatum, @RDatum, bool>(args) |&a, &b| { a == b },
             PNumber => typecheck::<LNumeric>(args),
             PReal => typecheck::<LReal>(args),

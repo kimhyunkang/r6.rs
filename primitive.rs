@@ -300,6 +300,7 @@ impl ToStr for PFunc {
 pub enum PrimSyntax {
     SynIf,
     SynCond,
+    SynCase,
     SynLambda,
     SynLet,
     SynLetRec,
@@ -337,6 +338,7 @@ pub fn syntax_to_str(&prim: &PrimSyntax) -> @str {
     match prim {
         SynIf => @"if",
         SynCond => @"cond",
+        SynCase => @"case",
         SynLambda => @"lambda",
         SynLet => @"let",
         SynLetRec => @"letrec",
