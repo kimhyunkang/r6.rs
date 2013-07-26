@@ -1,11 +1,7 @@
 * r5rs
 
-vector and string mutation
-
-compiled code
-call stack
 call/cc
-TCO 
+macro expansion
 
 * r6rs
 
