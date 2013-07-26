@@ -760,32 +760,22 @@ priv fn transpose(args: &[@RDatum]) -> Result<~[~[@RDatum]], RuntimeError>
     let mut ptrs: ~[@RDatum] = do args.map |&arg| { arg };
     let mut trans = ~[];
     loop {
-        match ptrs[0] {
-            @LNil => if ptrs.each(|&arg| {*arg == LNil}) {
-                    return Ok(trans)
-                } else {
-                    return Err(PrimitiveError(~"length of args are not equal"))
+        let mut i = 0u;
+        let mut line = vec::with_capacity(args.len());
+        while i < ptrs.len() {
+            match ptrs[i] {
+                @LCons(h, t) => {
+                    line.push(h);
+                    ptrs[i] = t;
                 },
-            @LCons(_, _) => {
-                let mut i = 0u;
-                let mut line = vec::with_capacity(args.len());
-                while i < ptrs.len() {
-                    match ptrs[i] {
-                        @LCons(h, t) => {
-                            line.push(h);
-                            ptrs[i] = t;
-                        },
-                        @LNil => 
-                            return Err(PrimitiveError(~"length of args are not equal")),
-                        _ => 
-                            return Err(PrimitiveError(~"non-list argument")),
-                    }
-                    i += 1
-                }
-                trans.push(line)
-            },
-            _ => return Err(NotList),
+                @LNil => 
+                    return Ok(trans),
+                _ => 
+                    return Err(PrimitiveError(~"non-list argument")),
+            }
+            i += 1
         }
+        trans.push(line)
     }
 }
 
