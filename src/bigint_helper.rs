@@ -1,7 +1,22 @@
-use std::num::{Zero, One, FromStrRadix, ToStrRadix};
+use std::num::{Zero, One, FromStrRadix, ToStrRadix, FromPrimitive, NumCast};
 use std::cmp::min;
-use std::cast;
-use extra::bigint::BigInt;
+use std::fmt;
+use num::bigint::BigInt;
+use num::rational::{Ratio, BigRational};
+
+pub fn rational_from_float<T:FloatMath + fmt::Show>(f: T) -> BigRational {
+    match float_disassemble(f) {
+        None => fail!("f is not normal float"),
+        Some((mantissa, exp)) => if exp < 0 {
+                let _1: BigInt = FromPrimitive::from_int(1).unwrap();
+                let n = _1 << (-exp as uint);
+                Ratio::new(n, mantissa)
+            } else {
+                let d = mantissa << (exp as uint);
+                Ratio::new(One::one(), d)
+            }
+    }
+}
 
 pub fn pow_uint<T:Clone + Zero + One + Div<T,T> + Mul<T, T>>(radix: &T, pow: uint) -> T {
     let _0 = Zero::zero();
@@ -12,7 +27,7 @@ pub fn pow_uint<T:Clone + Zero + One + Div<T,T> + Mul<T, T>>(radix: &T, pow: uin
     let mut my_pow     = pow;
     let mut total      = _1;
     let mut multiplier = radix.clone();
-    while (my_pow > 0u) {
+    while my_pow > 0u {
         if my_pow % 2u == 1u {
             total = total * multiplier;
         }
@@ -22,15 +37,16 @@ pub fn pow_uint<T:Clone + Zero + One + Div<T,T> + Mul<T, T>>(radix: &T, pow: uin
     total
 }
 
-pub fn bigint_to_float<T:Float + NumCast + Zero>(n: &BigInt) -> T {
+#[allow(deprecated)]
+pub fn bigint_to_float<T:FloatMath + Zero>(n: &BigInt) -> T {
     if n.is_zero() {
         return Zero::zero()
     }
 
-    let mdigits = Float::mantissa_digits::<T>();
+    let mdigits = Float::mantissa_digits(None::<T>);
     let neg = n.is_negative();
     let repr = n.abs().to_str_radix(2);
-    let mantissa_repr = repr.slice(0, min(mdigits, repr.len()));
+    let mantissa_repr = repr.as_slice().slice(0, min(mdigits, repr.len()));
     let u_mantissa:i64 = FromStrRadix::from_str_radix(mantissa_repr, 2).unwrap();
     let i_mantissa = if neg {
         -u_mantissa
@@ -38,24 +54,28 @@ pub fn bigint_to_float<T:Float + NumCast + Zero>(n: &BigInt) -> T {
         u_mantissa
     };
     let exp = (repr.len() - mantissa_repr.len()) as int;
-    Float::ldexp(NumCast::from(i_mantissa), exp)
+    let m:T = NumCast::from(i_mantissa).unwrap();
+    FloatMath::ldexp(m, exp)
 }
 
-pub fn float_disassemble<T:Float>(f: T) -> Option<(BigInt, int)> {
+pub fn rational_to_f64(r: &BigRational) -> f64 {
+    let d:f64 = bigint_to_float(r.denom());
+    let n:f64 = bigint_to_float(r.numer());
+
+    n / d
+}
+
+pub fn float_disassemble<T:FloatMath + fmt::Show>(f: T) -> Option<(BigInt, i16)> {
     if !f.is_finite() {
         return None
     }
-    let base = 1u64 << (Float::mantissa_digits::<T>() - 1);
-    let mask = base-1;
-    let (fr, fexp) = f.frexp();
-    let u_mantissa = unsafe { cast::transmute::<T, u64>(fr) } & mask;
-    let i_mantissa = if f.is_negative() {
-        -((u_mantissa + base) as i64)
+    let (u_mantissa, exp, sign) = f.integer_decode();
+    let i_mantissa = if sign < 0 {
+        -(u_mantissa as i64)
     } else {
-        (u_mantissa + base) as i64
+        u_mantissa as i64
     };
-    let mantissa = FromStrRadix::from_str_radix(i_mantissa.to_str_radix(16), 16).unwrap();
-    let exp = fexp - (Float::mantissa_digits::<T>() as int);
+    let mantissa = FromPrimitive::from_i64(i_mantissa).unwrap();
     Some((mantissa, exp))
 }
 
@@ -81,23 +101,26 @@ pub fn modulo(l: BigInt, r: BigInt) -> BigInt
 
 #[test]
 fn float_disassemble_test() {
+    let _1: BigInt = One::one();
+
     let ix = 2.0f64;
-    let mantissa = One::one::<BigInt>() << 52;
+    let mantissa = _1 << 52;
     let exp = -51;
     assert_eq!(float_disassemble(ix), Some((mantissa, exp)))
 
     let ix = 0.5f64;
-    let mantissa = One::one::<BigInt>() << 52;
+    let mantissa = _1 << 52;
     let exp = -53;
     assert_eq!(float_disassemble(ix), Some((mantissa, exp)))
 
     let ix = 0.25f64;
-    let mantissa = One::one::<BigInt>() << 52;
+    let mantissa = _1 << 52;
     let exp = -54;
     assert_eq!(float_disassemble(ix), Some((mantissa, exp)))
 
     let ix = 0.75f64;
-    let mantissa = BigInt::from_uint(3) << 51;
+    let _3: BigInt = FromPrimitive::from_uint(3).unwrap();
+    let mantissa = _3 << 51;
     let exp = -53;
     assert_eq!(float_disassemble(ix), Some((mantissa, exp)))
 }
