@@ -177,7 +177,7 @@ fn id_init(c: char) -> bool {
     match c {
         '!' | '$' | '%' | '&' | '*' | '/' | ':' |
         '<' | '=' | '>' | '?' | '^' | '_' | '~' |
-        'a' .. 'z' | 'A' .. 'Z' => true,
+        'a' ... 'z' | 'A' ... 'Z' => true,
         _ => false,
     }
 }
@@ -220,7 +220,7 @@ impl<R:Reader> Parser<R> {
                     self.consume_nil();
                     self.parse_sharp()
                 },
-            '0'..'9' =>
+            '0'...'9' =>
                 self.parse_number("").map(|n| LNum(n) ),
             '(' | '[' => {
                     let delim = if c == '(' { ')' } else { ']' };
@@ -238,7 +238,7 @@ impl<R:Reader> Parser<R> {
                 self.consume_nil();
                 match self.lookahead() {
                     Ok(c0) => match c0 {
-                        '0' .. '9' | 'i' | '.' =>
+                        '0' ... '9' | 'i' | '.' =>
                             self.parse_number(c.to_string().as_slice()).map(|n| LNum(n) ),
                         _ => {
                             println!("{:c}", c);
@@ -475,7 +475,7 @@ impl<R:Reader> Parser<R> {
 
     fn parse_dot<T>(&mut self) -> DResult<T> {
         match self.lookahead() {
-            Ok('0'..'9') => match self.parse_number(".") {
+            Ok('0'...'9') => match self.parse_number(".") {
                 Ok(x) => DDatum(LNum(x)),
                 Err(e) => DErr(e),
             },
@@ -498,7 +498,7 @@ impl<R:Reader> Parser<R> {
         loop {
             match self.lookahead() {
                 Ok(c) => match c {
-                    'a' .. 'z' => {
+                    'a' ... 'z' => {
                         self.consume_nil();
                         lit.push_char(c);
                     },
@@ -614,7 +614,7 @@ impl<R:Reader> Parser<R> {
             };
 
             match c {
-                '0' .. '9' => {
+                '0' ... '9' => {
                     self.consume_nil();
                     exp.push_char(c)
                 },
@@ -779,7 +779,7 @@ impl<R:Reader> Parser<R> {
             };
 
             match c {
-                '0' .. '9' | '+' | '-' | '.' | '@' => ident.push_char(c),
+                '0' ... '9' | '+' | '-' | '.' | '@' => ident.push_char(c),
                 _ =>
                     if id_init(c) {
                         ident.push_char(c)
