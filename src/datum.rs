@@ -55,9 +55,9 @@ impl<T: fmt::Show> fmt::Show for LDatum<T> {
             &LNil => write!(f, "()"),
             &LVector(ref v) => match v.as_slice() {
                 [] => write!(f, "#()"),
-                [ref head, .. ref tail] => {
-                    try!(write!(f, "{}", head))
-                    for x in tail.iter() {
+                slice => {
+                    try!(write!(f, "{}", slice.head()));
+                    for x in slice.tail().iter() {
                         try!(write!(f, " {}", x))
                     }
                     Ok(())
@@ -82,7 +82,7 @@ impl<T> LDatum<T> {
     pub fn from_list(list: &[Rc<LDatum<T>>]) -> Rc<LDatum<T>> {
         match list {
             [] => Rc::new(LNil),
-            [ref h, ..ref t] => Rc::new(LCons(h.clone(), LDatum::from_list(*t))),
+            _ => Rc::new(LCons(list.head().unwrap().clone(), LDatum::from_list(list.tail()))),
         }
     }
 
