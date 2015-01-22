@@ -1,11 +1,8 @@
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::borrow::Cow;
 use std::mem;
 use std::fmt;
 
-use primitive::libprimitive;
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
 use compiler::PrimSyntax;
@@ -157,11 +154,6 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn new(code: Vec<Inst>) -> Runtime {
-        let mut prelude = HashMap::new();
-        for (name, func) in libprimitive().into_iter() {
-            prelude.insert(Cow::Borrowed(name), Datum::Ext(RuntimeData::PrimFunc(name, func)));
-        }
-
         Runtime {
             ret_val: Datum::Nil,
             arg_stack: Vec::new(),
