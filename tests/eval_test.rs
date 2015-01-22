@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::io::BufReader;
 use std::borrow::Cow;
-use r6::runtime::{Runtime, RuntimeData};
-use r6::compiler::{Compiler, PrimSyntax};
+use r6::runtime::Runtime;
+use r6::compiler::{Compiler, EnvVar, Syntax};
 use r6::primitive::PRIM_ADD;
 use r6::parser::Parser;
 
@@ -27,8 +27,8 @@ macro_rules! assert_evaluates_to {
             };
 
             let mut glob = HashMap::new();
-            glob.insert(Cow::Borrowed("lambda"), RuntimeData::PrimSyntax(PrimSyntax::Lambda));
-            glob.insert(Cow::Borrowed("+"), RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD)));
+            glob.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
+            glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
             let mut compiler = Compiler::new(&glob);
             let bytecode = match compiler.compile(&sourcecode) {
                 Ok(code) => code,

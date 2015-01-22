@@ -4,21 +4,27 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::ops::Deref;
 
-use error::{CompileError, CompileErrorKind};
+use error::{CompileError, CompileErrorKind, RuntimeError};
 use datum::Datum;
-use runtime::{Inst, MemRef, RDatum, RuntimeData};
+use runtime::{Inst, MemRef, RDatum, RuntimeData, Closure};
 
 #[derive(Copy, Clone, PartialEq)]
-pub enum PrimSyntax {
+pub enum Syntax {
     Lambda
 }
 
+pub enum EnvVar {
+    Syntax(Syntax),
+    PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
+    Closure(Closure)
+}
+
 pub struct Compiler<'g> {
-    global_env: &'g HashMap<CowString<'static>, RuntimeData>
+    global_env: &'g HashMap<CowString<'static>, EnvVar>
 }
 
 impl<'g> Compiler<'g> {
-    pub fn new<'a>(global_env: &'a HashMap<CowString<'static>, RuntimeData>) -> Compiler<'a> {
+    pub fn new<'a>(global_env: &'a HashMap<CowString<'static>, EnvVar>) -> Compiler<'a> {
         Compiler {
             global_env: global_env
         }
@@ -62,7 +68,7 @@ impl<'g> Compiler<'g> {
         match datum {
             &Datum::Cons(ref h, ref t) =>
                 if let &Datum::Sym(ref n) = h.borrow().deref() {
-                    if let Some(&RuntimeData::PrimSyntax(PrimSyntax::Lambda)) = self.global_env.get(n) {
+                    if let Some(&EnvVar::Syntax(Syntax::Lambda)) = self.global_env.get(n) {
                         if let &Datum::Cons(ref cur_args, ref body) = t.borrow().deref() {
                             let new_stackenv = {
                                 let mut nenv = static_scope.to_vec();
@@ -129,10 +135,12 @@ impl<'g> Compiler<'g> {
 
                 match self.global_env.get(sym) {
                     Some(data) => match data {
-                        &RuntimeData::PrimSyntax(_) =>
+                        &EnvVar::Syntax(_) =>
                             Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
-                        _ =>
-                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(data.clone())))]),
+                        &EnvVar::PrimFunc(ref name, ref func) =>
+                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(name.clone(), func.clone()))))]),
+                        &EnvVar::Closure(ref closure) =>
+                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Closure(closure.clone()))))])
                     },
                     None => 
                         Err(CompileError { kind: CompileErrorKind::UnboundVariable })
@@ -143,7 +151,7 @@ impl<'g> Compiler<'g> {
     }
 }
 
-impl fmt::Show for PrimSyntax {
+impl fmt::Show for Syntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "lambda")
     }
@@ -157,12 +165,12 @@ mod test {
     use std::collections::HashMap;
     use runtime::{Inst, MemRef, RuntimeData};
     use primitive::PRIM_ADD;
-    use super::{Compiler, PrimSyntax};
+    use super::{Compiler, Syntax, EnvVar};
 
     #[test]
     fn test_simple_expr() {
         let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("+"), RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD)));
+        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
         let mut compiler = Compiler::new(&glob);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
@@ -178,7 +186,7 @@ mod test {
     #[test]
     fn test_nested_expr() {
         let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("+"), RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD)));
+        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
         let mut compiler = Compiler::new(&glob);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
@@ -197,8 +205,8 @@ mod test {
     #[test]
     fn test_lambda() {
         let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("lambda"), RuntimeData::PrimSyntax(PrimSyntax::Lambda));
-        glob.insert(Cow::Borrowed("+"), RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD)));
+        glob.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
+        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
         let mut compiler = Compiler::new(&glob);
 
         let f = vec![
@@ -224,8 +232,8 @@ mod test {
     #[test]
     fn test_upvalue() {
         let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("lambda"), RuntimeData::PrimSyntax(PrimSyntax::Lambda));
-        glob.insert(Cow::Borrowed("+"), RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD)));
+        glob.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
+        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
         let mut compiler = Compiler::new(&glob);
 
         let f = vec![

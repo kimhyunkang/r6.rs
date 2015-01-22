@@ -5,12 +5,10 @@ use std::fmt;
 
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
-use compiler::PrimSyntax;
 
 #[derive(Clone)]
 pub enum RuntimeData {
     PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
-    PrimSyntax(PrimSyntax),
     Closure(Closure)
 }
 
@@ -41,8 +39,7 @@ impl DatumType {
             &Datum::Nil => DatumType::List,
             &Datum::Cons(_, _) => DatumType::List,
             &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
-            &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
-            &Datum::Ext(RuntimeData::PrimSyntax(_)) => DatumType::Syntax,
+            &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable
         }
     }
 }
@@ -52,7 +49,6 @@ impl fmt::Show for RuntimeData {
         match self {
             &RuntimeData::PrimFunc(name, _) =>
                 write!(f, "<primitive: {:?}>", name),
-            &RuntimeData::PrimSyntax(name) => name.fmt(f),
             &RuntimeData::Closure(ref closure) =>
                 write!(f, "<procedure {:?}: {:?}>", closure.static_link, closure.code)
         }
@@ -64,12 +60,6 @@ impl PartialEq for RuntimeData {
         match self {
             &RuntimeData::PrimFunc(ref n0, _) =>
                 if let &RuntimeData::PrimFunc(ref n1, _) = other {
-                    *n0 == *n1
-                } else {
-                    false
-                },
-            &RuntimeData::PrimSyntax(ref n0) =>
-                if let &RuntimeData::PrimSyntax(ref n1) = other {
                     *n0 == *n1
                 } else {
                     false
