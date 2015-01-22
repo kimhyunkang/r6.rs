@@ -57,3 +57,11 @@ fn eval_to_self() {
     assert_evaluates_to!("#t", "#t");
     assert_evaluates_to!("23", "23");
 }
+
+#[test]
+fn numeric_expressions() {
+    assert_evaluates_to!("(+ 23 42)", "65");
+    assert_evaluates_to!("(+ 14 (* 23 42))", "980");
+    assert_evaluates_to!("(- 3 1)", "2");
+    assert_evaluates_to!("(- 3)", "-3");
+}
