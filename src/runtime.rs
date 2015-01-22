@@ -132,6 +132,9 @@ pub enum Inst {
     PushArg(MemRef),
     Call(usize),
     DropArg(usize),
+    Jump(usize),
+    JumpIfFalse(usize),
+    Nop,
     Return
 }
 
@@ -319,6 +322,10 @@ impl Runtime {
 
         debug!("fetch: {:?}", value);
         match value {
+            Inst::Nop => {
+                self.frame.pc += 1;
+                true
+            },
             Inst::Call(n) => {
                 let top = self.arg_stack.len();
                 let datum = self.arg_stack[top - n - 1].clone();
@@ -347,6 +354,22 @@ impl Runtime {
                         panic!("Not callable")
                     }
                 }
+            },
+            Inst::Jump(pc) => {
+                self.frame.pc = pc;
+                true
+            },
+            Inst::JumpIfFalse(pc) => match self.arg_stack.pop() {
+                Some(Datum::Bool(false)) => {
+                    self.frame.pc = pc;
+                    true
+                },
+                Some(_) => {
+                    self.frame.pc += 1;
+                    true
+                },
+                None =>
+                    panic!("Stack empty!")
             },
             Inst::PushArg(ptr) => {
                 let val = self.fetch_mem(ptr);

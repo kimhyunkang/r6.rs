@@ -12,5 +12,6 @@ pub fn libbase() -> HashMap<CowString<'static>, EnvVar> {
         lib.insert(Cow::Borrowed(name), EnvVar::PrimFunc(name, func.clone()));
     }
     lib.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
+    lib.insert(Cow::Borrowed("if"), EnvVar::Syntax(Syntax::If));
     return lib;
 }

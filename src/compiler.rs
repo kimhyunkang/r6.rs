@@ -12,7 +12,10 @@ use runtime::{Inst, MemRef, RDatum, RuntimeData};
 #[derive(Copy, Clone, PartialEq)]
 pub enum Syntax {
     /// `lambda` syntax
-    Lambda
+    Lambda,
+
+    /// `if` syntax
+    If
 }
 
 /// Environment variables in the global environment
@@ -48,6 +51,7 @@ impl<'g> Compiler<'g> {
 
     /// Compiles the datum into a bytecode evaluates it
     pub fn compile(&mut self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
+        debug!("compile({:?})", datum);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
@@ -61,6 +65,7 @@ impl<'g> Compiler<'g> {
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_call({:?})", datum);
         let mut arg_count = 0;
         for d in datum.iter() {
             match d {
@@ -84,6 +89,7 @@ impl<'g> Compiler<'g> {
                       args: &[CowString<'static>], body: &RDatum)
             -> Result<CodeGenContext, CompileError>
     {
+        debug!("compile_block({:?})", body);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
@@ -101,10 +107,59 @@ impl<'g> Compiler<'g> {
         return Ok(ctx);
     }
 
+    fn compile_if(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                  ctx: &mut CodeGenContext, tail: &RDatum)
+            -> Result<(), CompileError>
+    {
+        debug!("compile_if({:?})", tail);
+        let exprs:Vec<RDatum> = match tail.iter().collect() {
+            Ok(e) => e,
+            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadIfSyntax })
+        };
+
+        if exprs.len() == 2 || exprs.len() == 3 {
+            let cond = &exprs[0];
+            let then_expr = &exprs[1];
+
+            try!(self.compile_expr(static_scope, args, ctx, cond));
+
+            let cond_jump_pc = ctx.code.len();
+            // placeholder to replace with JumpIfFalse
+            ctx.code.push(Inst::Nop);
+
+            try!(self.compile_expr(static_scope, args, ctx, then_expr));
+
+            if exprs.len() == 2 {
+                ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
+            } else {
+                // When there is an else-clause, we need jump after the then-clause
+
+                let jump_pc = ctx.code.len();
+                // push placeholder to replace with Jump
+                ctx.code.push(Inst::Nop);
+
+                ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
+
+                let else_expr = &exprs[2];
+
+                try!(self.compile_expr(static_scope, args, ctx, else_expr));
+
+                // Currently code[ctx.code.len()] is out of range, but Return will be pushed at the
+                // end of code anyway
+                ctx.code[jump_pc] = Inst::Jump(ctx.code.len());
+            }
+
+            Ok(())
+        } else {
+            Err(CompileError { kind: CompileErrorKind::BadIfSyntax })
+        }
+    }
+
     fn compile_lambda(&mut self, static_scope: &[Vec<CowString<'static>>],
                       args: &[CowString<'static>], ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_lambda({:?})", tail);
         if let &Datum::Cons(ref cur_args, ref body) = tail {
             let new_scope = {
                 let mut nenv = static_scope.to_vec();
@@ -145,12 +200,15 @@ impl<'g> Compiler<'g> {
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_expr({:?})", datum);
         match datum {
             &Datum::Cons(ref h, ref t) =>
                 if let &Datum::Sym(ref n) = h.borrow().deref() {
                     match self.global_env.get(n) {
                         Some(&EnvVar::Syntax(Syntax::Lambda)) =>
                             self.compile_lambda(static_scope, args, ctx, t.borrow().deref()),
+                        Some(&EnvVar::Syntax(Syntax::If)) =>
+                            self.compile_if(static_scope, args, ctx, t.borrow().deref()),
                         _ =>
                             self.compile_call(static_scope, args, ctx, datum)
                     }
@@ -207,7 +265,10 @@ impl<'g> Compiler<'g> {
 
 impl fmt::Show for Syntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "lambda")
+        match *self {
+            Syntax::Lambda => write!(f, "lambda"),
+            Syntax::If => write!(f, "if")
+        }
     }
 }
 

@@ -65,6 +65,8 @@ pub enum CompileErrorKind {
     DottedBody,
     /// Invalid lambda syntax
     BadLambdaSyntax,
+    /// Invalid if syntax
+    BadIfSyntax,
     /// Trying to apply non-function constant
     NotCallable,
     /// Trying to refer a syntax variable

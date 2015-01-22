@@ -45,3 +45,9 @@ fn lexical_scoping() {
     // If it's static scope, it should return 1
     assert_evaluates_to!("((lambda (y f) (f 2)) #f ((lambda (y) (lambda (x) y)) #t))", "#t")
 }
+
+#[test]
+fn if_expression() {
+    assert_evaluates_to!("(if #t 1 0)", "1");
+    assert_evaluates_to!("(if #f 1 0)", "0");
+}
