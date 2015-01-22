@@ -6,7 +6,7 @@ use std::ops::Deref;
 
 use error::{CompileError, CompileErrorKind, RuntimeError};
 use datum::Datum;
-use runtime::{Inst, MemRef, RDatum, RuntimeData, Closure};
+use runtime::{Inst, MemRef, RDatum, RuntimeData};
 
 /// Syntax variables
 #[derive(Copy, Clone, PartialEq)]
@@ -178,10 +178,7 @@ impl<'g> Compiler<'g> {
                             Ok(())
                         },
                         &EnvVar::Procedure(ref code) => {
-                            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Closure(Closure::new(
-                                                code.clone(),
-                                                None
-                            ))))));
+                            ctx.code.push(Inst::PushArg(MemRef::Closure(code.clone(), 0)));
                             Ok(())
                         }
                     },
