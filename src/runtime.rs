@@ -11,7 +11,13 @@ use compiler::PrimSyntax;
 pub enum RuntimeData {
     PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
     PrimSyntax(PrimSyntax),
-    Closure(Rc<Vec<Inst>>, Option<StaticLink>)
+    Closure(Closure)
+}
+
+#[derive(Show, Clone, PartialEq)]
+pub struct Closure {
+    code: Rc<Vec<Inst>>,
+    static_link: Option<StaticLink>
 }
 
 #[derive(Show, Copy)]
@@ -35,7 +41,7 @@ impl DatumType {
             &Datum::Nil => DatumType::List,
             &Datum::Cons(_, _) => DatumType::List,
             &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
-            &Datum::Ext(RuntimeData::Closure(_, _)) => DatumType::Callable,
+            &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::PrimSyntax(_)) => DatumType::Syntax,
         }
     }
@@ -44,10 +50,11 @@ impl DatumType {
 impl fmt::Show for RuntimeData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &RuntimeData::PrimFunc(name, _) => name.fmt(f),
+            &RuntimeData::PrimFunc(name, _) =>
+                write!(f, "<primitive: {:?}>", name),
             &RuntimeData::PrimSyntax(name) => name.fmt(f),
-            &RuntimeData::Closure(ref code, ref static_link) =>
-                write!(f, "<procedure {:?}: {:?}>", static_link, code)
+            &RuntimeData::Closure(ref closure) =>
+                write!(f, "<procedure {:?}: {:?}>", closure.static_link, closure.code)
         }
     }
 }
@@ -67,8 +74,8 @@ impl PartialEq for RuntimeData {
                 } else {
                     false
                 },
-            &RuntimeData::Closure(ref c0, _) =>
-                if let &RuntimeData::Closure(ref c1, _) = other {
+            &RuntimeData::Closure(ref c0) =>
+                if let &RuntimeData::Closure(ref c1) = other {
                     *c0 == *c1
                 } else {
                     false
@@ -117,13 +124,13 @@ pub enum Inst {
     Return
 }
 
-#[derive(Show)]
+#[derive(Show, PartialEq)]
 pub struct HeapClosure {
     args: Vec<RDatum>,
     static_link: Option<StaticLink>
 }
 
-#[derive(Show)]
+#[derive(Show, PartialEq)]
 pub enum ScopePtr {
     // Stack(n) refers to the n-th element of the main call stack
     // if n == runtime.call_stack.len(), this refers to the runtime.frame
@@ -137,11 +144,10 @@ pub type StaticLink = Rc<RefCell<ScopePtr>>;
 
 #[derive(Show)]
 pub struct StackFrame {
-    code: Rc<Vec<Inst>>,
+    closure: Closure,
     pc: usize,
     stack_bottom: usize,
     arg_size: usize,
-    static_link: Option<StaticLink>,
     self_link: StaticLink
 }
 
@@ -159,18 +165,17 @@ impl Runtime {
             arg_stack: Vec::new(),
             call_stack: Vec::new(),
             frame: StackFrame {
-                code: Rc::new(code),
+                closure: Closure { code: Rc::new(code), static_link: None},
                 pc: 0,
                 stack_bottom: 0,
                 arg_size: 0,
-                static_link: None,
                 self_link: Rc::new(RefCell::new(ScopePtr::Stack(0)))
             }
         }
     }
 
     fn fetch(&self) -> Inst {
-        self.frame.code[self.frame.pc].clone()
+        self.frame.closure.code[self.frame.pc].clone()
     }
 
     pub fn get_stack_val(&self, idx: usize) -> RDatum {
@@ -183,16 +188,16 @@ impl Runtime {
             Some(link) => match *link.borrow() {
                 ScopePtr::Heap(ref data) => data.static_link.clone(),
                 ScopePtr::Stack(n) => if n == self.call_stack.len() {
-                        self.frame.static_link.clone()
+                        self.frame.closure.static_link.clone()
                     } else {
-                        self.call_stack[n].static_link.clone()
+                        self.call_stack[n].closure.static_link.clone()
                     },
             }
         }
     }
 
     fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> RDatum {
-        let mut link = self.frame.static_link.clone();
+        let mut link = self.frame.closure.static_link.clone();
         for _ in range(0, link_cnt) {
             link = self.up_scope(link);
         }
@@ -220,8 +225,10 @@ impl Runtime {
             MemRef::UpValue(i, j) => self.get_upvalue(i, j),
             MemRef::Const(val) => val.clone(),
             MemRef::Closure(code, _) => Datum::Ext(RuntimeData::Closure(
-                    code.clone(),
-                    Some(self.frame.self_link.clone())
+                Closure {
+                    code: code.clone(),
+                    static_link: Some(self.frame.self_link.clone())
+                }
             ))
         }
     }
@@ -234,7 +241,7 @@ impl Runtime {
                 let top = bottom + self.frame.arg_size;
                 let heap = HeapClosure {
                     args: self.arg_stack[bottom .. top].to_vec(),
-                    static_link: self.frame.static_link.clone()
+                    static_link: self.frame.closure.static_link.clone()
                 };
                 *self.frame.self_link.borrow_mut() = ScopePtr::Heap(heap);
                 self.frame = f;
@@ -243,17 +250,14 @@ impl Runtime {
         }
     }
 
-    fn push_call_stack(&mut self, code: Rc<Vec<Inst>>, arg_size: usize,
-                       static_link: Option<StaticLink>)
-    {
+    fn push_call_stack(&mut self, arg_size: usize, closure: Closure) {
         let idx = self.call_stack.len();
         let stack_bottom = self.arg_stack.len() - arg_size; 
         let new_frame = StackFrame {
-            code: code.clone(),
+            closure: closure,
             pc: 0,
             stack_bottom: stack_bottom,
             arg_size: arg_size,
-            static_link: static_link,
             self_link: Rc::new(RefCell::new(ScopePtr::Stack(idx+1)))
         };
 
@@ -287,7 +291,11 @@ impl Runtime {
                 let datum = self.arg_stack[top - n - 1].clone();
                 match datum {
                     Datum::Ext(RuntimeData::PrimFunc(_, f)) => {
-                        self.push_call_stack(Rc::new(Vec::new()), n, None);
+                        let dummy_closure = Closure {
+                            code: Rc::new(Vec::new()),
+                            static_link: None
+                        };
+                        self.push_call_stack(n, dummy_closure);
                         let res = match (*f)(&self.arg_stack[top - n ..]) {
                             Ok(x) => x,
                             Err(e) => panic!(e)
@@ -298,8 +306,8 @@ impl Runtime {
                         self.frame.pc += 1;
                         true
                     }, 
-                    Datum::Ext(RuntimeData::Closure(code, static_link)) => {
-                        self.push_call_stack(code, n, static_link);
+                    Datum::Ext(RuntimeData::Closure(closure)) => {
+                        self.push_call_stack(n, closure);
                         true
                     },
                     _ => {
