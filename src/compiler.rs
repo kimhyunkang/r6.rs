@@ -162,16 +162,15 @@ mod test {
     use std::borrow::Cow;
     use std::rc::Rc;
     use datum::Datum;
-    use std::collections::HashMap;
     use runtime::{Inst, MemRef, RuntimeData};
+    use base::libbase;
     use primitive::PRIM_ADD;
-    use super::{Compiler, Syntax, EnvVar};
+    use super::Compiler;
 
     #[test]
     fn test_simple_expr() {
-        let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
-        let mut compiler = Compiler::new(&glob);
+        let env = libbase();
+        let mut compiler = Compiler::new(&env);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(1))),
@@ -185,9 +184,8 @@ mod test {
 
     #[test]
     fn test_nested_expr() {
-        let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
-        let mut compiler = Compiler::new(&glob);
+        let env = libbase();
+        let mut compiler = Compiler::new(&env);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(3))),
@@ -204,10 +202,8 @@ mod test {
 
     #[test]
     fn test_lambda() {
-        let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
-        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
-        let mut compiler = Compiler::new(&glob);
+        let env = libbase();
+        let mut compiler = Compiler::new(&env);
 
         let f = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
@@ -231,10 +227,8 @@ mod test {
 
     #[test]
     fn test_upvalue() {
-        let mut glob = HashMap::new();
-        glob.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
-        glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
-        let mut compiler = Compiler::new(&glob);
+        let env = libbase();
+        let mut compiler = Compiler::new(&env);
 
         let f = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),

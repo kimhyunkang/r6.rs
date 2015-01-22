@@ -15,7 +15,7 @@ fn add(args: &[RDatum]) -> Result<RDatum, RuntimeError> {
 }
 
 pub fn libprimitive() -> Vec<(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>)> {
-    let mut lib = Vec::new();
-    lib.push(("+", Rc::new(PRIM_ADD)));
-    return lib;
+    vec![
+        ("+", Rc::new(PRIM_ADD))
+    ]
 }

@@ -45,3 +45,4 @@ pub mod lexer;
 pub mod runtime;
 pub mod primitive;
 pub mod compiler;
+pub mod base;
