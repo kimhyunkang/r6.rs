@@ -3,7 +3,7 @@ use std::rc::Rc;
 use error::RuntimeError;
 use runtime::{DatumCast, RDatum};
 
-/// (+ n0 n1 ...)
+/// `(+ n0 n1 ...)`
 pub static PRIM_ADD:fn(&[RDatum]) -> Result<RDatum, RuntimeError> = add;
 
 fn add(args: &[RDatum]) -> Result<RDatum, RuntimeError> {
