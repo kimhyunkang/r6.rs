@@ -7,3 +7,5 @@ r6.rs
 [travis]: https://travis-ci.org/kimhyunkang/r6.rs
 
 Scheme implementation written in Rust
+
+The project is a work in progress
