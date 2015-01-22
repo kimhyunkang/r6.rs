@@ -22,6 +22,15 @@ pub struct Closure {
     static_link: Option<StaticLink>
 }
 
+impl Closure {
+    pub fn new(code: Rc<Vec<Inst>>, static_link: Option<StaticLink>) -> Closure {
+        Closure {
+            code: code,
+            static_link: static_link
+        }
+    }
+}
+
 /// Type representation of RDatum
 #[derive(Show, Copy)]
 pub enum DatumType {

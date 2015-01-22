@@ -24,7 +24,7 @@ pub enum EnvVar {
     PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
 
     /// Compiled library functions
-    Closure(Closure)
+    Procedure(Rc<Vec<Inst>>)
 }
 
 /// Compiler compiles Datum into a bytecode evaluates it
@@ -170,8 +170,8 @@ impl<'g> Compiler<'g> {
                             Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
                         &EnvVar::PrimFunc(ref name, ref func) =>
                             Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(name.clone(), func.clone()))))]),
-                        &EnvVar::Closure(ref closure) =>
-                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Closure(closure.clone()))))])
+                        &EnvVar::Procedure(ref code) =>
+                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Closure(Closure::new(code.clone(), None)))))]),
                     },
                     None => 
                         Err(CompileError { kind: CompileErrorKind::UnboundVariable })
