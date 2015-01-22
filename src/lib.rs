@@ -1,18 +1,47 @@
-#![crate_name = "r5"]
+#![crate_name = "r6"]
 
-#![comment = "r5.rs library"]
-#![license = "MIT/ASL2"]
+#![feature(plugin)]
+#![feature(slicing_syntax)]
+#![feature(box_syntax)]
+//TODO: Allow unstable items until Rust hits 1.0
+#![allow(unstable)]
 
-#![feature(macro_rules)]
-#![feature(globs)]
+#[plugin]
+extern crate phf_mac;
+extern crate phf;
+extern crate unicode;
 
-extern crate num;
-#[cfg(test)]
-extern crate debug;
+#[macro_use]
+extern crate log;
 
-pub mod primitive;
+macro_rules! list{
+    ($($x:expr),*) => (
+        vec![$($x),*].into_iter().collect()
+    )
+}
+
+macro_rules! sym{
+    ($e:expr) => (
+        Datum::Sym(Cow::Borrowed($e))
+    )
+}
+
+macro_rules! num{
+    ($e:expr) => (
+        Datum::Num($e)
+    )
+}
+
+macro_rules! nil{
+    () => (
+        Datum::Nil
+    )
+}
+
+pub mod error;
 pub mod datum;
-pub mod bigint_helper;
-pub mod real;
-pub mod numeric;
 pub mod parser;
+pub mod lexer;
+pub mod runtime;
+pub mod primitive;
+pub mod compiler;

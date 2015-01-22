@@ -1,4 +1,8 @@
 [package]
-name = "r5"
+name = "r6"
 version = "0.0.1"
-authors = ["kimhyunkang <kimhyunkang@gmail.com>"]
+authors = [ "kimhyunkang@gmail.com" ]
+
+[dependencies]
+phf = "~0.4.0"
+phf_mac = "~0.4.0"

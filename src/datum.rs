@@ -1,151 +1,139 @@
-use numeric::LNumeric;
-use std::fmt;
+use std::string::CowString;
 use std::rc::Rc;
+use std::cell::RefCell;
+use std::iter::FromIterator;
+use std::ops::Deref;
+use std::fmt;
 
-#[deriving(PartialEq)]
-pub enum LDatum<T> {
-    LIdent(String),
-    LString(String),
-    LChar(char),
-    LBool(bool),
-    LNum(LNumeric),
-    LCons(Rc<LDatum<T>>, Rc<LDatum<T>>),
-    LNil,
-    LVector(Rc<Vec<Rc<LDatum<T>>>>),
-    LExt(T),
+#[derive(PartialEq, Clone)]
+pub enum Datum<T> {
+    Sym(CowString<'static>),
+    Bool(bool),
+    Char(char),
+    Num(isize),
+    Nil,
+    Cons(Rc<RefCell<Datum<T>>>, Rc<RefCell<Datum<T>>>),
+    Ext(T)
 }
 
-#[deriving(PartialEq)]
-pub enum Quotation
-{
-    Quote,
-    QuasiQuote,
-    Unquote,
-    UnquoteSplicing,
-}
-
-impl<T: fmt::Show> fmt::Show for LDatum<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &LIdent(ref s) => write!(f, "{}", s),
-            &LString(ref s) => write!(f, "\"{}\"", s.escape_default()),
-            &LChar(' ') => write!(f, "#\\space"),
-            &LChar('\n') => write!(f, "#\\newline"),
-            &LChar(c) => write!(f, "#\\{:c}", c),
-            &LBool(true) => write!(f, "#t"),
-            &LBool(false) => write!(f, "#f"),
-            &LNum(ref x) => write!(f, "{}", x),
-            &LCons(ref head, ref tail) => {
-                match is_quote(head.deref(), tail.deref()) {
-                    Some((name, v)) => {
-                        let prefix = match name {
-                            Quote => "\'",
-                            Unquote => ",",
-                            UnquoteSplicing => ",@",
-                            QuasiQuote => "`",
-                        };
-                        write!(f, "{}{}", prefix, v)
-                    },
-                    None => {
-                        try!(write!(f, "({}", *head));
-                        write_list(f, tail.deref())
-                    },
-                }
-            },
-            &LNil => write!(f, "()"),
-            &LVector(ref v) => match v.as_slice() {
-                [] => write!(f, "#()"),
-                slice => {
-                    try!(write!(f, "{}", slice.head()));
-                    for x in slice.tail().iter() {
-                        try!(write!(f, " {}", x))
-                    }
-                    Ok(())
-                }
-            },
-            &LExt(ref v) => {
-                write!(f, "{}", v)
-            },
-        }
-    }
-}
-
-impl<T> LDatum<T> {
-    pub fn to_list(&self) -> Option<Vec<Rc<LDatum<T>>>> {
-        match self {
-            &LCons(ref h, ref t) => datum_to_list(h.clone(), t.clone()),
-            &LNil => Some(vec![]),
-            _ => None,
-        }
-    }
-
-    pub fn from_list(list: &[Rc<LDatum<T>>]) -> Rc<LDatum<T>> {
-        match list {
-            [] => Rc::new(LNil),
-            _ => Rc::new(LCons(list.head().unwrap().clone(), LDatum::from_list(list.tail()))),
-        }
-    }
-
-    pub fn append(&self, other: Rc<LDatum<T>>) -> Option<Rc<LDatum<T>>> {
-        match self {
-            &LNil => Some(other),
-            &LCons(ref h, ref t) => t.append(other).map(|ts| { Rc::new(LCons(h.clone(), ts)) }),
-            _ => None,
-        }
-    }
-}
-
-fn datum_to_list<T>(head: Rc<LDatum<T>>, tail: Rc<LDatum<T>>) -> Option<Vec<Rc<LDatum<T>>>> {
-    let mut x = &tail;
-    let mut list = vec![head.clone()];
-
-    loop {
-        match x.deref() {
-            &LCons(ref h, ref t) => {
-                list.push(h.clone());
-                x = t;
-            },
-            &LNil => break,
-            _ => return None,
-        }
-    }
-
-    Some(list)
-}
-
-pub fn is_quote<T>(head: &LDatum<T>, tail: &LDatum<T>) -> Option<(Quotation, Rc<LDatum<T>>)> {
-    match head {
-        &LIdent(ref name) =>
-            match tail {
-                &LCons(ref v, ref t) => match *t.deref() {
-                    LNil => 
-                        if name.as_slice() == "quote" {
-                            Some((Quote, v.clone()))
-                        } else if name.as_slice() == "quasiquote" {
-                            Some((QuasiQuote, v.clone()))
-                        } else if name.as_slice() == "unquote" {
-                            Some((Unquote, v.clone()))
-                        } else if name.as_slice() == "unquote-splicing" {
-                            Some((UnquoteSplicing, v.clone()))
-                        } else {
-                            None
-                        },
-                    _ => None
-                },
-                _ => None
-            },
-        _ =>
-            None,
-    }
-}
-
-fn write_list<T: fmt::Show>(f: &mut fmt::Formatter, v: &LDatum<T>) -> fmt::Result {
-    match v {
-        &LCons(ref head, ref tail) => {
-            try!(write!(f, " {}", head));
-            write_list(f, tail.deref())
+fn write_cons<T: fmt::Show>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
+    match *tail {
+        Datum::Nil => {
+            write!(f, ")")
         },
-        &LNil => write!(f, ")"),
-        _ => write!(f, " . {})", v)
+        Datum::Cons(ref ht, ref tt) => {
+            try!(write!(f, " {:?}", ht.borrow()));
+            write_cons(tt.borrow().deref(), f)
+        },
+        _ => {
+            write!(f, " . {:?})", tail)
+        }
+    }
+}
+
+fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
+    try!(write!(f, "#\\"));
+    match c {
+        '\0' => write!(f, "nul"),
+        '\x08' => write!(f, "backspace"),
+        '\t' => write!(f, "tab"),
+        '\x0c' => write!(f, "page"),
+        '\r' => write!(f, "return"),
+        ' ' => write!(f, "space"),
+        '!'...'~' => write!(f, "{}", c),
+        _ => write!(f, "x{:x}", c as usize)
+    }
+}
+
+impl<T: fmt::Show> fmt::Show for Datum<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Datum::Sym(ref s) => write!(f, "{}", s),
+            Datum::Bool(true) => write!(f, "#t"),
+            Datum::Bool(false) => write!(f, "#f"),
+            Datum::Char(c) => format_char(c, f),
+            Datum::Num(n) => n.fmt(f),
+            Datum::Ext(ref x) => x.fmt(f),
+            Datum::Nil => write!(f, "()"),
+            Datum::Cons(ref h, ref t) => {
+                try!(write!(f, "({:?}", h.borrow()));
+                write_cons(t.borrow().deref(), f)
+            }
+        }
+    }
+}
+
+impl<T: Clone> Datum<T> {
+    pub fn iter(&self) -> DatumIter<T> {
+        DatumIter { ptr: self.clone() }
+    }
+}
+
+pub struct DatumIter<T> {
+    ptr: Datum<T>
+}
+
+impl<T: Clone> Iterator for DatumIter<T> {
+    type Item = Result<Datum<T>, ()>;
+
+    fn next(&mut self) -> Option<Result<Datum<T>, ()>> {
+        let (val, next) = match self.ptr {
+            Datum::Nil => return None,
+            Datum::Cons(ref h, ref t) => (h.borrow().deref().clone(), t.borrow().deref().clone()),
+            _ => return Some(Err(()))
+        };
+
+        self.ptr = next;
+
+        Some(Ok(val))
+    }
+}
+
+impl<T> FromIterator<Datum<T>> for Datum<T> {
+    fn from_iter<Iter: Iterator<Item=Datum<T>> >(iterator: Iter) -> Datum<T> {
+        let list:Vec<Datum<T>> = FromIterator::from_iter(iterator);
+        let mut res = Datum::Nil;
+        for d in list.into_iter().rev() {
+            res = cons(d, res);
+        }
+        return res;
+    }
+}
+
+pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
+    Datum::Cons(Rc::new(RefCell::new(head)), Rc::new(RefCell::new(tail)))
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Datum, cons};
+    use std::borrow::Cow;
+    use std::rc::Rc;
+    use std::cell::RefCell;
+
+    fn compare_fmt(s: &str, datum: Datum<()>) {
+        assert_eq!(s.to_string(), format!("{:?}", datum))
+    }
+
+    #[test]
+    fn test_fmt() {
+        compare_fmt("a", sym!("a"));
+        compare_fmt("()", list!());
+        compare_fmt("(a)", list!(sym!("a")));
+        compare_fmt("(a b)", list!(sym!("a"), sym!("b")));
+        compare_fmt("(a . b)", cons(sym!("a"), sym!("b")));
+    }
+
+    #[test]
+    fn test_iter() {
+        let list: Datum<()> = Datum::Cons(
+            Rc::new(RefCell::new(Datum::Num(1))),
+            Rc::new(RefCell::new(Datum::Cons(
+                Rc::new(RefCell::new(Datum::Num(2))),
+                Rc::new(RefCell::new(Datum::Nil))
+            )
+        )));
+
+        assert_eq!(Ok(vec![Datum::Num(1), Datum::Num(2)]), list.iter().collect());
     }
 }
