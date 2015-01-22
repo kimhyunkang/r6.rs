@@ -5,6 +5,7 @@ use std::borrow::Cow;
 use compiler::{EnvVar, Syntax};
 use primitive::libprimitive;
 
+/// Compiles the global env from `base`
 pub fn libbase() -> HashMap<CowString<'static>, EnvVar> {
     let mut lib = HashMap::new();
     for &(name, ref func) in libprimitive().iter() {

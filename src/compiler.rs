@@ -8,28 +8,40 @@ use error::{CompileError, CompileErrorKind, RuntimeError};
 use datum::Datum;
 use runtime::{Inst, MemRef, RDatum, RuntimeData, Closure};
 
+/// Syntax variables
 #[derive(Copy, Clone, PartialEq)]
 pub enum Syntax {
+    /// `lambda` syntax
     Lambda
 }
 
+/// Environment variables in the global environment
 pub enum EnvVar {
+    /// Syntax variables
     Syntax(Syntax),
+
+    /// Primitive functions
     PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
+
+    /// Compiled library functions
     Closure(Closure)
 }
 
+/// Compiler compiles Datum into a bytecode evaluates it
 pub struct Compiler<'g> {
+    /// Global environment
     global_env: &'g HashMap<CowString<'static>, EnvVar>
 }
 
 impl<'g> Compiler<'g> {
+    /// Creates a new compiler with given environment
     pub fn new<'a>(global_env: &'a HashMap<CowString<'static>, EnvVar>) -> Compiler<'a> {
         Compiler {
             global_env: global_env
         }
     }
 
+    /// Compiles the datum into a bytecode evaluates it
     pub fn compile(&mut self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
         let mut link_size = 0;
         let mut code = try!(self.compile_expr(&[], &[], &mut link_size, datum));

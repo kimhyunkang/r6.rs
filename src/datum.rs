@@ -5,14 +5,25 @@ use std::iter::FromIterator;
 use std::ops::Deref;
 use std::fmt;
 
+/// Datum is the primary data type of Scheme
+/// Datum is a generic type here to make parser somewhat independent from runtime
+/// Ext can hold runtime data not representable in datum syntax, such as primitive function or I/O
+/// ports
 #[derive(PartialEq, Clone)]
 pub enum Datum<T> {
+    /// Symbol
     Sym(CowString<'static>),
+    /// Boolean
     Bool(bool),
+    /// Character
     Char(char),
+    /// Numeric value
     Num(isize),
+    /// `()`
     Nil,
+    /// Pair
     Cons(Rc<RefCell<Datum<T>>>, Rc<RefCell<Datum<T>>>),
+    /// Extra values
     Ext(T)
 }
 
@@ -64,11 +75,14 @@ impl<T: fmt::Show> fmt::Show for Datum<T> {
 }
 
 impl<T: Clone> Datum<T> {
+    /// Iterate the values if it's a proper list
     pub fn iter(&self) -> DatumIter<T> {
         DatumIter { ptr: self.clone() }
     }
 }
 
+/// If the datum is a proper list, iterate the values in the list.
+/// If it's not a list, returns Err(()) when the iterator meets non-null cdr
 pub struct DatumIter<T> {
     ptr: Datum<T>
 }
@@ -100,6 +114,7 @@ impl<T> FromIterator<Datum<T>> for Datum<T> {
     }
 }
 
+/// `cons` the values into a pair
 pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
     Datum::Cons(Rc::new(RefCell::new(head)), Rc::new(RefCell::new(tail)))
 }

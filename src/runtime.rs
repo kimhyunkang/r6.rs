@@ -6,18 +6,23 @@ use std::fmt;
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
 
+/// RuntimeData contains runtime values not representable in standard syntax
 #[derive(Clone)]
 pub enum RuntimeData {
     PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
     Closure(Closure)
 }
 
+/// Compiled closure object 
 #[derive(Show, Clone, PartialEq)]
 pub struct Closure {
+    // Pointer to the bytecode
     code: Rc<Vec<Inst>>,
+    // The lexical environment directly enclosing the code
     static_link: Option<StaticLink>
 }
 
+/// Type representation of RDatum
 #[derive(Show, Copy)]
 pub enum DatumType {
     Sym,
@@ -30,6 +35,7 @@ pub enum DatumType {
 }
 
 impl DatumType {
+    /// Get the type of datum
     fn get_type(datum: &RDatum) -> DatumType {
         match datum {
             &Datum::Sym(_) => DatumType::Sym,
@@ -74,10 +80,14 @@ impl PartialEq for RuntimeData {
     }
 }
 
+/// RDatum contains RuntimeData in addition to normal Datum
 pub type RDatum = Datum<RuntimeData>;
 
+/// Types with implementing DatumCast trait can cast from/to Datum
 pub trait DatumCast {
+    /// Casts Datum into Self, possibly raising error
     fn unwrap(datum: &RDatum) -> Result<Self, RuntimeError>;
+    /// Casts Self into Datum
     fn wrap(&self) -> RDatum;
 }
 
@@ -97,6 +107,7 @@ impl DatumCast for isize {
     }
 }
 
+/// Pointer referring to memory locations in the VM
 #[derive(Clone, Show, PartialEq)]
 pub enum MemRef {
     RetVal,
@@ -106,6 +117,7 @@ pub enum MemRef {
     Closure(Rc<Vec<Inst>>, usize),
 }
 
+/// The instruction of the bytecode
 #[derive(Clone, Show, PartialEq)]
 pub enum Inst {
     PushArg(MemRef),
@@ -114,33 +126,54 @@ pub enum Inst {
     Return
 }
 
+/// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
+/// memory. HeapClosure represents the env in heap memory
 #[derive(Show, PartialEq)]
 pub struct HeapClosure {
     args: Vec<RDatum>,
     static_link: Option<StaticLink>
 }
 
+/// ScopePtr points to the directly enclosing lexical env of the frame. It might be live in stack,
+/// or residing in heap
 #[derive(Show, PartialEq)]
 pub enum ScopePtr {
     // Stack(n) refers to the n-th element of the main call stack
     // if n == runtime.call_stack.len(), this refers to the runtime.frame
     Stack(usize),
 
-    // refers to the heap closure
+    // refers to the heap environment
     Heap(HeapClosure)
 }
 
+/// Shared link to the ScopePtr
 pub type StaticLink = Rc<RefCell<ScopePtr>>;
 
+/// StackFrame represents frame in the main stack
 #[derive(Show)]
 pub struct StackFrame {
+    // Current running code
     closure: Closure,
+
+    // Program counter
     pc: usize,
+
+    // Bottom of the current frame
     stack_bottom: usize,
+
+    // Number of function arguments of the current frame
     arg_size: usize,
+
+    // Pointer link to this frame. When this frame is out of scope, other closures enclosed by
+    // this scope loses reference to upvalues. To prevent such situation, when the frame is out of
+    // scope, the VM copies this frame into a newly allocated heap memory. However, doing that
+    // requires searching entire stack and heap memory looking for the pointers pointing to this
+    // frame. To avoid that, VM just changes self_link pointing to ClosureHeap when the frame goes
+    // out of scope.
     self_link: StaticLink
 }
 
+/// The virtual machine running the bytecode
 pub struct Runtime {
     ret_val: RDatum,
     arg_stack: Vec<RDatum>,
@@ -149,6 +182,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
+    /// Create the new virtual machine with given code
     pub fn new(code: Vec<Inst>) -> Runtime {
         Runtime {
             ret_val: Datum::Nil,

@@ -5,16 +5,24 @@ use std::fmt;
 
 use error::{ParserError, ParserErrorKind};
 
+/// Token types
 #[derive(PartialEq)]
 pub enum Token {
+    /// `(`
     OpenParen,
+    /// `)`
     CloseParen,
+    /// `.`
     Dot,
     Identifier(CowString<'static>),
+    /// `#t`
     True,
+    /// `#f`
     False,
+    /// `#\<String>`
     Character(String),
     Numeric(String),
+    /// End of character stream
     EOF
 }
 
@@ -34,6 +42,7 @@ impl fmt::Show for Token {
     }
 }
 
+/// TokenWrapper provides positional information to each token
 pub struct TokenWrapper {
     pub line: usize,
     pub column: usize,
@@ -74,6 +83,7 @@ fn is_subsequent(c: char) -> bool {
     }
 }
 
+/// Lexer transforms character stream into a token stream
 pub struct Lexer<'a> {
     line: usize,
     column: usize,
@@ -82,6 +92,7 @@ pub struct Lexer<'a> {
 }
 
 impl <'a> Lexer<'a> {
+    /// Creates new Lexer from io::Buffer
     pub fn new<'r>(stream: &'r mut Buffer) -> Lexer<'r> {
         Lexer {
             line: 1,
@@ -91,6 +102,7 @@ impl <'a> Lexer<'a> {
         }
     }
 
+    /// return next token
     pub fn lex_token(&mut self) -> Result<TokenWrapper, ParserError> {
         try!(self.consume_whitespace());
 

@@ -8,6 +8,7 @@ use datum::{Datum, cons};
 use lexer::{Token, TokenWrapper, Lexer};
 use error::{ParserError, ParserErrorKind};
 
+/// Parser parses character stream into a Datum
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     token_buf: Option<TokenWrapper>
@@ -58,6 +59,7 @@ fn parse_numeric(rep: &str) -> Option<isize> {
 }
 
 impl <'a> Parser<'a> {
+    /// Create new parser from io::Buffer
     pub fn new<'r>(stream: &'r mut Buffer) -> Parser<'r> {
         Parser {
             lexer: Lexer::new(stream),
@@ -65,6 +67,7 @@ impl <'a> Parser<'a> {
         }
     }
 
+    /// Parse next datum
     pub fn parse_datum<T>(&mut self) -> Result<Datum<T>, ParserError> {
         let tok = try!(self.consume_token());
         match tok.token {

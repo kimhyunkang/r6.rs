@@ -1,5 +1,7 @@
 #![crate_name = "r6"]
 
+//! r6.rs is an attempt to implement R6RS Scheme in Rust language
+
 #![feature(plugin)]
 #![feature(slicing_syntax)]
 #![feature(box_syntax)]
@@ -38,11 +40,17 @@ macro_rules! nil{
     )
 }
 
+/// Error values returned from parser, compiler or runtime
 pub mod error;
+/// Basic datum types
 pub mod datum;
 pub mod parser;
 pub mod lexer;
+/// Virtual machine running the bytecode
 pub mod runtime;
+/// Primitive functions
 pub mod primitive;
+/// Compiles datum into a bytecode
 pub mod compiler;
+/// R6RS `base` library
 pub mod base;
