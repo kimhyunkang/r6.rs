@@ -129,25 +129,23 @@ impl<'g> Compiler<'g> {
 
             try!(self.compile_expr(static_scope, args, ctx, then_expr));
 
-            if exprs.len() == 2 {
-                ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
-            } else {
-                // When there is an else-clause, we need jump after the then-clause
+            let jump_pc = ctx.code.len();
+            // push placeholder to replace with Jump
+            ctx.code.push(Inst::Nop);
 
-                let jump_pc = ctx.code.len();
-                // push placeholder to replace with Jump
-                ctx.code.push(Inst::Nop);
+            ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
 
-                ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
-
+            if exprs.len() == 3 {
                 let else_expr = &exprs[2];
 
                 try!(self.compile_expr(static_scope, args, ctx, else_expr));
-
-                // Currently code[ctx.code.len()] is out of range, but Return will be pushed at the
-                // end of code anyway
-                ctx.code[jump_pc] = Inst::Jump(ctx.code.len());
+            } else {
+                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
             }
+
+            // Currently code[ctx.code.len()] is out of range, but Return will be pushed at the
+            // end of code anyway
+            ctx.code[jump_pc] = Inst::Jump(ctx.code.len());
 
             Ok(())
         } else {

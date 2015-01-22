@@ -9,8 +9,14 @@ use datum::Datum;
 /// RuntimeData contains runtime values not representable in standard syntax
 #[derive(Clone)]
 pub enum RuntimeData {
+    /// Primitive Function
     PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
-    Closure(Closure)
+
+    /// Compiled Closure
+    Closure(Closure),
+
+    /// Undefined value
+    Undefined
 }
 
 /// Compiled closure object 
@@ -40,7 +46,7 @@ pub enum DatumType {
     Num,
     List,
     Callable,
-    Syntax
+    Undefined
 }
 
 impl DatumType {
@@ -54,7 +60,8 @@ impl DatumType {
             &Datum::Nil => DatumType::List,
             &Datum::Cons(_, _) => DatumType::List,
             &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
-            &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable
+            &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
+            &Datum::Ext(RuntimeData::Undefined) => DatumType::Undefined
         }
     }
 }
@@ -65,7 +72,9 @@ impl fmt::Show for RuntimeData {
             &RuntimeData::PrimFunc(name, _) =>
                 write!(f, "<primitive: {:?}>", name),
             &RuntimeData::Closure(ref closure) =>
-                write!(f, "<procedure {:?}: {:?}>", closure.static_link, closure.code)
+                write!(f, "<procedure {:?}: {:?}>", closure.static_link, closure.code),
+            &RuntimeData::Undefined =>
+                write!(f, "<undefined>")
         }
     }
 }
@@ -82,6 +91,12 @@ impl PartialEq for RuntimeData {
             &RuntimeData::Closure(ref c0) =>
                 if let &RuntimeData::Closure(ref c1) = other {
                     *c0 == *c1
+                } else {
+                    false
+                },
+            &RuntimeData::Undefined =>
+                if let &RuntimeData::Undefined = other {
+                    true
                 } else {
                     false
                 },
