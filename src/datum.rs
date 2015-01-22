@@ -93,7 +93,7 @@ impl<T: Clone> Iterator for DatumIter<T> {
     fn next(&mut self) -> Option<Result<Datum<T>, ()>> {
         let (val, next) = match self.ptr {
             Datum::Nil => return None,
-            Datum::Cons(ref h, ref t) => (h.borrow().deref().clone(), t.borrow().deref().clone()),
+            Datum::Cons(ref h, ref t) => (h.borrow().clone(), t.borrow().clone()),
             _ => return Some(Err(()))
         };
 

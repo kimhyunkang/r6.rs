@@ -129,7 +129,9 @@ impl<'g> Compiler<'g> {
                             };
 
                             let block_ctx = try!(self.compile_block(
-                                    new_scope.as_slice(), new_args.as_slice(), &*body.borrow()
+                                    new_scope.as_slice(),
+                                    new_args.as_slice(),
+                                    body.borrow().deref()
                             ));
 
                             ctx.code.push(Inst::PushArg(MemRef::Closure(
