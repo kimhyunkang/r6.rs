@@ -130,7 +130,11 @@ impl <'a> Lexer<'a> {
             } else {
                 match self.lookahead() {
                     Ok('>') => self.lex_ident("-".to_string()).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s)))),
-                    Ok(c) => Err(self.make_error(ParserErrorKind::InvalidCharacter(c))),
+                    Ok(c) => if c.is_numeric() {
+                            self.lex_numeric('-').map(|s| wrap(line, col, Token::Numeric(s)))
+                        } else {
+                            Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
+                        },
                     Err(e) => match e.kind {
                         IoErrorKind::EndOfFile => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-")))),
                         _ => Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
