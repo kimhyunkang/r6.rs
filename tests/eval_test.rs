@@ -1,12 +1,9 @@
 extern crate r6;
 
-use std::collections::HashMap;
-use std::rc::Rc;
 use std::io::BufReader;
-use std::borrow::Cow;
 use r6::runtime::Runtime;
-use r6::compiler::{Compiler, EnvVar, Syntax};
-use r6::primitive::PRIM_ADD;
+use r6::compiler::Compiler;
+use r6::base::libbase;
 use r6::parser::Parser;
 
 macro_rules! assert_evaluates_to {
@@ -26,10 +23,8 @@ macro_rules! assert_evaluates_to {
                 Err(e) => panic!("failed to parse result: {:?}", e)
             };
 
-            let mut glob = HashMap::new();
-            glob.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
-            glob.insert(Cow::Borrowed("+"), EnvVar::PrimFunc("+", Rc::new(PRIM_ADD)));
-            let mut compiler = Compiler::new(&glob);
+            let base = libbase();
+            let mut compiler = Compiler::new(&base);
             let bytecode = match compiler.compile(&sourcecode) {
                 Ok(code) => code,
                 Err(e) => panic!("compile failure: {:?}", e)
