@@ -34,7 +34,8 @@ pub struct Compiler<'g> {
 }
 
 struct CodeGenContext {
-    link_size: usize,
+    code: Vec<Inst>,
+    link_size: usize
 }
 
 impl<'g> Compiler<'g> {
@@ -48,23 +49,23 @@ impl<'g> Compiler<'g> {
     /// Compiles the datum into a bytecode evaluates it
     pub fn compile(&mut self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
         let mut ctx = CodeGenContext {
-            link_size: 0,
+            code: Vec::new(),
+            link_size: 0
         };
-        let mut code = try!(self.compile_expr(&[], &[], &mut ctx, datum));
-        code.push(Inst::Return);
-        return Ok(code);
+        try!(self.compile_expr(&[], &[], &mut ctx, datum));
+        ctx.code.push(Inst::Return);
+        return Ok(ctx.code);
     }
 
     fn compile_call(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
-            -> Result<Vec<Inst>, CompileError>
+            -> Result<(), CompileError>
     {
-        let mut code = Vec::new();
         let mut arg_count = 0;
         for d in datum.iter() {
             match d {
                 Ok(d) => {
-                    code.push_all(try!(self.compile_expr(static_scope, args, ctx, &d)).as_slice());
+                    try!(self.compile_expr(static_scope, args, ctx, &d));
                     arg_count += 1;
                 },
                 Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedEval })
@@ -74,40 +75,35 @@ impl<'g> Compiler<'g> {
         if arg_count == 0 {
             Err(CompileError { kind: CompileErrorKind::NullEval })
         } else {
-            code.push(Inst::Call(arg_count - 1));
-            Ok(code)
+            ctx.code.push(Inst::Call(arg_count - 1));
+            Ok(())
         }
     }
 
     fn compile_block(&mut self, static_scope: &[Vec<CowString<'static>>],
                       args: &[CowString<'static>], body: &RDatum)
-            -> Result<(Vec<Inst>, usize), CompileError>
+            -> Result<CodeGenContext, CompileError>
     {
         let mut ctx = CodeGenContext {
-            link_size: 0,
+            code: Vec::new(),
+            link_size: 0
         };
-        let mut code = Vec::new();
         for expr in body.iter() {
             if let Ok(e) = expr {
-                let piece = try!(self.compile_expr(
-                        static_scope,
-                        args,
-                        &mut ctx,
-                        &e));
-                code.push_all(piece.as_slice());
+                try!(self.compile_expr(static_scope, args, &mut ctx, &e));
             } else {
                 return Err(CompileError { kind: CompileErrorKind::DottedBody });
             }
         }
 
-        code.push(Inst::Return);
+        ctx.code.push(Inst::Return);
 
-        return Ok((code, ctx.link_size));
+        return Ok(ctx);
     }
 
     fn compile_expr(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
-            -> Result<Vec<Inst>, CompileError>
+            -> Result<(), CompileError>
     {
         match datum {
             &Datum::Cons(ref h, ref t) =>
@@ -132,11 +128,15 @@ impl<'g> Compiler<'g> {
                                 nargs
                             };
 
-                            let (code, link_size) = try!(self.compile_block(
+                            let block_ctx = try!(self.compile_block(
                                     new_scope.as_slice(), new_args.as_slice(), &*body.borrow()
                             ));
 
-                            return Ok(vec![Inst::PushArg(MemRef::Closure(Rc::new(code), link_size))]);
+                            ctx.code.push(Inst::PushArg(MemRef::Closure(
+                                        Rc::new(block_ctx.code),
+                                        block_ctx.link_size
+                            )));
+                            return Ok(());
                         } else {
                             return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax })
                         }
@@ -149,7 +149,8 @@ impl<'g> Compiler<'g> {
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
                 if let Some(i) = range(0, args.len()).find(|&i| args[i] == *sym) {
-                    return Ok(vec![Inst::PushArg(MemRef::Arg(i))])
+                    ctx.code.push(Inst::PushArg(MemRef::Arg(i)));
+                    return Ok(());
                 }
 
                 // (0, static_scope[-1]), (1, static_scope[-2]), (2, static_scope[-3]), ...
@@ -159,7 +160,8 @@ impl<'g> Compiler<'g> {
                             if ctx.link_size < i+1 {
                                 ctx.link_size = i+1;
                             }
-                            return Ok(vec![Inst::PushArg(MemRef::UpValue(i, j))]);
+                            ctx.code.push(Inst::PushArg(MemRef::UpValue(i, j)));
+                            return Ok(());
                         }
                     }
                 }
@@ -168,16 +170,29 @@ impl<'g> Compiler<'g> {
                     Some(data) => match data {
                         &EnvVar::Syntax(_) =>
                             Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
-                        &EnvVar::PrimFunc(ref name, ref func) =>
-                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(name.clone(), func.clone()))))]),
-                        &EnvVar::Procedure(ref code) =>
-                            Ok(vec![Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Closure(Closure::new(code.clone(), None)))))]),
+                        &EnvVar::PrimFunc(ref name, ref func) => {
+                            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
+                                                name.clone(),
+                                                func.clone()
+                            )))));
+                            Ok(())
+                        },
+                        &EnvVar::Procedure(ref code) => {
+                            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Closure(Closure::new(
+                                                code.clone(),
+                                                None
+                            ))))));
+                            Ok(())
+                        }
                     },
                     None => 
                         Err(CompileError { kind: CompileErrorKind::UnboundVariable })
                 }
             },
-            _ => Ok(vec![Inst::PushArg(MemRef::Const(datum.clone()))])
+            _ => {
+                ctx.code.push(Inst::PushArg(MemRef::Const(datum.clone())));
+                Ok(())
+            }
         }
     }
 }
