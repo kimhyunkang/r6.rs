@@ -51,3 +51,9 @@ fn if_expression() {
     assert_evaluates_to!("(if #t 1 0)", "1");
     assert_evaluates_to!("(if #f 1 0)", "0");
 }
+
+#[test]
+fn eval_to_self() {
+    assert_evaluates_to!("#t", "#t");
+    assert_evaluates_to!("23", "23");
+}
