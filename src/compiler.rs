@@ -101,6 +101,46 @@ impl<'g> Compiler<'g> {
         return Ok(ctx);
     }
 
+    fn compile_lambda(&mut self, static_scope: &[Vec<CowString<'static>>],
+                      args: &[CowString<'static>], ctx: &mut CodeGenContext, tail: &RDatum)
+            -> Result<(), CompileError>
+    {
+        if let &Datum::Cons(ref cur_args, ref body) = tail {
+            let new_scope = {
+                let mut nenv = static_scope.to_vec();
+                nenv.push(args.to_vec());
+                nenv
+            };
+
+            let new_args = {
+                let mut nargs = Vec::new();
+                for arg in cur_args.borrow().iter() {
+                    if let Ok(Datum::Sym(s)) = arg {
+                        nargs.push(s)
+                    } else {
+                        return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax });
+                    }
+                }
+                nargs
+            };
+
+            let block_ctx = try!(self.compile_block(
+                    new_scope.as_slice(),
+                    new_args.as_slice(),
+                    body.borrow().deref()
+            ));
+
+            ctx.code.push(Inst::PushArg(MemRef::Closure(
+                    Rc::new(block_ctx.code),
+                    block_ctx.link_size
+            )));
+
+            return Ok(());
+        } else {
+            return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax })
+        }
+    }
+
     fn compile_expr(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
@@ -108,42 +148,11 @@ impl<'g> Compiler<'g> {
         match datum {
             &Datum::Cons(ref h, ref t) =>
                 if let &Datum::Sym(ref n) = h.borrow().deref() {
-                    if let Some(&EnvVar::Syntax(Syntax::Lambda)) = self.global_env.get(n) {
-                        if let &Datum::Cons(ref cur_args, ref body) = t.borrow().deref() {
-                            let new_scope = {
-                                let mut nenv = static_scope.to_vec();
-                                nenv.push(args.to_vec());
-                                nenv
-                            };
-
-                            let new_args = {
-                                let mut nargs = Vec::new();
-                                for arg in cur_args.borrow().iter() {
-                                    if let Ok(Datum::Sym(s)) = arg {
-                                        nargs.push(s)
-                                    } else {
-                                        return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax });
-                                    }
-                                }
-                                nargs
-                            };
-
-                            let block_ctx = try!(self.compile_block(
-                                    new_scope.as_slice(),
-                                    new_args.as_slice(),
-                                    body.borrow().deref()
-                            ));
-
-                            ctx.code.push(Inst::PushArg(MemRef::Closure(
-                                        Rc::new(block_ctx.code),
-                                        block_ctx.link_size
-                            )));
-                            return Ok(());
-                        } else {
-                            return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax })
-                        }
-                    } else {
-                        self.compile_call(static_scope, args, ctx, datum)
+                    match self.global_env.get(n) {
+                        Some(&EnvVar::Syntax(Syntax::Lambda)) =>
+                            self.compile_lambda(static_scope, args, ctx, t.borrow().deref()),
+                        _ =>
+                            self.compile_call(static_scope, args, ctx, datum)
                     }
                 } else {
                     self.compile_call(static_scope, args, ctx, datum)
