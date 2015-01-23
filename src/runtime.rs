@@ -144,14 +144,21 @@ pub enum MemRef {
 /// The instruction of the bytecode
 #[derive(Clone, Show, PartialEq)]
 pub enum Inst {
+    /// no-op
     Nop,
+    /// push value of given pointer to the stack
     PushArg(MemRef),
+    /// call the function in (stack_top - n)
     Call(usize),
+    /// pop the call stack frame, and return to the call site
     Return,
+    /// push the call stack without jumping, and move stack_bottom to (stack_top - n)
     PushFrame(usize),
+    /// pop the call stack without jumping
     PopFrame,
-    DropArg(usize),
+    /// jump to the given pc
     Jump(usize),
+    /// jump to the given pc if current stack top is `#f`
     JumpIfFalse(usize),
 }
 
@@ -417,12 +424,6 @@ impl Runtime {
                 let val = self.fetch_mem(ptr);
                 self.arg_stack.push(val);
                 self.frame.pc += 1;
-                true
-            },
-            Inst::DropArg(n) => {
-                for _ in range(0, n) {
-                    self.pop_stack();
-                }
                 true
             },
             Inst::Return => {
