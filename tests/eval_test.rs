@@ -24,7 +24,7 @@ macro_rules! assert_evaluates_to {
             };
 
             let base = libbase();
-            let mut compiler = Compiler::new(&base);
+            let compiler = Compiler::new(&base);
             let bytecode = match compiler.compile(&sourcecode) {
                 Ok(code) => code,
                 Err(e) => panic!("compile failure: {:?}", e)

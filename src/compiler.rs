@@ -53,7 +53,7 @@ impl<'g> Compiler<'g> {
     }
 
     /// Compiles the datum into a bytecode evaluates it
-    pub fn compile(&mut self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
+    pub fn compile(&self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
         debug!("compile({:?})", datum);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
@@ -64,7 +64,7 @@ impl<'g> Compiler<'g> {
         return Ok(ctx.code);
     }
 
-    fn compile_call(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+    fn compile_call(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
@@ -88,7 +88,7 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_block(&mut self, static_scope: &[Vec<CowString<'static>>],
+    fn compile_block(&self, static_scope: &[Vec<CowString<'static>>],
                       args: &[CowString<'static>], body: &RDatum)
             -> Result<CodeGenContext, CompileError>
     {
@@ -115,7 +115,7 @@ impl<'g> Compiler<'g> {
         return Ok(ctx);
     }
 
-    fn compile_if(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+    fn compile_if(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                   ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
@@ -161,7 +161,7 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_let(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+    fn compile_let(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                    ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
@@ -213,7 +213,7 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_lambda(&mut self, static_scope: &[Vec<CowString<'static>>],
+    fn compile_lambda(&self, static_scope: &[Vec<CowString<'static>>],
                       args: &[CowString<'static>], ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
@@ -254,7 +254,7 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_expr(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+    fn compile_expr(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
@@ -346,7 +346,7 @@ mod test {
     #[test]
     fn test_simple_expr() {
         let env = libbase();
-        let mut compiler = Compiler::new(&env);
+        let compiler = Compiler::new(&env);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(1))),
@@ -361,7 +361,7 @@ mod test {
     #[test]
     fn test_nested_expr() {
         let env = libbase();
-        let mut compiler = Compiler::new(&env);
+        let compiler = Compiler::new(&env);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(3))),
@@ -379,7 +379,7 @@ mod test {
     #[test]
     fn test_lambda() {
         let env = libbase();
-        let mut compiler = Compiler::new(&env);
+        let compiler = Compiler::new(&env);
 
         let f = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
@@ -404,7 +404,7 @@ mod test {
     #[test]
     fn test_upvalue() {
         let env = libbase();
-        let mut compiler = Compiler::new(&env);
+        let compiler = Compiler::new(&env);
 
         let f = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
