@@ -47,21 +47,26 @@ fn lexical_scoping() {
 }
 
 #[test]
-fn if_expression() {
+fn if_expression_test() {
     assert_evaluates_to!("(if #t 1 0)", "1");
     assert_evaluates_to!("(if #f 1 0)", "0");
 }
 
 #[test]
-fn eval_to_self() {
+fn eval_to_self_test() {
     assert_evaluates_to!("#t", "#t");
     assert_evaluates_to!("23", "23");
 }
 
 #[test]
-fn numeric_expressions() {
+fn numeric_expressions_test() {
     assert_evaluates_to!("(+ 23 42)", "65");
     assert_evaluates_to!("(+ 14 (* 23 42))", "980");
     assert_evaluates_to!("(- 3 1)", "2");
     assert_evaluates_to!("(- 3)", "-3");
+}
+
+#[test]
+fn let_test() {
+    assert_evaluates_to!("(let ((x 23) (y 42)) (+ x y))", "65");
 }

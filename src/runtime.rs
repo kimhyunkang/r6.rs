@@ -144,13 +144,15 @@ pub enum MemRef {
 /// The instruction of the bytecode
 #[derive(Clone, Show, PartialEq)]
 pub enum Inst {
+    Nop,
     PushArg(MemRef),
     Call(usize),
+    Return,
+    PushFrame(usize),
+    PopFrame,
     DropArg(usize),
     Jump(usize),
     JumpIfFalse(usize),
-    Nop,
-    Return
 }
 
 /// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
@@ -369,6 +371,31 @@ impl Runtime {
                         panic!("Not callable")
                     }
                 }
+            },
+            Inst::PushFrame(n) => {
+                let new_closure = Closure {
+                    code: self.frame.closure.code.clone(),
+                    static_link: Some(self.frame.self_link.clone())
+                };
+                let idx = self.call_stack.len();
+
+                let new_frame = StackFrame {
+                    closure: new_closure,
+                    pc: self.frame.pc+1,
+                    stack_bottom: self.arg_stack.len() - n,
+                    arg_size: n,
+                    self_link: Rc::new(RefCell::new(ScopePtr::Stack(idx)))
+                };
+
+                self.call_stack.push(new_frame);
+                mem::swap(&mut self.frame, self.call_stack.last_mut().unwrap());
+                true
+            },
+            Inst::PopFrame => {
+                let pc = self.frame.pc;
+                self.pop_call_stack();
+                self.frame.pc = pc+1;
+                true
             },
             Inst::Jump(pc) => {
                 self.frame.pc = pc;

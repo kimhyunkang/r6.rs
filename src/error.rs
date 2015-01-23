@@ -63,10 +63,10 @@ pub enum CompileErrorKind {
     DottedEval,
     /// Expression body is non-proper list, such as `(a b c . d)`
     DottedBody,
-    /// Invalid lambda syntax
-    BadLambdaSyntax,
-    /// Invalid if syntax
-    BadIfSyntax,
+    /// Expression body is `()`
+    EmptyBody,
+    /// Invalid basic syntax
+    BadSyntax,
     /// Trying to apply non-function constant
     NotCallable,
     /// Trying to refer a syntax variable

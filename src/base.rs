@@ -13,5 +13,6 @@ pub fn libbase() -> HashMap<CowString<'static>, EnvVar> {
     }
     lib.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
     lib.insert(Cow::Borrowed("if"), EnvVar::Syntax(Syntax::If));
+    lib.insert(Cow::Borrowed("let"), EnvVar::Syntax(Syntax::Let));
     return lib;
 }

@@ -11,11 +11,14 @@ use runtime::{Inst, MemRef, RDatum, RuntimeData};
 /// Syntax variables
 #[derive(Copy, Clone, PartialEq)]
 pub enum Syntax {
-    /// `lambda` syntax
+    /// `lambda`
     Lambda,
 
-    /// `if` syntax
-    If
+    /// `if`
+    If,
+
+    /// `let`
+    Let
 }
 
 /// Environment variables in the global environment
@@ -94,6 +97,11 @@ impl<'g> Compiler<'g> {
             code: Vec::new(),
             link_size: 0
         };
+
+        if body == &Datum::Nil {
+            return Err(CompileError { kind: CompileErrorKind::EmptyBody });
+        }
+
         for expr in body.iter() {
             if let Ok(e) = expr {
                 try!(self.compile_expr(static_scope, args, &mut ctx, &e));
@@ -114,7 +122,7 @@ impl<'g> Compiler<'g> {
         debug!("compile_if({:?})", tail);
         let exprs:Vec<RDatum> = match tail.iter().collect() {
             Ok(e) => e,
-            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadIfSyntax })
+            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
 
         if exprs.len() == 2 || exprs.len() == 3 {
@@ -149,7 +157,59 @@ impl<'g> Compiler<'g> {
 
             Ok(())
         } else {
-            Err(CompileError { kind: CompileErrorKind::BadIfSyntax })
+            Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        }
+    }
+
+    fn compile_let(&mut self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                   ctx: &mut CodeGenContext, tail: &RDatum)
+            -> Result<(), CompileError>
+    {
+        debug!("compile_let({:?})", tail);
+        if let &Datum::Cons(ref bindings, ref body) = tail {
+            let mut syms = Vec::new();
+            for b in bindings.borrow().iter() {
+                match b {
+                    Ok(datum) => {
+                        let binding:Vec<RDatum> = match datum.iter().collect() {
+                            Ok(v) => v,
+                            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                        };
+                        match binding.as_slice() {
+                            [Datum::Sym(ref sym), ref expr] => {
+                                syms.push(sym.clone());
+                                try!(self.compile_expr(static_scope, args, ctx, expr));
+                            },
+                            _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                        };
+                    },
+                    Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                }
+            }
+            ctx.code.push(Inst::PushFrame(syms.len()));
+
+            let new_scope = {
+                let mut nenv = static_scope.to_vec();
+                nenv.push(args.to_vec());
+                nenv
+            };
+
+            if *body.borrow() == Datum::Nil {
+                return Err(CompileError { kind: CompileErrorKind::EmptyBody });
+            }
+
+            for expr in body.borrow().iter() {
+                match expr {
+                    Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
+                    Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
+                }
+            }
+
+            ctx.code.push(Inst::PopFrame);
+
+            Ok(())
+        } else {
+            return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
     }
 
@@ -171,7 +231,7 @@ impl<'g> Compiler<'g> {
                     if let Ok(Datum::Sym(s)) = arg {
                         nargs.push(s)
                     } else {
-                        return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax });
+                        return Err(CompileError { kind: CompileErrorKind::BadSyntax });
                     }
                 }
                 nargs
@@ -190,7 +250,7 @@ impl<'g> Compiler<'g> {
 
             return Ok(());
         } else {
-            return Err(CompileError { kind: CompileErrorKind::BadLambdaSyntax })
+            return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
     }
 
@@ -207,6 +267,8 @@ impl<'g> Compiler<'g> {
                             self.compile_lambda(static_scope, args, ctx, t.borrow().deref()),
                         Some(&EnvVar::Syntax(Syntax::If)) =>
                             self.compile_if(static_scope, args, ctx, t.borrow().deref()),
+                        Some(&EnvVar::Syntax(Syntax::Let)) =>
+                            self.compile_let(static_scope, args, ctx, t.borrow().deref()),
                         _ =>
                             self.compile_call(static_scope, args, ctx, datum)
                     }
@@ -265,7 +327,8 @@ impl fmt::Show for Syntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Syntax::Lambda => write!(f, "lambda"),
-            Syntax::If => write!(f, "if")
+            Syntax::If => write!(f, "if"),
+            Syntax::Let => write!(f, "let")
         }
     }
 }
