@@ -18,7 +18,10 @@ pub enum Syntax {
     If,
 
     /// `let`
-    Let
+    Let,
+
+    /// `set!`
+    Set
 }
 
 /// Environment variables in the global environment
@@ -254,6 +257,67 @@ impl<'g> Compiler<'g> {
         }
     }
 
+    fn find_var(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                ctx: &mut CodeGenContext, sym: &CowString<'static>)
+            -> Result<MemRef, CompileError>
+    {
+        if let Some(i) = range(0, args.len()).find(|&i| args[i] == *sym) {
+            return Ok(MemRef::Arg(i));
+        }
+
+        // (0, static_scope[-1]), (1, static_scope[-2]), (2, static_scope[-3]), ...
+        for (i, up_args) in static_scope.iter().rev().enumerate() {
+            for (j, arg) in up_args.iter().enumerate() {
+                if *arg == *sym {
+                    if ctx.link_size < i+1 {
+                        ctx.link_size = i+1;
+                    }
+                    return Ok(MemRef::UpValue(i, j));
+                }
+            }
+        }
+
+        match self.global_env.get(sym) {
+            Some(data) => match data {
+                &EnvVar::Syntax(_) =>
+                    Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
+                &EnvVar::PrimFunc(ref name, ref func) => {
+                    Ok(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
+                                        name.clone(),
+                                        func.clone()
+                    ))))
+                },
+                &EnvVar::Procedure(ref code) => {
+                    Ok(MemRef::Closure(code.clone(), 0))
+                }
+            },
+            None => 
+                Err(CompileError { kind: CompileErrorKind::UnboundVariable })
+        }
+    }
+
+    fn compile_set(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                   ctx: &mut CodeGenContext, formal: &RDatum)
+            -> Result<(), CompileError>
+    {
+        debug!("compile_set({:?})", formal);
+        let assignment:Vec<RDatum> = match formal.iter().collect() {
+            Ok(v) => v,
+            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        };
+        match assignment.as_slice() {
+            [Datum::Sym(ref sym), ref expr] => {
+                try!(self.compile_expr(static_scope, args, ctx, expr));
+                let ptr = try!(self.find_var(static_scope, args, ctx, sym));
+                ctx.code.push(Inst::PopArg(ptr));
+                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+                Ok(())
+            },
+            _ =>
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        }
+    }
+
     fn compile_expr(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
@@ -269,6 +333,8 @@ impl<'g> Compiler<'g> {
                             self.compile_if(static_scope, args, ctx, t.borrow().deref()),
                         Some(&EnvVar::Syntax(Syntax::Let)) =>
                             self.compile_let(static_scope, args, ctx, t.borrow().deref()),
+                        Some(&EnvVar::Syntax(Syntax::Set)) =>
+                            self.compile_set(static_scope, args, ctx, t.borrow().deref()),
                         _ =>
                             self.compile_call(static_scope, args, ctx, datum)
                     }
@@ -277,43 +343,9 @@ impl<'g> Compiler<'g> {
                 },
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
-                if let Some(i) = range(0, args.len()).find(|&i| args[i] == *sym) {
-                    ctx.code.push(Inst::PushArg(MemRef::Arg(i)));
-                    return Ok(());
-                }
-
-                // (0, static_scope[-1]), (1, static_scope[-2]), (2, static_scope[-3]), ...
-                for (i, up_args) in static_scope.iter().rev().enumerate() {
-                    for (j, arg) in up_args.iter().enumerate() {
-                        if *arg == *sym {
-                            if ctx.link_size < i+1 {
-                                ctx.link_size = i+1;
-                            }
-                            ctx.code.push(Inst::PushArg(MemRef::UpValue(i, j)));
-                            return Ok(());
-                        }
-                    }
-                }
-
-                match self.global_env.get(sym) {
-                    Some(data) => match data {
-                        &EnvVar::Syntax(_) =>
-                            Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
-                        &EnvVar::PrimFunc(ref name, ref func) => {
-                            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
-                                                name.clone(),
-                                                func.clone()
-                            )))));
-                            Ok(())
-                        },
-                        &EnvVar::Procedure(ref code) => {
-                            ctx.code.push(Inst::PushArg(MemRef::Closure(code.clone(), 0)));
-                            Ok(())
-                        }
-                    },
-                    None => 
-                        Err(CompileError { kind: CompileErrorKind::UnboundVariable })
-                }
+                let ptr = try!(self.find_var(static_scope, args, ctx, sym));
+                ctx.code.push(Inst::PushArg(ptr));
+                return Ok(());
             },
             _ => {
                 ctx.code.push(Inst::PushArg(MemRef::Const(datum.clone())));
@@ -328,7 +360,8 @@ impl fmt::Show for Syntax {
         match *self {
             Syntax::Lambda => write!(f, "lambda"),
             Syntax::If => write!(f, "if"),
-            Syntax::Let => write!(f, "let")
+            Syntax::Let => write!(f, "let"),
+            Syntax::Set => write!(f, "set!")
         }
     }
 }

@@ -2,6 +2,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::mem;
 use std::fmt;
+use std::ops::DerefMut;
 
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
@@ -148,6 +149,8 @@ pub enum Inst {
     Nop,
     /// push value of given pointer to the stack
     PushArg(MemRef),
+    /// pop value from the stack and copy to the given pointer
+    PopArg(MemRef),
     /// call the function in (stack_top - n)
     Call(usize),
     /// pop the call stack frame, and return to the call site
@@ -278,6 +281,30 @@ impl Runtime {
         }
     }
 
+    fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: RDatum) {
+        let mut link = self.frame.closure.static_link.clone();
+        for _ in range(0, link_cnt) {
+            link = self.up_scope(link);
+        }
+        match link {
+            None => panic!("get_upvalue({:?}, {:?}) failed!", link_cnt, arg_idx),
+            Some(link) => match link.borrow_mut().deref_mut() {
+                &mut ScopePtr::Heap(ref mut data) => {
+                    data.args[arg_idx] = val;
+                },
+                &mut ScopePtr::Stack(n) => {
+                    let frame_ref = if n == self.call_stack.len() {
+                        &self.frame
+                    } else {
+                        &self.call_stack[n]
+                    };
+                    let bot = frame_ref.stack_bottom;
+                    self.arg_stack[bot + arg_idx] = val;
+                }
+            }
+        }
+    }
+
     fn fetch_mem(&self, ptr: MemRef) -> RDatum {
         match ptr {
             MemRef::RetVal => self.ret_val.clone(),
@@ -290,6 +317,20 @@ impl Runtime {
                     static_link: Some(self.frame.self_link.clone())
                 }
             ))
+        }
+    }
+
+    fn write_mem(&mut self, ptr: MemRef, val: RDatum) {
+        match ptr {
+            MemRef::RetVal => {
+                self.ret_val = val;
+            },
+            MemRef::Arg(idx) => {
+                self.arg_stack[self.frame.stack_bottom + idx] = val;
+            },
+            MemRef::UpValue(i, j) => self.set_upvalue(i, j, val),
+            MemRef::Const(_) => panic!("Cannot write to read-only memory"),
+            MemRef::Closure(_, _) => panic!("Cannot write to instruction memory")
         }
     }
 
@@ -423,6 +464,15 @@ impl Runtime {
             Inst::PushArg(ptr) => {
                 let val = self.fetch_mem(ptr);
                 self.arg_stack.push(val);
+                self.frame.pc += 1;
+                true
+            },
+            Inst::PopArg(ptr) => {
+                let val = match self.arg_stack.pop() {
+                    Some(x) => x,
+                    None => panic!("Stack empty!")
+                };
+                self.write_mem(ptr, val);
                 self.frame.pc += 1;
                 true
             },

@@ -70,3 +70,8 @@ fn numeric_expressions_test() {
 fn let_test() {
     assert_evaluates_to!("(let ((x 23) (y 42)) (+ x y))", "65");
 }
+
+#[test]
+fn set_test() {
+    assert_evaluates_to!("(let ((x 23)) (set! x 24) x)", "24");
+}
