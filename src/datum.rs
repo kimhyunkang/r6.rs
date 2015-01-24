@@ -2,7 +2,6 @@ use std::string::CowString;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::iter::FromIterator;
-use std::ops::Deref;
 use std::fmt;
 
 /// Datum is the primary data type of Scheme
@@ -22,19 +21,20 @@ pub enum Datum<T> {
     /// `()`
     Nil,
     /// Pair
-    Cons(Rc<RefCell<Datum<T>>>, Rc<RefCell<Datum<T>>>),
+    Cons(Rc<RefCell<(Datum<T>, Datum<T>)>>),
     /// Extra values
     Ext(T)
 }
 
 fn write_cons<T: fmt::Show>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
-    match *tail {
-        Datum::Nil => {
+    match tail {
+        &Datum::Nil => {
             write!(f, ")")
         },
-        Datum::Cons(ref ht, ref tt) => {
-            try!(write!(f, " {:?}", ht.borrow()));
-            write_cons(tt.borrow().deref(), f)
+        &Datum::Cons(ref ptr) => {
+            let pair = ptr.borrow();
+            try!(write!(f, " {:?}", pair.0));
+            write_cons(&pair.1, f)
         },
         _ => {
             write!(f, " . {:?})", tail)
@@ -66,9 +66,10 @@ impl<T: fmt::Show> fmt::Show for Datum<T> {
             Datum::Num(n) => n.fmt(f),
             Datum::Ext(ref x) => x.fmt(f),
             Datum::Nil => write!(f, "()"),
-            Datum::Cons(ref h, ref t) => {
-                try!(write!(f, "({:?}", h.borrow()));
-                write_cons(t.borrow().deref(), f)
+            Datum::Cons(ref ptr) => {
+                let pair = ptr.borrow();
+                try!(write!(f, "({:?}", pair.0));
+                write_cons(&pair.1, f)
             }
         }
     }
@@ -93,7 +94,10 @@ impl<T: Clone> Iterator for DatumIter<T> {
     fn next(&mut self) -> Option<Result<Datum<T>, ()>> {
         let (val, next) = match self.ptr {
             Datum::Nil => return None,
-            Datum::Cons(ref h, ref t) => (h.borrow().clone(), t.borrow().clone()),
+            Datum::Cons(ref ptr) => {
+                let pair = ptr.borrow();
+                (pair.0.clone(), pair.1.clone())
+            }
             _ => return Some(Err(()))
         };
 
@@ -116,7 +120,7 @@ impl<T> FromIterator<Datum<T>> for Datum<T> {
 
 /// `cons` the values into a pair
 pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
-    Datum::Cons(Rc::new(RefCell::new(head)), Rc::new(RefCell::new(tail)))
+    Datum::Cons(Rc::new(RefCell::new((head, tail))))
 }
 
 #[cfg(test)]
@@ -141,13 +145,13 @@ mod test {
 
     #[test]
     fn test_iter() {
-        let list: Datum<()> = Datum::Cons(
-            Rc::new(RefCell::new(Datum::Num(1))),
-            Rc::new(RefCell::new(Datum::Cons(
-                Rc::new(RefCell::new(Datum::Num(2))),
-                Rc::new(RefCell::new(Datum::Nil))
-            )
-        )));
+        let list: Datum<()> = Datum::Cons(Rc::new(RefCell::new((
+            Datum::Num(1),
+            Datum::Cons(Rc::new(RefCell::new((
+                Datum::Num(2),
+                Datum::Nil
+            ))))
+        ))));
 
         assert_eq!(Ok(vec![Datum::Num(1), Datum::Num(2)]), list.iter().collect());
     }

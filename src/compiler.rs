@@ -2,7 +2,6 @@ use std::string::CowString;
 use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::ops::Deref;
 
 use error::{CompileError, CompileErrorKind, RuntimeError};
 use datum::Datum;
@@ -169,9 +168,10 @@ impl<'g> Compiler<'g> {
             -> Result<(), CompileError>
     {
         debug!("compile_let({:?})", tail);
-        if let &Datum::Cons(ref bindings, ref body) = tail {
+        if let &Datum::Cons(ref ptr) = tail {
+            let (ref bindings, ref body) = *ptr.borrow();
             let mut syms = Vec::new();
-            for b in bindings.borrow().iter() {
+            for b in bindings.iter() {
                 match b {
                     Ok(datum) => {
                         let binding:Vec<RDatum> = match datum.iter().collect() {
@@ -197,11 +197,11 @@ impl<'g> Compiler<'g> {
                 nenv
             };
 
-            if *body.borrow() == Datum::Nil {
+            if body == &Datum::Nil {
                 return Err(CompileError { kind: CompileErrorKind::EmptyBody });
             }
 
-            for expr in body.borrow().iter() {
+            for expr in body.iter() {
                 match expr {
                     Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
                     Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
@@ -221,7 +221,8 @@ impl<'g> Compiler<'g> {
             -> Result<(), CompileError>
     {
         debug!("compile_lambda({:?})", tail);
-        if let &Datum::Cons(ref cur_args, ref body) = tail {
+        if let &Datum::Cons(ref ptr) = tail {
+            let (ref cur_args, ref body) = *ptr.borrow();
             let new_scope = {
                 let mut nenv = static_scope.to_vec();
                 nenv.push(args.to_vec());
@@ -230,7 +231,7 @@ impl<'g> Compiler<'g> {
 
             let new_args = {
                 let mut nargs = Vec::new();
-                for arg in cur_args.borrow().iter() {
+                for arg in cur_args.iter() {
                     if let Ok(Datum::Sym(s)) = arg {
                         nargs.push(s)
                     } else {
@@ -243,7 +244,7 @@ impl<'g> Compiler<'g> {
             let block_ctx = try!(self.compile_block(
                     new_scope.as_slice(),
                     new_args.as_slice(),
-                    body.borrow().deref()
+                    body
             ));
 
             ctx.code.push(Inst::PushArg(MemRef::Closure(
@@ -324,17 +325,17 @@ impl<'g> Compiler<'g> {
     {
         debug!("compile_expr({:?})", datum);
         match datum {
-            &Datum::Cons(ref h, ref t) =>
-                if let &Datum::Sym(ref n) = h.borrow().deref() {
+            &Datum::Cons(ref ptr) =>
+                if let (Datum::Sym(ref n), ref t) = *ptr.borrow() {
                     match self.global_env.get(n) {
                         Some(&EnvVar::Syntax(Syntax::Lambda)) =>
-                            self.compile_lambda(static_scope, args, ctx, t.borrow().deref()),
+                            self.compile_lambda(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::If)) =>
-                            self.compile_if(static_scope, args, ctx, t.borrow().deref()),
+                            self.compile_if(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::Let)) =>
-                            self.compile_let(static_scope, args, ctx, t.borrow().deref()),
+                            self.compile_let(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::Set)) =>
-                            self.compile_set(static_scope, args, ctx, t.borrow().deref()),
+                            self.compile_set(static_scope, args, ctx, t),
                         _ =>
                             self.compile_call(static_scope, args, ctx, datum)
                     }

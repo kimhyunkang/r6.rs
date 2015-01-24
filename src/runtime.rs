@@ -59,7 +59,7 @@ impl DatumType {
             &Datum::Char(_) => DatumType::Char,
             &Datum::Num(_) => DatumType::Num,
             &Datum::Nil => DatumType::List,
-            &Datum::Cons(_, _) => DatumType::List,
+            &Datum::Cons(_) => DatumType::List,
             &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Undefined) => DatumType::Undefined
