@@ -153,6 +153,8 @@ pub enum Inst {
     PushArg(MemRef),
     /// pop value from the stack and copy to the given pointer
     PopArg(MemRef),
+    /// pop value from the stack and remove it
+    DropArg,
     /// call the function in (stack_top - n)
     Call(usize),
     /// pop the call stack frame, and return to the call site
@@ -475,6 +477,11 @@ impl Runtime {
                     None => panic!("Stack empty!")
                 };
                 self.write_mem(ptr, val);
+                self.frame.pc += 1;
+                true
+            },
+            Inst::DropArg => {
+                self.arg_stack.pop();
                 self.frame.pc += 1;
                 true
             },

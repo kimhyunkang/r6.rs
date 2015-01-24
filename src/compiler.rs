@@ -104,7 +104,15 @@ impl<'g> Compiler<'g> {
             return Err(CompileError { kind: CompileErrorKind::EmptyBody });
         }
 
+        let mut first = true;
+
         for expr in body.iter() {
+            if first {
+                first = false;
+            } else {
+                ctx.code.push(Inst::DropArg);
+            }
+
             if let Ok(e) = expr {
                 try!(self.compile_expr(static_scope, args, &mut ctx, &e));
             } else {
