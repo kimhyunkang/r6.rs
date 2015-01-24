@@ -32,11 +32,17 @@ fn invalid_token(tok: &TokenWrapper) -> ParserError {
 
 static CHAR_MAP: phf::Map<&'static str, char> = phf_map! {
     "nul" => '\0',
+    "alarm" => '\x07',
     "backspace" => '\x08',
     "tab" => '\t',
+    "newline" => '\n',
+    "linefeed" => '\n',
+    "vtab" => '\x0b',
     "page" => '\x0c',
     "return" => '\r',
+    "esc" => '\x1b',
     "space" => ' ',
+    "delete" => '\x7f'
 };
 
 fn parse_char(ch: &str) -> Option<char> {
