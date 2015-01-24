@@ -26,7 +26,7 @@ pub enum Datum<T> {
     Ext(T)
 }
 
-fn write_cons<T: fmt::Show>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
+fn write_cons<T: fmt::Debug>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
     match tail {
         &Datum::Nil => {
             write!(f, ")")
@@ -56,7 +56,7 @@ fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-impl<T: fmt::Show> fmt::Show for Datum<T> {
+impl<T: fmt::Debug> fmt::Debug for Datum<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Datum::Sym(ref s) => write!(f, "{}", s),

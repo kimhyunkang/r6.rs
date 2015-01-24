@@ -1,8 +1,9 @@
 use std::io::IoError;
 use std::error::{Error, FromError};
+use std::fmt;
 
 /// Possible parser errors
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ParserErrorKind {
     /// Parser met EOF before parsing a proper datum
     UnexpectedEOF,
@@ -18,7 +19,7 @@ pub enum ParserErrorKind {
 }
 
 /// Parser error
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ParserError {
     pub line: usize,
     pub column: usize,
@@ -30,15 +31,17 @@ impl Error for ParserError {
         ""
     }
 
-    fn detail(&self) -> Option<String> {
-        None
-    }
-
     fn cause(&self) -> Option<&Error> {
         match self.kind {
             ParserErrorKind::UnderlyingError(ref e) => Some(e as &Error),
             _ => None
         }
+    }
+}
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "line {:?}, column {:?}: {:?}", self.line, self.column, self.kind)
     }
 }
 
@@ -53,7 +56,7 @@ impl FromError<IoError> for ParserError {
 }
 
 /// Possible compiler errors
-#[derive(Show, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Copy)]
 pub enum CompileErrorKind {
     /// The syntax is not implemented yet
     NotImplemented,
@@ -76,13 +79,13 @@ pub enum CompileErrorKind {
 }
 
 /// Compiler error
-#[derive(Show, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Copy)]
 pub struct CompileError {
     pub kind: CompileErrorKind
 }
 
 /// Errors raised in runtime
-#[derive(Show, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum RuntimeErrorKind {
     /// Number of arguments did not match
     NumArgs,
@@ -91,7 +94,7 @@ pub enum RuntimeErrorKind {
 }
 
 /// Errors raised in runtime
-#[derive(Show, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RuntimeError {
     pub kind: RuntimeErrorKind,
     pub desc: String

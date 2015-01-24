@@ -26,7 +26,7 @@ pub enum Token {
     EOF
 }
 
-impl fmt::Show for Token {
+impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Token::OpenParen => write!(f, "OpenParen"),

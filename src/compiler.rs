@@ -356,7 +356,7 @@ impl<'g> Compiler<'g> {
     }
 }
 
-impl fmt::Show for Syntax {
+impl fmt::Debug for Syntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Syntax::Lambda => write!(f, "lambda"),

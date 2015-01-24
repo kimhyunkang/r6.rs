@@ -21,7 +21,7 @@ pub enum RuntimeData {
 }
 
 /// Compiled closure object 
-#[derive(Show, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     // Pointer to the bytecode
     code: Rc<Vec<Inst>>,
@@ -39,7 +39,7 @@ impl Closure {
 }
 
 /// Type representation of RDatum
-#[derive(Show, Copy)]
+#[derive(Debug, Copy)]
 pub enum DatumType {
     Sym,
     Bool,
@@ -67,7 +67,7 @@ impl DatumType {
     }
 }
 
-impl fmt::Show for RuntimeData {
+impl fmt::Debug for RuntimeData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             &RuntimeData::PrimFunc(name, _) =>
@@ -133,7 +133,7 @@ impl DatumCast for isize {
 }
 
 /// Pointer referring to memory locations in the VM
-#[derive(Clone, Show, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum MemRef {
     RetVal,
     Arg(usize),
@@ -143,7 +143,7 @@ pub enum MemRef {
 }
 
 /// The instruction of the bytecode
-#[derive(Clone, Show, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
     /// no-op
     Nop,
@@ -167,7 +167,7 @@ pub enum Inst {
 
 /// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
 /// memory. HeapClosure represents the env in heap memory
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct HeapClosure {
     args: Vec<RDatum>,
     static_link: Option<StaticLink>
@@ -175,7 +175,7 @@ pub struct HeapClosure {
 
 /// ScopePtr points to the directly enclosing lexical env of the frame. It might be live in stack,
 /// or residing in heap
-#[derive(Show, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum ScopePtr {
     // Stack(n) refers to the n-th element of the main call stack
     // if n == runtime.call_stack.len(), this refers to the runtime.frame
@@ -189,7 +189,7 @@ pub enum ScopePtr {
 pub type StaticLink = Rc<RefCell<ScopePtr>>;
 
 /// StackFrame represents frame in the main stack
-#[derive(Show)]
+#[derive(Debug)]
 pub struct StackFrame {
     // Current running code
     closure: Closure,
