@@ -2,6 +2,8 @@ use std::io::{IoError, IoErrorKind};
 use std::string::CowString;
 use std::borrow::Cow;
 use std::fmt;
+use std::num;
+use std::char;
 
 use error::{ParserError, ParserErrorKind};
 
@@ -21,6 +23,7 @@ pub enum Token {
     False,
     /// `#\<String>`
     Character(String),
+    String(String),
     Numeric(String),
     /// End of character stream
     EOF
@@ -37,6 +40,7 @@ impl fmt::Debug for Token {
             Token::False => write!(f, "#f"),
             Token::Character(ref name) => write!(f, "#\\{}", name),
             Token::Numeric(ref rep) => rep.fmt(f),
+            Token::String(ref rep) => write!(f, "{:?}", rep),
             Token::EOF => write!(f, "EOF"),
         }
     }
@@ -161,6 +165,8 @@ impl <'a> Lexer<'a> {
                 '\\' => self.lex_char().map(|s| wrap(line, col, Token::Character(s))),
                 _ => Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
             }
+        } else if c == '"' {
+            self.lex_string().map(|s| wrap(line, col, Token::String(s)))
         } else if c.is_numeric() {
             self.lex_numeric(c).map(|s| wrap(line, col, Token::Numeric(s)))
         } else {
@@ -199,6 +205,74 @@ impl <'a> Lexer<'a> {
         let sub = try!(self.read_while(|c| c.is_alphanumeric()));
         s.push_str(sub.as_slice());
         return Ok(s);
+    }
+
+    fn lex_string(&mut self) -> Result<String, ParserError> {
+        let mut s = String::new();
+        loop {
+            match self.consume() {
+                Err(e) => return Err(match e.kind {
+                    IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
+                    _ => self.make_error(ParserErrorKind::UnderlyingError(e))
+                }),
+                Ok('"') => return Ok(s),
+                Ok('\\') => match self.consume() {
+                    Err(e) => return Err(match e.kind {
+                        IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
+                        _ => self.make_error(ParserErrorKind::UnderlyingError(e))
+                    }),
+                    Ok('a') => s.push('\x07'),
+                    Ok('b') => s.push('\x08'),
+                    Ok('t') => s.push('\t'),
+                    Ok('n') => s.push('\n'),
+                    Ok('v') => s.push('\x0b'),
+                    Ok('f') => s.push('\x0c'),
+                    Ok('r') => s.push('\r'),
+                    Ok('"') => s.push('"'),
+                    Ok('\\') => s.push('\\'),
+                    Ok('x') => {
+                        let mut hex_str = String::new();
+                        loop {
+                            match self.consume() {
+                                Ok(';') => break,
+                                Ok(c) => hex_str.push(c),
+                                Err(e) => return Err(match e.kind {
+                                    IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
+                                    _ => self.make_error(ParserErrorKind::UnderlyingError(e))
+                                }),
+                            }
+                        }
+                        if hex_str.len() == 0 {
+                            return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
+                        }
+                        let code = match num::from_str_radix(hex_str.as_slice(), 16) {
+                            Some(n) => n,
+                            None => return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
+                        };
+                        match char::from_u32(code) {
+                            Some(c) => s.push(c),
+                            None => return Err(self.make_error(ParserErrorKind::InvalidUnicodeRange(code)))
+                        }
+                    },
+                    Ok(c) =>
+                        if c.is_whitespace() {
+                            try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
+                            if c != '\n' {
+                                if let Ok('\n') = self.consume() {
+                                    try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
+                                } else {
+                                    return Err(self.make_error(ParserErrorKind::InvalidStringLiteral))
+                                }
+                            }
+                        } else {
+                            let mut s = String::new();
+                            s.push(c);
+                            return Err(self.make_error(ParserErrorKind::InvalidStringEscape(s)))
+                        }
+                },
+                Ok(c) => s.push(c),
+            }
+        }
     }
 
     fn lex_numeric(&mut self, init: char) -> Result<String, ParserError> {

@@ -12,6 +12,12 @@ pub enum ParserErrorKind {
     UnexpectedToken(String, String),
     /// Lexer met character not allowed in source code
     InvalidCharacter(char),
+    /// Lexer met unknown escape character
+    InvalidStringEscape(String),
+    /// Lexer met non-unicode character codepoint
+    InvalidUnicodeRange(u32),
+    /// Lexer met non-unicode character codepoint
+    InvalidStringLiteral,
     /// Parser met un-parseable token
     InvalidToken(String),
     /// Parser met IoError while reading the underlying stream

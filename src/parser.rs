@@ -85,6 +85,7 @@ impl <'a> Parser<'a> {
                 Some(c) => Ok(Datum::Char(c)),
                 None => Err(invalid_token(&tok))
             },
+            Token::String(s) => Ok(Datum::String(s)),
             Token::Numeric(ref rep) => match parse_numeric(rep.as_slice()) {
                 Some(n) => Ok(Datum::Num(n)),
                 None => Err(invalid_token(&tok))
@@ -189,5 +190,13 @@ mod test {
     #[test]
     fn test_numeric() {
         test_parse("2", Datum::Num(2));
+    }
+
+    #[test]
+    fn test_string() {
+        test_parse(r#""abc""#, Datum::String("abc".to_string()));
+        test_parse(r#""\x41;bc""#, Datum::String("Abc".to_string()));
+        test_parse(r#""\x41; bc""#, Datum::String("A bc".to_string()));
+        test_parse(r#""\x41bc;""#, Datum::String("\u{41bc}".to_string()));
     }
 }

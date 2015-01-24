@@ -16,6 +16,8 @@ pub enum Datum<T> {
     Bool(bool),
     /// Character
     Char(char),
+    /// String
+    String(String),
     /// Numeric value
     Num(isize),
     /// `()`
@@ -63,6 +65,7 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Bool(true) => write!(f, "#t"),
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
+            Datum::String(ref s) => write!(f, "{:?}", s),
             Datum::Num(n) => n.fmt(f),
             Datum::Ext(ref x) => x.fmt(f),
             Datum::Nil => write!(f, "()"),
