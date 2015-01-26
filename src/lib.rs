@@ -12,6 +12,7 @@
 extern crate phf_mac;
 extern crate phf;
 extern crate unicode;
+extern crate num;
 
 #[macro_use]
 extern crate log;
@@ -54,3 +55,5 @@ pub mod primitive;
 pub mod compiler;
 /// R6RS `base` library
 pub mod base;
+/// Real part of the numerical tower
+pub mod real;

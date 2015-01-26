@@ -4,5 +4,6 @@ version = "0.0.1"
 authors = [ "kimhyunkang@gmail.com" ]
 
 [dependencies]
+num = "~0.1.10"
 phf = "~0.5.0"
 phf_mac = "~0.5.0"
