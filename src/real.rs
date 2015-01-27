@@ -203,10 +203,17 @@ impl PartialOrd for Real {
 
 #[cfg(test)]
 mod test {
-    use super::Real;
+    use super::{Real, int2flo};
+    use std::num::FromPrimitive;
 
     #[test]
     fn test_add() {
         assert_eq!(Real::Fixnum(3), Real::Fixnum(1) + Real::Fixnum(2));
+    }
+
+    #[test]
+    fn test_int2flo() {
+        let n = FromPrimitive::from_int(3).unwrap();
+        assert_eq!(3.0, int2flo(&n));
     }
 }
