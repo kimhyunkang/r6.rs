@@ -18,6 +18,17 @@ pub enum Real {
     Flonum(f64)
 }
 
+impl Real {
+    pub fn to_f64(&self) -> f64 {
+        match self {
+            &Real::Fixnum(n) => fix2flo(n),
+            &Real::Integer(ref n) => int2flo(n),
+            &Real::Rational(ref n) => rat2flo(n),
+            &Real::Flonum(n) => n
+        }
+    }
+}
+
 impl fmt::Display for Real {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

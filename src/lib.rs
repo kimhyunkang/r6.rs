@@ -57,3 +57,5 @@ pub mod compiler;
 pub mod base;
 /// Real part of the numerical tower
 pub mod real;
+/// Numerical tower
+pub mod number;
