@@ -4,12 +4,13 @@ use std::cmp::min;
 use std::fmt;
 use std::fmt::Writer;
 use std::f64;
+use std::cmp::Ordering;
 
 use num::bigint::{BigInt, ToBigInt};
 use num::rational::{Ratio, BigRational};
 use num::{Signed, Zero, Integer, CheckedAdd};
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub enum Real {
     Fixnum(isize),
     Integer(BigInt),
@@ -34,13 +35,13 @@ pub fn fix2int(n: isize) -> BigInt {
 }
 
 #[inline]
-pub fn int2rat(n: BigInt) -> BigRational {
-    Ratio::from_integer(n)
+pub fn int2rat(n: &BigInt) -> BigRational {
+    Ratio::from_integer(n.clone())
 }
 
 #[inline]
 pub fn fix2rat(n: isize) -> BigRational {
-    int2rat(fix2int(n))
+    int2rat(&fix2int(n))
 }
 
 #[inline]
@@ -89,63 +90,114 @@ pub fn rat2flo(r: &BigRational) -> f64 {
     int2flo(r.numer()) / int2flo(r.denom())
 }
 
-fn coerce<Fix, Big, Rat, Flo>(lhs: Real, rhs: Real,
-                              fix_op: Fix, big_op: Big,
-                              rat_op: Rat, flo_op: Flo)
+fn coerce_arith<Fix, Big, Rat, Flo>(lhs: &Real, rhs: &Real,
+                                    fix_op: Fix, big_op: Big,
+                                    rat_op: Rat, flo_op: Flo)
         -> Real
     where Fix: Fn(isize, isize) -> Option<isize>,
-          Big: Fn(BigInt, BigInt) -> BigInt,
-          Rat: Fn(BigRational, BigRational) -> BigRational,
+          Big: Fn(&BigInt, &BigInt) -> BigInt,
+          Rat: Fn(&BigRational, &BigRational) -> BigRational,
           Flo: Fn(f64, f64) -> f64
 {
+    coerce(lhs, rhs,
+           |x, y| match fix_op(x, y) {
+               Some(n) => Real::Fixnum(n),
+               None => Real::Integer(big_op(&fix2int(x), &fix2int(y)))
+           },
+           |x, y| Real::Integer(big_op(x, y)),
+           |x, y| Real::Rational(rat_op(x, y)),
+           |x, y| Real::Flonum(flo_op(x, y))
+    )
+}
+
+fn coerce<Fix, Big, Rat, Flo, T>(lhs: &Real, rhs: &Real,
+                                 fix_op: Fix, big_op: Big,
+                                 rat_op: Rat, flo_op: Flo)
+        -> T
+    where Fix: Fn(isize, isize) -> T,
+          Big: Fn(&BigInt, &BigInt) -> T,
+          Rat: Fn(&BigRational, &BigRational) -> T,
+          Flo: Fn(f64, f64) -> T
+{
     match (lhs, rhs) {
-        (Real::Fixnum(l), Real::Fixnum(r)) =>
-            match fix_op(l, r) {
-                Some(n) => Real::Fixnum(n),
-                None => Real::Integer(big_op(fix2int(l), fix2int(r)))
-            },
-        (Real::Fixnum(l), Real::Integer(r)) =>
-            Real::Integer(big_op(fix2int(l), r)),
-        (Real::Fixnum(l), Real::Rational(r)) =>
-            Real::Rational(rat_op(fix2rat(l), r)),
-        (Real::Fixnum(l), Real::Flonum(r)) =>
-            Real::Flonum(flo_op(fix2flo(l), r)),
-        (Real::Integer(l), Real::Fixnum(r)) =>
-            Real::Integer(big_op(l, fix2int(r))),
-        (Real::Integer(l), Real::Integer(r)) =>
-            Real::Integer(big_op(l, r)),
-        (Real::Integer(l), Real::Rational(r)) =>
-            Real::Rational(rat_op(int2rat(l), r)),
-        (Real::Integer(ref l), Real::Flonum(r)) =>
-            Real::Flonum(flo_op(int2flo(l), r)),
-        (Real::Rational(l), Real::Fixnum(r)) =>
-            Real::Rational(rat_op(l, fix2rat(r))),
-        (Real::Rational(l), Real::Integer(r)) =>
-            Real::Rational(rat_op(l, int2rat(r))),
-        (Real::Rational(l), Real::Rational(r)) =>
-            Real::Rational(rat_op(l, r)),
-        (Real::Rational(ref l), Real::Flonum(r)) =>
-            Real::Flonum(flo_op(rat2flo(l), r)),
-        (Real::Flonum(l), Real::Fixnum(r)) =>
-            Real::Flonum(flo_op(l, fix2flo(r))),
-        (Real::Flonum(l), Real::Integer(ref r)) =>
-            Real::Flonum(flo_op(l, int2flo(r))),
-        (Real::Flonum(l), Real::Rational(ref r)) =>
-            Real::Flonum(flo_op(l, rat2flo(r))),
-        (Real::Flonum(l), Real::Flonum(r)) =>
-            Real::Flonum(flo_op(l, r))
+        (&Real::Fixnum(l), &Real::Fixnum(r)) =>
+            fix_op(l, r),
+        (&Real::Fixnum(l), &Real::Integer(ref r)) =>
+            big_op(&fix2int(l), r),
+        (&Real::Fixnum(l), &Real::Rational(ref r)) =>
+            rat_op(&fix2rat(l), r),
+        (&Real::Fixnum(l), &Real::Flonum(r)) =>
+            flo_op(fix2flo(l), r),
+        (&Real::Integer(ref l), &Real::Fixnum(r)) =>
+            big_op(l, &fix2int(r)),
+        (&Real::Integer(ref l), &Real::Integer(ref r)) =>
+            big_op(l, r),
+        (&Real::Integer(ref l), &Real::Rational(ref r)) =>
+            rat_op(&int2rat(l), r),
+        (&Real::Integer(ref l), &Real::Flonum(r)) =>
+            flo_op(int2flo(l), r),
+        (&Real::Rational(ref l), &Real::Fixnum(r)) =>
+            rat_op(l, &fix2rat(r)),
+        (&Real::Rational(ref l), &Real::Integer(ref r)) =>
+            rat_op(l, &int2rat(r)),
+        (&Real::Rational(ref l), &Real::Rational(ref r)) =>
+            rat_op(l, r),
+        (&Real::Rational(ref l), &Real::Flonum(r)) =>
+            flo_op(rat2flo(l), r),
+        (&Real::Flonum(l), &Real::Fixnum(r)) =>
+            flo_op(l, fix2flo(r)),
+        (&Real::Flonum(l), &Real::Integer(ref r)) =>
+            flo_op(l, int2flo(r)),
+        (&Real::Flonum(l), &Real::Rational(ref r)) =>
+            flo_op(l, rat2flo(r)),
+        (&Real::Flonum(l), &Real::Flonum(r)) =>
+            flo_op(l, r)
     }
 }
 
 impl Add<Real> for Real {
     type Output = Real;
 
-    fn add(self, other: Real) -> <Real as Add<Real>>::Output {
+    fn add(self, other: Real) -> Real {
+        coerce_arith(&self, &other,
+                     |x, y| x.checked_add(&y),
+                     |x, y| x + y,
+                     |x, y| x + y,
+                     |x, y| x + y)
+    }
+}
+
+impl<'a, 'b> Add<&'a Real> for &'b Real {
+    type Output = Real;
+
+    fn add(self, other: &Real) -> Real {
+        coerce_arith(self, other,
+                     |x, y| x.checked_add(&y),
+                     |x, y| x + y,
+                     |x, y| x + y,
+                     |x, y| x + y)
+    }
+}
+
+impl PartialEq for Real {
+    fn eq(&self, other: &Real) -> bool {
         coerce(self, other,
-               |x, y| x.checked_add(&y),
-               |x, y| x + y,
-               |x, y| x + y,
-               |x, y| x + y)
+               |x, y| x == y,
+               |x, y| x == y,
+               |x, y| x == y,
+               |x, y| x == y
+        )
+    }
+}
+
+impl PartialOrd for Real {
+    fn partial_cmp(&self, other: &Real) -> Option<Ordering> {
+        coerce(self, other,
+                    |x, y| x.partial_cmp(&y),
+                    |x, y| x.partial_cmp(y),
+                    |x, y| x.partial_cmp(y),
+                    |x, y| x.partial_cmp(&y)
+        )
     }
 }
 
