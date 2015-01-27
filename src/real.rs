@@ -180,29 +180,37 @@ fn coerce<Fix, Big, Rat, Flo, T>(lhs: &Real, rhs: &Real,
     }
 }
 
-impl Add<Real> for Real {
-    type Output = Real;
+macro_rules! impl_arith {
+    ($tr:ident, $op:ident, $checked_op:ident) => {
+        impl $tr<Real> for Real {
+            type Output = Real;
 
-    fn add(self, other: Real) -> Real {
-        coerce_arith(&self, &other,
-                     |x, y| x.checked_add(&y),
-                     |x, y| x + y,
-                     |x, y| x + y,
-                     |x, y| x + y)
+            fn $op(self, other: Real) -> Real {
+                coerce_arith(&self, &other,
+                             |x, y| x.$checked_op(&y),
+                             |x, y| x.$op(y),
+                             |x, y| x.$op(y),
+                             |x, y| x.$op(&y)
+                )
+            }
+        }
+
+        impl<'a, 'b> $tr<&'a Real> for &'b Real {
+            type Output = Real;
+
+            fn $op(self, other: &Real) -> Real {
+                coerce_arith(self, other,
+                             |x, y| x.$checked_op(&y),
+                             |x, y| x.$op(y),
+                             |x, y| x.$op(y),
+                             |x, y| x.$op(&y)
+                )
+            }
+        }
     }
 }
 
-impl<'a, 'b> Add<&'a Real> for &'b Real {
-    type Output = Real;
-
-    fn add(self, other: &Real) -> Real {
-        coerce_arith(self, other,
-                     |x, y| x.checked_add(&y),
-                     |x, y| x + y,
-                     |x, y| x + y,
-                     |x, y| x + y)
-    }
-}
+impl_arith!(Add, add, checked_add);
 
 impl PartialEq for Real {
     fn eq(&self, other: &Real) -> bool {
