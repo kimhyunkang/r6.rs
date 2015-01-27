@@ -1,4 +1,4 @@
-use std::ops::Add;
+use std::ops::{Add, Sub, Mul, Div};
 use std::num::{Float, FromPrimitive, ToPrimitive, FromStrRadix};
 use std::cmp::min;
 use std::fmt;
@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 
 use num::bigint::{BigInt, ToBigInt};
 use num::rational::{Ratio, BigRational};
-use num::{Signed, Zero, Integer, CheckedAdd};
+use num::{Signed, Zero, Integer, CheckedAdd, CheckedSub, CheckedMul};
 
 #[derive(Debug)]
 pub enum Real {
@@ -211,6 +211,34 @@ macro_rules! impl_arith {
 }
 
 impl_arith!(Add, add, checked_add);
+impl_arith!(Sub, sub, checked_sub);
+impl_arith!(Mul, mul, checked_mul);
+
+impl Div<Real> for Real {
+    type Output = Real;
+
+    fn div(self, other: Real) -> Real {
+        coerce(&self, &other,
+               |x, y| Real::Rational(Ratio::new(fix2int(x), fix2int(y))),
+               |x, y| Real::Rational(Ratio::new(x.clone(), y.clone())),
+               |x, y| Real::Rational(x / y),
+               |x, y| Real::Flonum(x / y)
+        )
+    }
+}
+
+impl<'a, 'b> Div<&'a Real> for &'b Real {
+    type Output = Real;
+
+    fn div(self, other: &Real) -> Real {
+        coerce(self, other,
+               |x, y| Real::Rational(Ratio::new(fix2int(x), fix2int(y))),
+               |x, y| Real::Rational(Ratio::new(x.clone(), y.clone())),
+               |x, y| Real::Rational(x / y),
+               |x, y| Real::Flonum(x / y)
+        )
+    }
+}
 
 impl PartialEq for Real {
     fn eq(&self, other: &Real) -> bool {
@@ -236,8 +264,9 @@ impl PartialOrd for Real {
 
 #[cfg(test)]
 mod test {
-    use super::{Real, int2flo};
+    use super::{Real, int2flo, fix2int};
     use std::num::FromPrimitive;
+    use num::rational::Ratio;
 
     #[test]
     fn test_add() {
@@ -245,10 +274,42 @@ mod test {
     }
 
     #[test]
+    fn test_coerce() {
+        let x = Real::Rational(Ratio::new(fix2int(3), fix2int(2)));
+        let y = Real::Fixnum(1);
+        let z = Real::Rational(Ratio::new(fix2int(5), fix2int(2)));
+        assert_eq!(z, x + y);
+    }
+
+    #[test]
+    fn test_sub() {
+        assert_eq!(Real::Fixnum(1), Real::Fixnum(3) - Real::Fixnum(2));
+    }
+
+    #[test]
+    fn test_mul() {
+        assert_eq!(Real::Fixnum(6), Real::Fixnum(3) * Real::Fixnum(2));
+    }
+
+    #[test]
+    fn test_div() {
+        let x = Real::Fixnum(6);
+        let y = Real::Fixnum(4);
+        assert_eq!(Real::Rational(Ratio::new(fix2int(3), fix2int(2))), x/y);
+    }
+
+    #[test]
     fn test_reduce() {
         let x = Real::Integer(FromPrimitive::from_int(1).unwrap());
         let y = Real::Integer(FromPrimitive::from_int(2).unwrap());
         assert_eq!(Real::Fixnum(3), x+y);
+    }
+
+    #[test]
+    fn test_reduce_rat() {
+        let x = Real::Rational(Ratio::new(fix2int(3), fix2int(2)));
+        let y = Real::Rational(Ratio::new(fix2int(1), fix2int(2)));
+        assert_eq!(Real::Fixnum(2), x + y);
     }
 
     #[test]
