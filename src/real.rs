@@ -3,7 +3,7 @@ use std::num::{Float, FromPrimitive, ToPrimitive, FromStrRadix};
 use std::cmp::min;
 use std::fmt;
 use std::fmt::Writer;
-use std::f64;
+use std::{f64, isize};
 use std::cmp::Ordering;
 
 use num::bigint::{BigInt, ToBigInt};
@@ -90,6 +90,31 @@ pub fn rat2flo(r: &BigRational) -> f64 {
     int2flo(r.numer()) / int2flo(r.denom())
 }
 
+pub fn reduce(r: Real) -> Real {
+    match r {
+        Real::Fixnum(_) =>
+            r,
+        Real::Integer(n) => {
+            let max_fixnum: BigInt = FromPrimitive::from_int(isize::MAX).unwrap();
+            let min_fixnum: BigInt = FromPrimitive::from_int(isize::MIN).unwrap();
+
+            if min_fixnum <= n && n <= max_fixnum {
+                Real::Fixnum(n.to_int().unwrap())
+            } else {
+                Real::Integer(n)
+            }
+        },
+        Real::Rational(n) =>
+            if n.is_integer() {
+                reduce(Real::Integer(n.to_integer()))
+            } else {
+                Real::Rational(n)
+            },
+        Real::Flonum(_) =>
+            r
+    }
+}
+
 fn coerce_arith<Fix, Big, Rat, Flo>(lhs: &Real, rhs: &Real,
                                     fix_op: Fix, big_op: Big,
                                     rat_op: Rat, flo_op: Flo)
@@ -102,10 +127,10 @@ fn coerce_arith<Fix, Big, Rat, Flo>(lhs: &Real, rhs: &Real,
     coerce(lhs, rhs,
            |x, y| match fix_op(x, y) {
                Some(n) => Real::Fixnum(n),
-               None => Real::Integer(big_op(&fix2int(x), &fix2int(y)))
+               None => reduce(Real::Integer(big_op(&fix2int(x), &fix2int(y))))
            },
-           |x, y| Real::Integer(big_op(x, y)),
-           |x, y| Real::Rational(rat_op(x, y)),
+           |x, y| reduce(Real::Integer(big_op(x, y))),
+           |x, y| reduce(Real::Rational(rat_op(x, y))),
            |x, y| Real::Flonum(flo_op(x, y))
     )
 }
@@ -209,6 +234,13 @@ mod test {
     #[test]
     fn test_add() {
         assert_eq!(Real::Fixnum(3), Real::Fixnum(1) + Real::Fixnum(2));
+    }
+
+    #[test]
+    fn test_reduce() {
+        let x = Real::Integer(FromPrimitive::from_int(1).unwrap());
+        let y = Real::Integer(FromPrimitive::from_int(2).unwrap());
+        assert_eq!(Real::Fixnum(3), x+y);
     }
 
     #[test]
