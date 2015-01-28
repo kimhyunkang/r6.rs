@@ -31,7 +31,7 @@ macro_rules! sym{
 
 macro_rules! num{
     ($e:expr) => (
-        Datum::Num($e)
+        Datum::Num(Number::new_int($e, 0))
     )
 }
 

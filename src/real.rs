@@ -1,4 +1,4 @@
-use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::num::{Float, FromPrimitive, ToPrimitive, FromStrRadix};
 use std::cmp::min;
 use std::fmt;
@@ -8,9 +8,9 @@ use std::cmp::Ordering;
 
 use num::bigint::{BigInt, ToBigInt};
 use num::rational::{Ratio, BigRational};
-use num::{Signed, Zero, Integer, CheckedAdd, CheckedSub, CheckedMul};
+use num::{Signed, Zero, One, Integer, CheckedAdd, CheckedSub, CheckedMul};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Real {
     Fixnum(isize),
     Integer(BigInt),
@@ -25,6 +25,65 @@ impl Real {
             &Real::Integer(ref n) => int2flo(n),
             &Real::Rational(ref n) => rat2flo(n),
             &Real::Flonum(n) => n
+        }
+    }
+
+    pub fn reduce(self) -> Real {
+        match self {
+            Real::Fixnum(_) =>
+                self,
+            Real::Integer(n) => {
+                let max_fixnum: BigInt = FromPrimitive::from_int(isize::MAX).unwrap();
+                let min_fixnum: BigInt = FromPrimitive::from_int(isize::MIN).unwrap();
+
+                if min_fixnum <= n && n <= max_fixnum {
+                    Real::Fixnum(n.to_int().unwrap())
+                } else {
+                    Real::Integer(n)
+                }
+            },
+            Real::Rational(n) =>
+                if n.is_integer() {
+                    Real::Integer(n.to_integer()).reduce()
+                } else {
+                    Real::Rational(n)
+                },
+            Real::Flonum(_) =>
+                self
+        }
+    }
+}
+
+impl Zero for Real {
+    fn zero() -> Real {
+        Real::Fixnum(0)
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            &Real::Fixnum(n) => n.is_zero(),
+            &Real::Integer(ref n) => n.is_zero(),
+            &Real::Rational(ref n) => n.is_zero(),
+            &Real::Flonum(n) => n.is_zero()
+        }
+    }
+}
+
+impl One for Real {
+    fn one() -> Real {
+        Real::Fixnum(1)
+    }
+}
+
+impl Neg for Real {
+    type Output = Real;
+
+    fn neg(self) -> Real {
+        match self {
+            Real::Fixnum(n) => Real::Fixnum(n.neg()),
+            Real::Integer(n) => Real::Integer(n.neg()),
+            Real::Rational(n) => Real::Rational(n.neg()),
+            Real::Flonum(n) => Real::Flonum(n.neg())
         }
     }
 }
@@ -101,31 +160,6 @@ pub fn rat2flo(r: &BigRational) -> f64 {
     int2flo(r.numer()) / int2flo(r.denom())
 }
 
-pub fn reduce(r: Real) -> Real {
-    match r {
-        Real::Fixnum(_) =>
-            r,
-        Real::Integer(n) => {
-            let max_fixnum: BigInt = FromPrimitive::from_int(isize::MAX).unwrap();
-            let min_fixnum: BigInt = FromPrimitive::from_int(isize::MIN).unwrap();
-
-            if min_fixnum <= n && n <= max_fixnum {
-                Real::Fixnum(n.to_int().unwrap())
-            } else {
-                Real::Integer(n)
-            }
-        },
-        Real::Rational(n) =>
-            if n.is_integer() {
-                reduce(Real::Integer(n.to_integer()))
-            } else {
-                Real::Rational(n)
-            },
-        Real::Flonum(_) =>
-            r
-    }
-}
-
 fn coerce_arith<Fix, Big, Rat, Flo>(lhs: &Real, rhs: &Real,
                                     fix_op: Fix, big_op: Big,
                                     rat_op: Rat, flo_op: Flo)
@@ -138,10 +172,10 @@ fn coerce_arith<Fix, Big, Rat, Flo>(lhs: &Real, rhs: &Real,
     coerce(lhs, rhs,
            |x, y| match fix_op(x, y) {
                Some(n) => Real::Fixnum(n),
-               None => reduce(Real::Integer(big_op(&fix2int(x), &fix2int(y))))
+               None => Real::Integer(big_op(&fix2int(x), &fix2int(y))).reduce()
            },
-           |x, y| reduce(Real::Integer(big_op(x, y))),
-           |x, y| reduce(Real::Rational(rat_op(x, y))),
+           |x, y| Real::Integer(big_op(x, y)).reduce(),
+           |x, y| Real::Rational(rat_op(x, y)).reduce(),
            |x, y| Real::Flonum(flo_op(x, y))
     )
 }

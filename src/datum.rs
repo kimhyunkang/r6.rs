@@ -4,6 +4,8 @@ use std::cell::RefCell;
 use std::iter::FromIterator;
 use std::fmt;
 
+use number::Number;
+
 /// Datum is the primary data type of Scheme
 /// Datum is a generic type here to make parser somewhat independent from runtime
 /// Ext can hold runtime data not representable in datum syntax, such as primitive function or I/O
@@ -19,7 +21,7 @@ pub enum Datum<T> {
     /// String
     String(String),
     /// Numeric value
-    Num(isize),
+    Num(Number),
     /// `()`
     Nil,
     /// Pair
@@ -66,7 +68,7 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
             Datum::String(ref s) => write!(f, "{:?}", s),
-            Datum::Num(n) => n.fmt(f),
+            Datum::Num(ref n) => write!(f, "{}", n),
             Datum::Ext(ref x) => x.fmt(f),
             Datum::Nil => write!(f, "()"),
             Datum::Cons(ref ptr) => {
@@ -129,9 +131,9 @@ pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
 #[cfg(test)]
 mod test {
     use super::{Datum, cons};
+    use number::Number;
     use std::borrow::Cow;
-    use std::rc::Rc;
-    use std::cell::RefCell;
+    use std::num::FromPrimitive;
 
     fn compare_fmt(s: &str, datum: Datum<()>) {
         assert_eq!(s.to_string(), format!("{:?}", datum))
@@ -148,14 +150,10 @@ mod test {
 
     #[test]
     fn test_iter() {
-        let list: Datum<()> = Datum::Cons(Rc::new(RefCell::new((
-            Datum::Num(1),
-            Datum::Cons(Rc::new(RefCell::new((
-                Datum::Num(2),
-                Datum::Nil
-            ))))
-        ))));
+        let n1 = FromPrimitive::from_int(1).unwrap();
+        let n2 = FromPrimitive::from_int(2).unwrap();
+        let list: Datum<()> = list!(num!(1), num!(2));
 
-        assert_eq!(Ok(vec![Datum::Num(1), Datum::Num(2)]), list.iter().collect());
+        assert_eq!(Ok(vec![Datum::Num(n1), Datum::Num(n2)]), list.iter().collect());
     }
 }

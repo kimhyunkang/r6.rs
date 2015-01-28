@@ -4,6 +4,7 @@ use std::mem;
 use std::fmt;
 use std::ops::DerefMut;
 
+use number::Number;
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
 
@@ -118,10 +119,10 @@ pub trait DatumCast {
     fn wrap(&self) -> RDatum;
 }
 
-impl DatumCast for isize {
-    fn unwrap(datum: &RDatum) -> Result<isize, RuntimeError> {
+impl DatumCast for Number {
+    fn unwrap(datum: &RDatum) -> Result<Number, RuntimeError> {
         match datum {
-            &Datum::Num(n) => Ok(n),
+            &Datum::Num(ref n) => Ok(n.clone()),
             _ => Err(RuntimeError {
                 kind: RuntimeErrorKind::InvalidType,
                 desc: format!("expected Num, but received {:?}", DatumType::get_type(datum))
@@ -130,7 +131,7 @@ impl DatumCast for isize {
     }
 
     fn wrap(&self) -> RDatum{
-        Datum::Num(*self)
+        Datum::Num(self.clone())
     }
 }
 
@@ -518,36 +519,37 @@ mod test {
     use super::{Inst, MemRef, Runtime, RuntimeData};
     use datum::Datum;
     use primitive::PRIM_ADD;
+    use number::Number;
 
     #[test]
     fn test_runtime() {
         let code = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(1))),
-            Inst::PushArg(MemRef::Const(Datum::Num(2))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(3));
+        assert_eq!(runtime.run(), Datum::Num(Number::new_int(3, 0)));
     }
 
     #[test]
     fn test_nested_call() {
         let code = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(3))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(1))),
-            Inst::PushArg(MemRef::Const(Datum::Num(2))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Call(2),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(6));
+        assert_eq!(runtime.run(), Datum::Num(Number::new_int(6, 0)));
     }
 
     #[test]
@@ -555,19 +557,19 @@ mod test {
         let f = vec![
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
             Inst::PushArg(MemRef::Arg(0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(2))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Return
         ];
         let code = vec![
             Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(1))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::Call(1),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(3));
+        assert_eq!(runtime.run(), Datum::Num(Number::new_int(3, 0)));
     }
 
     #[test]
@@ -590,14 +592,14 @@ mod test {
         //   ) 2) 3)
         let code = vec![
             Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(2))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(1),
-            Inst::PushArg(MemRef::Const(Datum::Num(3))),
+            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
             Inst::Call(1),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(5));
+        assert_eq!(runtime.run(), Datum::Num(Number::new_int(5, 0)));
     }
 }

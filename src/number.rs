@@ -1,13 +1,15 @@
-use std::ops::{Add, Sub, Mul, Div};
+use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
 use std::num::FromPrimitive;
 
 use num::complex::{Complex, Complex64};
+use num::bigint::BigInt;
 use num::rational::{Ratio, BigRational};
 use num::{Zero, One};
 
 use real::{Real, int2rat, fix2rat, rat2flo};
 
+#[derive(Clone)]
 pub enum Number {
     Real(Real),
     ECmplx(Complex<BigRational>),
@@ -71,6 +73,50 @@ impl fmt::Display for Number {
             &Number::ECmplx(ref c) => write!(f, "{}", c),
             &Number::ICmplx(ref c) => write!(f, "{}", c)
         }
+    }
+}
+
+impl Zero for Number {
+    fn zero() -> Number {
+        Number::Real(Real::Fixnum(0))
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            &Number::Real(ref r) => r.is_zero(),
+            &Number::ECmplx(ref e) => e.is_zero(),
+            &Number::ICmplx(ref i) => i.is_zero()
+        }
+    }
+}
+
+impl One for Number {
+    fn one() -> Number {
+        Number::Real(Real::Fixnum(1))
+    }
+}
+
+impl Neg for Number {
+    type Output = Number;
+
+    fn neg(self) -> Number {
+        match self {
+            Number::Real(r) => Number::Real(r.neg()),
+            Number::ECmplx(r) => Number::ECmplx(r.neg()),
+            Number::ICmplx(r) => Number::ICmplx(r.neg())
+        }
+    }
+}
+
+impl FromPrimitive for Number {
+    fn from_i64(n: i64) -> Option<Number> {
+        let i: Option<BigInt> = FromPrimitive::from_i64(n);
+        i.map(|n| Number::Real(Real::Integer(n).reduce()))
+    }
+
+    fn from_u64(n: u64) -> Option<Number> {
+        let u: Option<BigInt> = FromPrimitive::from_u64(n);
+        u.map(|n| Number::Real(Real::Integer(n).reduce()))
     }
 }
 

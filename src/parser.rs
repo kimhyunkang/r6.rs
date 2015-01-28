@@ -4,6 +4,8 @@ use std::num::from_str_radix;
 use phf;
 use unicode;
 
+use real::Real;
+use number::Number;
 use datum::{Datum, cons};
 use lexer::{Token, TokenWrapper, Lexer};
 use error::{ParserError, ParserErrorKind};
@@ -60,8 +62,8 @@ fn parse_char(ch: &str) -> Option<char> {
     }
 }
 
-fn parse_numeric(rep: &str) -> Option<isize> {
-    rep.parse()
+fn parse_numeric(rep: &str) -> Option<Number> {
+    rep.parse().map(|n| Number::Real(Real::Fixnum(n)))
 }
 
 impl <'a> Parser<'a> {
@@ -150,6 +152,7 @@ impl <'a> Parser<'a> {
 mod test {
     use std::io::BufReader;
     use std::borrow::Cow;
+    use std::num::FromPrimitive;
     use super::Parser;
     use super::super::datum::{Datum, cons};
 
@@ -189,7 +192,8 @@ mod test {
 
     #[test]
     fn test_numeric() {
-        test_parse("2", Datum::Num(2));
+        let n2 = FromPrimitive::from_int(2).unwrap();
+        test_parse("2", Datum::Num(n2));
     }
 
     #[test]
