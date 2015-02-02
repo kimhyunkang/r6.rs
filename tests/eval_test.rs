@@ -123,3 +123,13 @@ fn typecheck_test() {
     assert_evaluates_to!(r#"(null? (list))"#, "#t");
     assert_evaluates_to!(r#"(null? (list 1 2))"#, "#f");
 }
+
+#[test]
+fn car_test() {
+    assert_evaluates_to!("(car '(a b))", "a");
+}
+
+#[test]
+fn cdr_test() {
+    assert_evaluates_to!("(cdr '(a b))", "(b)");
+}

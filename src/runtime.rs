@@ -153,6 +153,22 @@ impl DatumCast for bool {
     }
 }
 
+impl DatumCast for (RDatum, RDatum) {
+    fn unwrap(datum: &RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
+        match datum {
+            &Datum::Cons(ref c) => Ok(c.borrow().clone()),
+            _ => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: format!("expected Pair, but received {:?}", DatumType::get_type(datum))
+            })
+        }
+    }
+
+    fn wrap(&self) -> RDatum {
+        Datum::Cons(Rc::new(RefCell::new(self.clone())))
+    }
+}
+
 /// Pointer referring to memory locations in the VM
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemRef {
