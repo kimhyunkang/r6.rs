@@ -3,6 +3,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::iter::FromIterator;
 use std::fmt;
+use std::borrow::Cow;
 
 use number::Number;
 
@@ -73,6 +74,16 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Nil => write!(f, "()"),
             Datum::Cons(ref ptr) => {
                 let pair = ptr.borrow();
+                if let Datum::Sym(ref s) = pair.0 {
+                    if *s == Cow::Borrowed("quote") {
+                        if let Datum::Cons(ref tail) = pair.1 {
+                            let tail_ptr = tail.borrow();
+                            if let Datum::Nil = tail_ptr.1 {
+                                return write!(f, "'{:?}", tail_ptr.0);
+                            }
+                        }
+                    }
+                }
                 try!(write!(f, "({:?}", pair.0));
                 write_cons(&pair.1, f)
             }
@@ -146,6 +157,12 @@ mod test {
         compare_fmt("(a)", list!(sym!("a")));
         compare_fmt("(a b)", list!(sym!("a"), sym!("b")));
         compare_fmt("(a . b)", cons(sym!("a"), sym!("b")));
+    }
+
+    #[test]
+    fn test_quote_abbrev() {
+        compare_fmt("'a", list!(sym!("quote"), sym!("a")));
+        compare_fmt("'(a b)", list!(sym!("quote"), list!(sym!("a"), sym!("b"))));
     }
 
     #[test]
