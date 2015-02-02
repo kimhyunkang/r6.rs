@@ -380,18 +380,7 @@ impl Runtime {
     }
 
     fn step(&mut self) -> bool {
-        debug!("STEP");
-        let value = self.fetch();
-        for (i, frame) in self.call_stack.iter().enumerate() {
-            debug!("call_stack[{:?}]: {:?}", i, frame);
-        }
-        debug!("frame:          {:?}", self.frame);
-        for (i, val) in self.arg_stack.iter().enumerate() {
-            debug!("stack[{:?}]: {:?}", i, val);
-        }
-
-        debug!("fetch: {:?}", value);
-        match value {
+        match self.fetch() {
             Inst::Nop => {
                 self.frame.pc += 1;
                 true

@@ -56,7 +56,6 @@ impl<'g> Compiler<'g> {
 
     /// Compiles the datum into a bytecode evaluates it
     pub fn compile(&self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
-        debug!("compile({:?})", datum);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
@@ -70,7 +69,6 @@ impl<'g> Compiler<'g> {
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
-        debug!("compile_call({:?})", datum);
         let mut arg_count = 0;
         for d in datum.iter() {
             match d {
@@ -94,7 +92,6 @@ impl<'g> Compiler<'g> {
                       args: &[CowString<'static>], body: &RDatum)
             -> Result<CodeGenContext, CompileError>
     {
-        debug!("compile_block({:?})", body);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
@@ -129,7 +126,6 @@ impl<'g> Compiler<'g> {
                   ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
-        debug!("compile_if({:?})", tail);
         let exprs:Vec<RDatum> = match tail.iter().collect() {
             Ok(e) => e,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
@@ -175,7 +171,6 @@ impl<'g> Compiler<'g> {
                    ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
-        debug!("compile_let({:?})", tail);
         if let &Datum::Cons(ref ptr) = tail {
             let (ref bindings, ref body) = *ptr.borrow();
             let mut syms = Vec::new();
@@ -228,7 +223,6 @@ impl<'g> Compiler<'g> {
                       args: &[CowString<'static>], ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
-        debug!("compile_lambda({:?})", tail);
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.borrow();
             let new_scope = {
@@ -309,7 +303,6 @@ impl<'g> Compiler<'g> {
                    ctx: &mut CodeGenContext, formal: &RDatum)
             -> Result<(), CompileError>
     {
-        debug!("compile_set({:?})", formal);
         let assignment:Vec<RDatum> = match formal.iter().collect() {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
@@ -331,7 +324,6 @@ impl<'g> Compiler<'g> {
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
-        debug!("compile_expr({:?})", datum);
         match datum {
             &Datum::Cons(ref ptr) =>
                 if let (Datum::Sym(ref n), ref t) = *ptr.borrow() {

@@ -14,9 +14,6 @@ extern crate phf;
 extern crate unicode;
 extern crate num;
 
-#[macro_use]
-extern crate log;
-
 macro_rules! list{
     ($($x:expr),*) => (
         vec![$($x),*].into_iter().collect()
