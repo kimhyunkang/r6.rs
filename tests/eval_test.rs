@@ -82,3 +82,10 @@ fn set_test() {
 fn list_test() {
     assert_evaluates_to!("(list 1 2 3)", "(1 2 3)");
 }
+
+#[test]
+fn quote_test() {
+    assert_evaluates_to!(r#"(quote a)"#, "a");
+    assert_evaluates_to!(r#"(quote (1 2 3))"#, "(1 2 3)");
+    assert_evaluates_to!(r#"(quote #\a)"#, r#"#\a"#);
+}

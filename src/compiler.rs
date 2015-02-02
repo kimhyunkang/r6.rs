@@ -21,7 +21,10 @@ pub enum Syntax {
     Let,
 
     /// `set!`
-    Set
+    Set,
+
+    /// `quote`
+    Quote
 }
 
 /// Environment variables in the global environment
@@ -321,6 +324,24 @@ impl<'g> Compiler<'g> {
         }
     }
 
+    fn compile_quote(&self, ctx: &mut CodeGenContext, items: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut iter = items.iter();
+        match iter.next() {
+            Some(Ok(v)) => {
+                match iter.next() {
+                    None => {
+                        ctx.code.push(Inst::PushArg(MemRef::Const(v.clone())));
+                        Ok(())
+                    },
+                    Some(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                }
+            },
+            _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        }
+    }
+
     fn compile_expr(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
                     ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
@@ -337,6 +358,8 @@ impl<'g> Compiler<'g> {
                             self.compile_let(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::Set)) =>
                             self.compile_set(static_scope, args, ctx, t),
+                        Some(&EnvVar::Syntax(Syntax::Quote)) =>
+                            self.compile_quote(ctx, t),
                         _ =>
                             self.compile_call(static_scope, args, ctx, datum)
                     }
@@ -363,7 +386,8 @@ impl fmt::Debug for Syntax {
             Syntax::Lambda => write!(f, "lambda"),
             Syntax::If => write!(f, "if"),
             Syntax::Let => write!(f, "let"),
-            Syntax::Set => write!(f, "set!")
+            Syntax::Set => write!(f, "set!"),
+            Syntax::Quote => write!(f, "quote")
         }
     }
 }
