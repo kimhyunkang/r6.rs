@@ -1,4 +1,4 @@
-use std::io::{IoError, IoErrorKind};
+use std::old_io::{IoError, IoErrorKind};
 use std::string::CowString;
 use std::borrow::Cow;
 use std::fmt;

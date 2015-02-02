@@ -150,7 +150,7 @@ impl <'a> Parser<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::io::BufReader;
+    use std::old_io::BufReader;
     use std::borrow::Cow;
     use std::num::FromPrimitive;
     use super::Parser;

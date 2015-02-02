@@ -1,6 +1,6 @@
 extern crate r6;
 
-use std::io::BufReader;
+use std::old_io::BufReader;
 use r6::runtime::Runtime;
 use r6::compiler::Compiler;
 use r6::base::libbase;
