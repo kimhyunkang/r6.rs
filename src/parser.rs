@@ -2,6 +2,7 @@ use std::mem;
 use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
 use std::iter::range_step;
 use std::fmt::Writer;
+use std::borrow::Cow;
 
 use phf;
 use unicode;
@@ -340,6 +341,9 @@ impl <'a> Parser<'a> {
                     kind: ParserErrorKind::InvalidToken(format!("{:?}: {}", tok.token, e))
                 })
             },
+            Token::Quote => self.parse_datum().map(|v|
+                cons(Datum::Sym(Cow::Borrowed("quote")), cons(v, Datum::Nil))
+            ),
             _ => Err(unexpected_token(&tok, "Datum or OpenParen".to_string()))
         }
     }
@@ -493,5 +497,10 @@ mod test {
             },
             _ => panic!("Expected `Ok(NaN)`, but found {:?}", res)
         }
+    }
+
+    #[test]
+    fn test_parse_quote() {
+        test_parse_ok!("'a", list!(sym!("quote"), sym!("a")));
     }
 }

@@ -16,6 +16,8 @@ pub enum Token {
     CloseParen,
     /// `.`
     Dot,
+    /// `'`
+    Quote,
     Identifier(CowString<'static>),
     /// `#t`
     True,
@@ -35,6 +37,7 @@ impl fmt::Debug for Token {
             Token::OpenParen => write!(f, "OpenParen"),
             Token::CloseParen => write!(f, "CloseParen"),
             Token::Dot => write!(f, "Dot"),
+            Token::Quote => write!(f, "Quote"),
             Token::Identifier(ref name) => write!(f, "Identifier({})", name),
             Token::True => write!(f, "#t"),
             Token::False => write!(f, "#f"),
@@ -158,6 +161,8 @@ impl <'a> Lexer<'a> {
             Ok(wrap(line, col, Token::CloseParen))
         } else if c == '.' && end_of_token {
             Ok(wrap(line, col, Token::Dot))
+        } else if c == '\'' {
+            Ok(wrap(line, col, Token::Quote))
         } else if c == '#' {
             let c0 = match self.consume() {
                 Err(e) => return Err(match e.kind {
