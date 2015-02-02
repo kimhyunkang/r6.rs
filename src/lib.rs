@@ -5,8 +5,12 @@
 #![feature(plugin)]
 #![feature(slicing_syntax)]
 #![feature(box_syntax)]
-//TODO: Allow unstable items until Rust hits 1.0
-#![allow(unstable)]
+
+#![feature(core)]
+#![feature(std_misc)]
+#![feature(io)]
+#![feature(collections)]
+#![feature(unicode)]
 
 #[plugin]
 extern crate phf_mac;
