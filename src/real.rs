@@ -52,6 +52,22 @@ impl Real {
                 self
         }
     }
+
+    pub fn to_ratio(self) -> Option<BigRational> {
+        match self {
+            Real::Fixnum(n) => FromPrimitive::from_int(n).map(Ratio::from_integer),
+            Real::Integer(n) => Some(Ratio::from_integer(n)),
+            Real::Rational(n) => Some(n),
+            Real::Flonum(n) => Ratio::from_float(n)
+        }
+    }
+
+    pub fn is_exact(&self) -> bool {
+        match self {
+            &Real::Flonum(_) => false,
+            _ => true
+        }
+    }
 }
 
 impl Zero for Real {

@@ -87,6 +87,13 @@ fn is_subsequent(c: char) -> bool {
     }
 }
 
+fn is_delim(c: char) -> bool {
+    match c {
+        '(' | ')' | '[' | ']' | '"' | ';' => true,
+        _ => c.is_whitespace()
+    }
+}
+
 /// Lexer transforms character stream into a token stream
 pub struct Lexer<'a> {
     line: usize,
@@ -126,19 +133,19 @@ impl <'a> Lexer<'a> {
             let mut init = String::new();
             init.push(c);
             self.lex_ident(init).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s))))
-        } else if c == '+' && end_of_token {
-            Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("+"))))
+        } else if c == '+' {
+            if end_of_token {
+                Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("+"))))
+            } else {
+                self.lex_numeric("+".to_string()).map(|s| wrap(line, col, Token::Numeric(s)))
+            }
         } else if c == '-' {
             if end_of_token {
                 Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
             } else {
                 match self.lookahead() {
                     Ok('>') => self.lex_ident("-".to_string()).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s)))),
-                    Ok(c) => if c.is_numeric() {
-                            self.lex_numeric('-').map(|s| wrap(line, col, Token::Numeric(s)))
-                        } else {
-                            Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
-                        },
+                    Ok(_) => self.lex_numeric("-".to_string()).map(|s| wrap(line, col, Token::Numeric(s))),
                     Err(e) => match e.kind {
                         IoErrorKind::EndOfFile => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-")))),
                         _ => Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
@@ -162,13 +169,18 @@ impl <'a> Lexer<'a> {
             match c0 {
                 't' | 'T' => Ok(wrap(line, col, Token::True)),
                 'f' | 'F' => Ok(wrap(line, col, Token::False)),
+                'b' | 'B' | 'o' | 'O' | 'd' | 'D' | 'x' | 'X' | 'i' | 'I' | 'e' | 'E' => {
+                    let s = format!("{}{}", c, c0);
+                    self.lex_numeric(s).map(|s| wrap(line, col, Token::Numeric(s)))
+                },
                 '\\' => self.lex_char().map(|s| wrap(line, col, Token::Character(s))),
                 _ => Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
             }
         } else if c == '"' {
             self.lex_string().map(|s| wrap(line, col, Token::String(s)))
         } else if c.is_numeric() {
-            self.lex_numeric(c).map(|s| wrap(line, col, Token::Numeric(s)))
+            let s = format!("{}", c);
+            self.lex_numeric(s).map(|s| wrap(line, col, Token::Numeric(s)))
         } else {
             Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
         }
@@ -275,10 +287,9 @@ impl <'a> Lexer<'a> {
         }
     }
 
-    fn lex_numeric(&mut self, init: char) -> Result<String, ParserError> {
-        let mut s = String::new();
-        s.push(init);
-        let sub = try!(self.read_while(|c| c.is_numeric()));
+    fn lex_numeric(&mut self, init: String) -> Result<String, ParserError> {
+        let mut s = init;
+        let sub = try!(self.read_while(|c| !is_delim(c)));
         s.push_str(sub.as_slice());
         return Ok(s);
     }

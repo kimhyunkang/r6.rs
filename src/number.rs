@@ -64,6 +64,35 @@ impl Number {
     pub fn new_inexact(re: f64, im: f64) -> Number {
         Number::ICmplx(Complex::new(re, im))
     }
+
+    pub fn new_flonum(re: f64) -> Number {
+        Number::Real(Real::Flonum(re))
+    }
+
+    pub fn new_imag(im: Real) -> Number {
+        match im {
+            Real::Flonum(i) => Number::new_inexact(0.0, i),
+            _ => Number::ECmplx(Complex::new(Zero::zero(), im.to_ratio().unwrap()))
+        }
+    }
+
+    pub fn new(re: Real, im: Real) -> Number {
+        if re.is_exact() && im.is_exact() {
+            if im.is_zero() {
+                Number::Real(re)
+            } else {
+                Number::ECmplx(Complex::new(re.to_ratio().unwrap(), im.to_ratio().unwrap()))
+            }
+        } else {
+            Number::new_inexact(re.to_f64(), im.to_f64())
+        }
+    }
+
+    pub fn new_ratio(re: isize, im: isize) -> Number {
+        let re_big = FromPrimitive::from_int(re).unwrap();
+        let im_big = FromPrimitive::from_int(im).unwrap();
+        Number::Real(Real::Rational(Ratio::new(re_big, im_big)).reduce())
+    }
 }
 
 impl fmt::Display for Number {
