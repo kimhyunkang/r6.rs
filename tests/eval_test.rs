@@ -77,3 +77,8 @@ fn let_test() {
 fn set_test() {
     assert_evaluates_to!("(let ((x 23)) (set! x 24) x)", "24");
 }
+
+#[test]
+fn list_test() {
+    assert_evaluates_to!("(list 1 2 3)", "(1 2 3)");
+}

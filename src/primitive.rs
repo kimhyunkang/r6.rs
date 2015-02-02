@@ -1,3 +1,5 @@
+use std::iter::FromIterator;
+
 use num::{Zero, One};
 
 use number::Number;
@@ -10,6 +12,11 @@ pub trait PrimFunc {
 
 pub struct Fold<P> {
     fold: fn(&[P]) -> P
+}
+
+#[derive(Copy)]
+pub struct FoldDatum {
+    fold: fn(&[RDatum]) -> RDatum
 }
 
 pub struct Fold1<P> {
@@ -25,6 +32,13 @@ impl<T> PrimFunc for Fold<T> where T: DatumCast {
         let p_args:Result<Vec<T>, RuntimeError> = args.iter().map(DatumCast::unwrap).collect();
         let f = self.fold;
         p_args.map(|v| f(v.as_slice()).wrap())
+    }
+}
+
+impl PrimFunc for FoldDatum {
+    fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
+        let f = self.fold;
+        Ok(f(args))
     }
 }
 
@@ -126,12 +140,19 @@ fn div(arg0: &Number, args: &[Number]) -> Result<Number, RuntimeError> {
 /// `(/ n0 n1 ...)`
 pub static PRIM_DIV:Fold1Err<Number> = Fold1Err { fold1: div };
 
+fn list(args: &[RDatum]) -> RDatum {
+    FromIterator::from_iter(args.iter().map(Clone::clone))
+}
+
+pub static PRIM_LIST:FoldDatum = FoldDatum { fold: list };
+
 /// Lists all primitive functions with its name
 pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
     vec![
         ("+", &PRIM_ADD),
         ("-", &PRIM_SUB),
         ("*", &PRIM_MUL),
-        ("/", &PRIM_DIV)
+        ("/", &PRIM_DIV),
+        ("list", &PRIM_LIST)
     ]
 }
