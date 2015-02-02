@@ -96,7 +96,9 @@ pub enum RuntimeErrorKind {
     /// Number of arguments did not match
     NumArgs,
     /// Argument type did not match 
-    InvalidType
+    InvalidType,
+    /// Divide by zero
+    DivideByZero
 }
 
 /// Errors raised in runtime

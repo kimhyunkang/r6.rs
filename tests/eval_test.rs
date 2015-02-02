@@ -64,6 +64,8 @@ fn numeric_expressions_test() {
     assert_evaluates_to!("(+ 14 (* 23 42))", "980");
     assert_evaluates_to!("(- 3 1)", "2");
     assert_evaluates_to!("(- 3)", "-3");
+    assert_evaluates_to!("(/ 3 2)", "3/2");
+    assert_evaluates_to!("(/ 3.0 2)", "1.5");
 }
 
 #[test]

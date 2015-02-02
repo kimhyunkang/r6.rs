@@ -93,6 +93,14 @@ impl Number {
         let im_big = FromPrimitive::from_int(im).unwrap();
         Number::Real(Real::Rational(Ratio::new(re_big, im_big)).reduce())
     }
+
+    pub fn is_exact(&self) -> bool {
+        match self {
+            &Number::Real(ref r) => r.is_exact(),
+            &Number::ECmplx(_) => true,
+            &Number::ICmplx(_) => false
+        }
+    }
 }
 
 impl fmt::Display for Number {
