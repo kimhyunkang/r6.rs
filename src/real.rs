@@ -104,6 +104,19 @@ impl Neg for Real {
     }
 }
 
+impl<'a> Neg for &'a Real {
+    type Output = Real;
+
+    fn neg(self) -> Real {
+        match self {
+            &Real::Fixnum(n) => Real::Fixnum(n.neg()),
+            &Real::Integer(ref n) => Real::Integer(n.neg()),
+            &Real::Rational(ref n) => Real::Rational(n.neg()),
+            &Real::Flonum(n) => Real::Flonum(n.neg())
+        }
+    }
+}
+
 impl fmt::Display for Real {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

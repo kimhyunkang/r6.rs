@@ -7,12 +7,13 @@ use std::ops::DerefMut;
 use number::Number;
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
+use primitive::PrimFunc;
 
 /// RuntimeData contains runtime values not representable in standard syntax
 #[derive(Clone)]
 pub enum RuntimeData {
     /// Primitive Function
-    PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
+    PrimFunc(&'static str, &'static (PrimFunc + 'static)),
 
     /// Compiled Closure
     Closure(Closure),
@@ -395,7 +396,7 @@ impl Runtime {
                             static_link: None
                         };
                         self.push_call_stack(n, dummy_closure);
-                        let res = match (*f)(&self.arg_stack[top - n ..]) {
+                        let res = match f.call(&self.arg_stack[top - n ..]) {
                             Ok(x) => x,
                             Err(e) => panic!(e)
                         };
@@ -513,7 +514,7 @@ mod test {
     #[test]
     fn test_runtime() {
         let code = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -527,9 +528,9 @@ mod test {
     #[test]
     fn test_nested_call() {
         let code = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -544,7 +545,7 @@ mod test {
     #[test]
     fn test_lambda() {
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -564,7 +565,7 @@ mod test {
     #[test]
     fn test_closure() {
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::Call(2),

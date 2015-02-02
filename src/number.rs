@@ -145,6 +145,18 @@ impl Neg for Number {
     }
 }
 
+impl<'a> Neg for &'a Number {
+    type Output = Number;
+
+    fn neg(self) -> Number {
+        match self {
+            &Number::Real(ref r) => Number::Real(r.neg()),
+            &Number::ECmplx(ref r) => Number::ECmplx(r.neg()),
+            &Number::ICmplx(ref r) => Number::ICmplx(r.neg())
+        }
+    }
+}
+
 impl FromPrimitive for Number {
     fn from_i64(n: i64) -> Option<Number> {
         let i: Option<BigInt> = FromPrimitive::from_i64(n);

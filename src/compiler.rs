@@ -3,9 +3,10 @@ use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use error::{CompileError, CompileErrorKind, RuntimeError};
+use error::{CompileError, CompileErrorKind};
 use datum::Datum;
 use runtime::{Inst, MemRef, RDatum, RuntimeData};
+use primitive::PrimFunc;
 
 /// Syntax variables
 #[derive(Copy, Clone, PartialEq)]
@@ -29,7 +30,7 @@ pub enum EnvVar {
     Syntax(Syntax),
 
     /// Primitive functions
-    PrimFunc(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>),
+    PrimFunc(&'static str, &'static (PrimFunc + 'static)),
 
     /// Compiled library functions
     Procedure(Rc<Vec<Inst>>)
@@ -284,10 +285,10 @@ impl<'g> Compiler<'g> {
             Some(data) => match data {
                 &EnvVar::Syntax(_) =>
                     Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
-                &EnvVar::PrimFunc(ref name, ref func) => {
+                &EnvVar::PrimFunc(ref name, func) => {
                     Ok(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
                                         name.clone(),
-                                        func.clone()
+                                        func
                     ))))
                 },
                 &EnvVar::Procedure(ref code) => {
@@ -383,7 +384,7 @@ mod test {
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1 ,0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2 ,0)))),
             Inst::Call(2),
@@ -398,9 +399,9 @@ mod test {
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -417,7 +418,7 @@ mod test {
         let compiler = Compiler::new(&env);
 
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -442,7 +443,7 @@ mod test {
         let compiler = Compiler::new(&env);
 
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", Rc::new(PRIM_ADD))))),
+            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::Call(2),

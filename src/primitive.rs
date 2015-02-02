@@ -1,102 +1,137 @@
-use std::rc::Rc;
-use std::ops::Neg;
 use num::{Zero, One};
 
 use number::Number;
 use error::{RuntimeError, RuntimeErrorKind};
 use runtime::{DatumCast, RDatum};
-use datum::Datum;
+
+pub trait PrimFunc {
+    fn call(&self, &[RDatum]) -> Result<RDatum, RuntimeError>;
+}
+
+pub struct Fold<P> {
+    fold: fn(&[P]) -> P
+}
+
+pub struct Fold1<P> {
+    fold1: fn(&P, &[P]) -> P
+}
+
+pub struct Fold1Err<P> {
+    fold1: fn(&P, &[P]) -> Result<P, RuntimeError>
+}
+
+impl<T> PrimFunc for Fold<T> where T: DatumCast {
+    fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
+        let p_args:Result<Vec<T>, RuntimeError> = args.iter().map(DatumCast::unwrap).collect();
+        let f = self.fold;
+        p_args.map(|v| f(v.as_slice()).wrap())
+    }
+}
+
+impl<T> PrimFunc for Fold1<T> where T: DatumCast {
+    fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
+        let p_args:Result<Vec<T>, RuntimeError> = args.iter().map(DatumCast::unwrap).collect();
+        let f = self.fold1;
+        p_args.and_then(|v|
+            if v.len() < 1 {
+                Err(RuntimeError {
+                    kind: RuntimeErrorKind::NumArgs,
+                    desc: "Expected at least 1 arguments, received 0".to_string()
+                })
+            } else {
+                Ok(f(&v[0], &v[1..]).wrap())
+            }
+        )
+    }
+}
+
+impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
+    fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
+        let p_args:Result<Vec<T>, RuntimeError> = args.iter().map(DatumCast::unwrap).collect();
+        let f = self.fold1;
+        p_args.and_then(|v|
+            if v.len() < 1 {
+                Err(RuntimeError {
+                    kind: RuntimeErrorKind::NumArgs,
+                    desc: "Expected at least 1 arguments, received 0".to_string()
+                })
+            } else {
+                f(&v[0], &v[1..]).map(|res| res.wrap())
+            }
+        )
+    }
+}
+
+fn add(args: &[Number]) -> Number {
+    let mut sum:Number = Zero::zero();
+    for a in args.iter() {
+        sum = &sum + a;
+    }
+    return sum;
+}
 
 /// `(+ n0 n1 ...)`
-pub static PRIM_ADD:fn(&[RDatum]) -> Result<RDatum, RuntimeError> = add;
+pub static PRIM_ADD:Fold<Number> = Fold { fold: add };
 
-fn add(args: &[RDatum]) -> Result<RDatum, RuntimeError> {
-    let mut sum:Number = Zero::zero();
-    for arg in args.iter() {
-        let a = try!(DatumCast::unwrap(arg));
-        sum = sum + a;
+fn mul(args: &[Number]) -> Number {
+    let mut product:Number = One::one();
+    for a in args.iter() {
+        product = &product * a;
     }
-    return Ok(sum.wrap());
+    return product;
 }
 
 /// `(* n0 n1 ...)`
-pub static PRIM_MUL:fn(&[RDatum]) -> Result<RDatum, RuntimeError> = mul;
+pub static PRIM_MUL:Fold<Number> = Fold { fold: mul };
 
-fn mul(args: &[RDatum]) -> Result<RDatum, RuntimeError> {
-    let mut product:Number = One::one();
-    for arg in args.iter() {
-        let a = try!(DatumCast::unwrap(arg));
-        product = product * a;
+fn sub(arg0: &Number, args: &[Number]) -> Number {
+    if args.len() == 0 {
+        return -arg0;
     }
-    return Ok(product.wrap());
+    let mut sum:Number = arg0.clone();
+    for a in args.iter() {
+        sum = &sum - a;
+    }
+    return sum;
 }
 
 /// `(- n0 n1 ...)`
-pub static PRIM_SUB:fn(&[RDatum]) -> Result<RDatum, RuntimeError> = sub;
+pub static PRIM_SUB:Fold1<Number> = Fold1 { fold1: sub };
 
-fn sub(args: &[RDatum]) -> Result<RDatum, RuntimeError> {
-    match args.len() {
-        0 => return Err(RuntimeError { kind: RuntimeErrorKind::NumArgs, desc: "Expected at least 1 arguments, received 0".to_string() }),
-        1 => {
-            let n: Number = try!(DatumCast::unwrap(&args[0]));
-            return Ok(n.neg().wrap());
-        },
-        _ => ()
+fn div(arg0: &Number, args: &[Number]) -> Result<Number, RuntimeError> {
+    if args.len() == 0 {
+        if arg0.is_exact() && arg0.is_zero() {
+            return Err(RuntimeError {
+                kind: RuntimeErrorKind::DivideByZero,
+                desc: "Tried to divied by 0".to_string()
+            });
+        }
+        return Ok(-arg0);
     }
 
-    let mut it = args.iter();
-    let mut sum:Number = try!(DatumCast::unwrap(it.next().unwrap()));
-
-    for arg in it {
-        let a = try!(DatumCast::unwrap(arg));
-        sum = sum - a;
-    }
-    return Ok(sum.wrap());
-}
-
-/// `(/ n0 n1 ...)`
-pub static PRIM_DIV:fn(&[RDatum]) -> Result<RDatum, RuntimeError> = div;
-
-fn div(args: &[RDatum]) -> Result<RDatum, RuntimeError> {
-    match args.len() {
-        0 => return Err(RuntimeError { kind: RuntimeErrorKind::NumArgs, desc: "Expected at least 1 arguments, received 0".to_string() }),
-        1 => {
-            let n: Number = try!(DatumCast::unwrap(&args[0]));
-            if n.is_exact() && n.is_zero() {
-                return Err(RuntimeError {
-                    kind: RuntimeErrorKind::DivideByZero,
-                    desc: "Tried to divied by 0".to_string()
-                });
-            } else {
-                let _1: Number = One::one();
-                return Ok(Datum::Num(_1 / n));
-            }
-        },
-        _ => ()
-    }
-
-    let mut it = args.iter();
-    let mut product:Number = try!(DatumCast::unwrap(it.next().unwrap()));
-
-    for arg in it {
-        let a: Number = try!(DatumCast::unwrap(arg));
+    let mut product:Number = arg0.clone();
+    for a in args.iter() {
         if a.is_exact() && a.is_zero() {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::DivideByZero,
                 desc: "Tried to divied by 0".to_string()
             });
         }
-        product = product / a;
+        product = &product / a;
     }
-    return Ok(product.wrap());
+
+    return Ok(product);
 }
 
+/// `(/ n0 n1 ...)`
+pub static PRIM_DIV:Fold1Err<Number> = Fold1Err { fold1: div };
+
 /// Lists all primitive functions with its name
-pub fn libprimitive() -> Vec<(&'static str, Rc<fn(&[RDatum]) -> Result<RDatum, RuntimeError>>)> {
+pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
     vec![
-        ("+", Rc::new(PRIM_ADD)),
-        ("-", Rc::new(PRIM_SUB)),
-        ("*", Rc::new(PRIM_MUL)),
-        ("/", Rc::new(PRIM_DIV))
+        ("+", &PRIM_ADD),
+        ("-", &PRIM_SUB),
+        ("*", &PRIM_MUL),
+        ("/", &PRIM_DIV)
     ]
 }
