@@ -27,9 +27,8 @@ pub struct Fold1Err<P> {
     fold1: fn(&P, &[P]) -> Result<P, RuntimeError>
 }
 
-#[derive(Copy)]
-pub struct Pred {
-    pred: fn(&RDatum) -> bool
+pub struct F1<T0, R> {
+    f1: fn(&T0) -> R
 }
 
 impl<T> PrimFunc for Fold<T> where T: DatumCast {
@@ -81,7 +80,7 @@ impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
     }
 }
 
-impl PrimFunc for Pred {
+impl<R: DatumCast> PrimFunc for F1<RDatum, R> {
     fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
@@ -89,7 +88,7 @@ impl PrimFunc for Pred {
                 desc: format!("Expected 1 argument, received {:?}", args.len())
             });
         }
-        let f = self.pred;
+        let f = self.f1;
 
         Ok(f(&args[0]).wrap())
     }
@@ -171,7 +170,7 @@ macro_rules! impl_typecheck {
             DatumType::get_type(arg) == DatumType::$type_name
         }
 
-        pub static $static_name: Pred = Pred { pred: $func_name };
+        pub static $static_name: F1<RDatum, bool> = F1 { f1: $func_name };
     )
 }
 
