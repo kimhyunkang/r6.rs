@@ -41,29 +41,30 @@ impl Closure {
 }
 
 /// Type representation of RDatum
-#[derive(Debug, Copy)]
+#[derive(Debug, Copy, PartialEq)]
 pub enum DatumType {
     Sym,
     Bool,
     Char,
     String,
     Num,
-    List,
+    Pair,
+    Null,
     Callable,
     Undefined
 }
 
 impl DatumType {
     /// Get the type of datum
-    fn get_type(datum: &RDatum) -> DatumType {
+    pub fn get_type(datum: &RDatum) -> DatumType {
         match datum {
             &Datum::Sym(_) => DatumType::Sym,
             &Datum::Bool(_) => DatumType::Bool,
             &Datum::Char(_) => DatumType::Char,
             &Datum::String(_) => DatumType::String,
             &Datum::Num(_) => DatumType::Num,
-            &Datum::Nil => DatumType::List,
-            &Datum::Cons(_) => DatumType::List,
+            &Datum::Nil => DatumType::Null,
+            &Datum::Cons(_) => DatumType::Pair,
             &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Undefined) => DatumType::Undefined
@@ -133,6 +134,22 @@ impl DatumCast for Number {
 
     fn wrap(&self) -> RDatum{
         Datum::Num(self.clone())
+    }
+}
+
+impl DatumCast for bool {
+    fn unwrap(datum: &RDatum) -> Result<bool, RuntimeError> {
+        match datum {
+            &Datum::Bool(b) => Ok(b),
+            _ => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: format!("expected Bool, but received {:?}", DatumType::get_type(datum))
+            })
+        }
+    }
+
+    fn wrap(&self) -> RDatum{
+        Datum::Bool(*self)
     }
 }
 

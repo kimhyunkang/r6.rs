@@ -81,6 +81,7 @@ fn set_test() {
 #[test]
 fn list_test() {
     assert_evaluates_to!("(list 1 2 3)", "(1 2 3)");
+    assert_evaluates_to!("(list)", "()");
 }
 
 #[test]
@@ -88,4 +89,37 @@ fn quote_test() {
     assert_evaluates_to!(r#"(quote a)"#, "a");
     assert_evaluates_to!(r#"(quote (1 2 3))"#, "(1 2 3)");
     assert_evaluates_to!(r#"(quote #\a)"#, r#"#\a"#);
+}
+
+#[test]
+fn quote_abbrev_test() {
+    assert_evaluates_to!(r#"'a"#, "a");
+    assert_evaluates_to!(r#"'(1 2 3)"#, "(1 2 3)");
+    assert_evaluates_to!(r#"'#\a"#, r#"#\a"#);
+}
+
+#[test]
+fn typecheck_test() {
+    assert_evaluates_to!("(boolean? #t)", "#t");
+    assert_evaluates_to!("(boolean? #f)", "#t");
+    assert_evaluates_to!("(boolean? 1)", "#f");
+
+    assert_evaluates_to!("(pair? (list 1 2))", "#t");
+    assert_evaluates_to!("(pair? (list))", "#f");
+    assert_evaluates_to!("(pair? 1)", "#f");
+
+    assert_evaluates_to!(r#"(symbol? #\a)"#, "#f");
+    assert_evaluates_to!(r#"(symbol? 'a)"#, "#t");
+
+    assert_evaluates_to!(r#"(char? #\a)"#, "#t");
+    assert_evaluates_to!(r#"(char? 'a)"#, "#f");
+
+    assert_evaluates_to!(r#"(string? "a")"#, "#t");
+    assert_evaluates_to!(r#"(string? 'a)"#, "#f");
+
+    assert_evaluates_to!(r#"(procedure? +)"#, "#t");
+    assert_evaluates_to!(r#"(procedure? '+)"#, "#f");
+
+    assert_evaluates_to!(r#"(null? (list))"#, "#t");
+    assert_evaluates_to!(r#"(null? (list 1 2))"#, "#f");
 }

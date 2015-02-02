@@ -4,7 +4,7 @@ use num::{Zero, One};
 
 use number::Number;
 use error::{RuntimeError, RuntimeErrorKind};
-use runtime::{DatumCast, RDatum};
+use runtime::{DatumCast, RDatum, DatumType};
 
 pub trait PrimFunc {
     fn call(&self, &[RDatum]) -> Result<RDatum, RuntimeError>;
@@ -25,6 +25,11 @@ pub struct Fold1<P> {
 
 pub struct Fold1Err<P> {
     fold1: fn(&P, &[P]) -> Result<P, RuntimeError>
+}
+
+#[derive(Copy)]
+pub struct Pred {
+    pred: fn(&RDatum) -> bool
 }
 
 impl<T> PrimFunc for Fold<T> where T: DatumCast {
@@ -73,6 +78,20 @@ impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
                 f(&v[0], &v[1..]).map(|res| res.wrap())
             }
         )
+    }
+}
+
+impl PrimFunc for Pred {
+    fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
+        if args.len() != 1 {
+            return Err(RuntimeError {
+                kind: RuntimeErrorKind::NumArgs,
+                desc: format!("Expected 1 argument, received {:?}", args.len())
+            });
+        }
+        let f = self.pred;
+
+        Ok(f(&args[0]).wrap())
     }
 }
 
@@ -146,6 +165,25 @@ fn list(args: &[RDatum]) -> RDatum {
 
 pub static PRIM_LIST:FoldDatum = FoldDatum { fold: list };
 
+macro_rules! impl_typecheck {
+    ($static_name:ident, $func_name:ident, $type_name:ident) => (
+        fn $func_name(arg: &RDatum) -> bool {
+            DatumType::get_type(arg) == DatumType::$type_name
+        }
+
+        pub static $static_name: Pred = Pred { pred: $func_name };
+    )
+}
+
+impl_typecheck!(PRIM_BOOLEAN, is_boolean, Bool);
+impl_typecheck!(PRIM_PAIR, is_pair, Pair);
+impl_typecheck!(PRIM_SYMBOL, is_symbol, Sym);
+impl_typecheck!(PRIM_NUMBER, is_number, Num);
+impl_typecheck!(PRIM_CHAR, is_char, Char);
+impl_typecheck!(PRIM_STRING, is_string, String);
+impl_typecheck!(PRIM_PROCEDURE, is_procedure, Callable);
+impl_typecheck!(PRIM_NULL, is_null, Null);
+
 /// Lists all primitive functions with its name
 pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
     vec![
@@ -153,6 +191,14 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("-", &PRIM_SUB),
         ("*", &PRIM_MUL),
         ("/", &PRIM_DIV),
-        ("list", &PRIM_LIST)
+        ("list", &PRIM_LIST),
+        ("boolean?", &PRIM_BOOLEAN),
+        ("pair?", &PRIM_PAIR),
+        ("symbol?", &PRIM_SYMBOL),
+        ("number?", &PRIM_NUMBER),
+        ("char?", &PRIM_CHAR),
+        ("string?", &PRIM_STRING),
+        ("procedure?", &PRIM_PROCEDURE),
+        ("null?", &PRIM_NULL)
     ]
 }
