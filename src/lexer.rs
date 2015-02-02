@@ -188,7 +188,7 @@ impl <'a> Lexer<'a> {
 
     fn is_end_of_token(&mut self) -> Result<bool, ParserError> {
         match self.lookahead() {
-            Ok(c) => Ok(is_whitespace(c)),
+            Ok(c) => Ok(is_whitespace(c) || is_delim(c)),
             Err(e) => match e.kind {
                 IoErrorKind::EndOfFile => Ok(true),
                 _ => Err(self.make_error(ParserErrorKind::UnderlyingError(e)))

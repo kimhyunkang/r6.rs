@@ -426,6 +426,11 @@ mod test {
     }
 
     #[test]
+    fn test_end_of_list() {
+        test_parse_ok!("(+)", list!(sym!("+")));
+    }
+
+    #[test]
     fn test_list() {
         test_parse_ok!("()", list!());
         test_parse_ok!("(a)", list!(sym!("a")));
