@@ -118,7 +118,7 @@ pub trait DatumCast {
     /// Casts Datum into Self, possibly raising error
     fn unwrap(datum: &RDatum) -> Result<Self, RuntimeError>;
     /// Casts Self into Datum
-    fn wrap(&self) -> RDatum;
+    fn wrap(self) -> RDatum;
 }
 
 impl DatumCast for Number {
@@ -132,8 +132,8 @@ impl DatumCast for Number {
         }
     }
 
-    fn wrap(&self) -> RDatum{
-        Datum::Num(self.clone())
+    fn wrap(self) -> RDatum{
+        Datum::Num(self)
     }
 }
 
@@ -148,8 +148,8 @@ impl DatumCast for bool {
         }
     }
 
-    fn wrap(&self) -> RDatum{
-        Datum::Bool(*self)
+    fn wrap(self) -> RDatum{
+        Datum::Bool(self)
     }
 }
 
@@ -164,8 +164,8 @@ impl DatumCast for (RDatum, RDatum) {
         }
     }
 
-    fn wrap(&self) -> RDatum {
-        Datum::Cons(Rc::new(RefCell::new(self.clone())))
+    fn wrap(self) -> RDatum {
+        Datum::Cons(Rc::new(RefCell::new(self)))
     }
 }
 

@@ -28,7 +28,11 @@ pub struct Fold1Err<P> {
 }
 
 pub struct F1<T0, R> {
-    f1: fn(&T0) -> R
+    f1: fn(T0) -> R
+}
+
+pub struct R1<R> {
+    f1: fn(&RDatum) -> R
 }
 
 impl<T> PrimFunc for Fold<T> where T: DatumCast {
@@ -80,7 +84,7 @@ impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
     }
 }
 
-impl<R: DatumCast> PrimFunc for F1<RDatum, R> {
+impl<R: DatumCast> PrimFunc for R1<R> {
     fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
@@ -102,8 +106,7 @@ impl<T0: DatumCast> PrimFunc for F1<T0, RDatum> {
                 desc: format!("Expected 1 argument, received {:?}", args.len())
             });
         }
-        let f = self.f1;
-        DatumCast::unwrap(&args[0]).map(|v| f(&v))
+        DatumCast::unwrap(&args[0]).map(self.f1)
     }
 }
 
@@ -178,15 +181,15 @@ fn list(args: &[RDatum]) -> RDatum {
 /// `(list a0 a1 ...)`
 pub static PRIM_LIST:FoldDatum = FoldDatum { fold: list };
 
-fn car(arg: &(RDatum, RDatum)) -> RDatum {
-    arg.0.clone()
+fn car(arg: (RDatum, RDatum)) -> RDatum {
+    arg.0
 }
 
 /// `(car x)`
 pub static PRIM_CAR: F1<(RDatum, RDatum), RDatum> = F1 { f1: car };
 
-fn cdr(arg: &(RDatum, RDatum)) -> RDatum {
-    arg.1.clone()
+fn cdr(arg: (RDatum, RDatum)) -> RDatum {
+    arg.1
 }
 
 /// `(cdr x)`
@@ -198,7 +201,7 @@ macro_rules! impl_typecheck {
             DatumType::get_type(arg) == DatumType::$type_name
         }
 
-        pub static $static_name: F1<RDatum, bool> = F1 { f1: $func_name };
+        pub static $static_name: R1<bool> = R1 { f1: $func_name };
     )
 }
 
