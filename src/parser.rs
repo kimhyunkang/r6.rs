@@ -64,7 +64,10 @@ fn parse_char(ch: &str) -> Option<char> {
     if ch.chars().count() == 1 {
         Some(ch.char_at(0))
     } else if ch.starts_with("x") {
-        from_str_radix(&ch[1..], 16).and_then(|c| unicode::char::from_u32(c))
+        match from_str_radix(&ch[1..], 16) {
+            Ok(c) => unicode::char::from_u32(c),
+            Err(_) => None
+        }
     } else {
         None
     }
@@ -249,8 +252,8 @@ fn parse_rational(radix: usize, rep: &str, captures: Captures)
     if radix != 10 {
         // Just use Ratio::from_str_radix
         let r: BigRational = match from_str_radix(rep, radix) {
-            Some(r) => r,
-            None => Ratio::from_integer(from_str_radix(rep, radix).unwrap())
+            Ok(r) => r,
+            Err(_) => Ratio::from_integer(from_str_radix(rep, radix).unwrap())
         };
         Ok((r, true))
     } else {

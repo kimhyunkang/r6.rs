@@ -5,7 +5,7 @@ authors = [ "kimhyunkang@gmail.com" ]
 
 [dependencies]
 num = "~0.1.10"
-phf = "~0.5.0"
-phf_mac = "~0.5.0"
+phf = "~0.6.1"
+phf_macros = "~0.6.1"
 regex = "~0.1.10"
 regex_macros = "~0.1.5"

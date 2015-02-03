@@ -13,7 +13,7 @@
 #![feature(unicode)]
 
 #[plugin]
-extern crate phf_mac;
+extern crate phf_macros;
 extern crate phf;
 #[plugin]
 #[no_link]

@@ -263,8 +263,8 @@ impl <'a> Lexer<'a> {
                             return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
                         }
                         let code = match num::from_str_radix(hex_str.as_slice(), 16) {
-                            Some(n) => n,
-                            None => return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
+                            Ok(n) => n,
+                            Err(_) => return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
                         };
                         match char::from_u32(code) {
                             Some(c) => s.push(c),
