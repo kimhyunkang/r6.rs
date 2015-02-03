@@ -14,11 +14,6 @@ pub struct Fold<P> {
     fold: fn(&[P]) -> P
 }
 
-#[derive(Copy)]
-pub struct FoldDatum {
-    fold: fn(&[RDatum]) -> RDatum
-}
-
 pub struct Fold1<P> {
     fold1: fn(&P, &[P]) -> P
 }
@@ -43,7 +38,7 @@ impl<T> PrimFunc for Fold<T> where T: DatumCast {
     }
 }
 
-impl PrimFunc for FoldDatum {
+impl PrimFunc for Fold<RDatum> {
     fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
         let f = self.fold;
         Ok(f(args))
@@ -179,7 +174,7 @@ fn list(args: &[RDatum]) -> RDatum {
 }
 
 /// `(list a0 a1 ...)`
-pub static PRIM_LIST:FoldDatum = FoldDatum { fold: list };
+pub static PRIM_LIST:Fold<RDatum> = Fold { fold: list };
 
 fn car(arg: (RDatum, RDatum)) -> RDatum {
     arg.0
