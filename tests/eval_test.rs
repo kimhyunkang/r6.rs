@@ -149,3 +149,11 @@ fn car_test() {
 fn cdr_test() {
     assert_evaluates_to!("(cdr '(a b))", "(b)");
 }
+
+#[test]
+fn number_predicates_test() {
+    assert_evaluates_to!("(zero? 0)", "#t");
+    assert_evaluates_to!("(zero? +0.0)", "#t");
+    assert_evaluates_to!("(zero? -0.0)", "#t");
+    assert_evaluates_to!("(zero? +nan.0)", "#f");
+}

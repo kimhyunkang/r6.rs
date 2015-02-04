@@ -105,6 +105,19 @@ impl<T0: DatumCast> PrimFunc for F1<T0, RDatum> {
     }
 }
 
+impl<T0: DatumCast, R: DatumCast> PrimFunc for F1<T0, R> {
+    fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
+        if args.len() != 1 {
+            return Err(RuntimeError {
+                kind: RuntimeErrorKind::NumArgs,
+                desc: format!("Expected 1 argument, received {:?}", args.len())
+            });
+        }
+        let f = self.f1;
+        DatumCast::unwrap(&args[0]).map(|v| f(v).wrap())
+    }
+}
+
 fn add(args: &[Number]) -> Number {
     let mut sum:Number = Zero::zero();
     for a in args.iter() {
@@ -190,6 +203,12 @@ fn cdr(arg: (RDatum, RDatum)) -> RDatum {
 /// `(cdr x)`
 pub static PRIM_CDR: F1<(RDatum, RDatum), RDatum> = F1 { f1: cdr };
 
+fn zero(arg: Number) -> bool {
+    arg.is_zero()
+}
+
+pub static PRIM_ZERO: F1<Number, bool> = F1 { f1: zero };
+
 macro_rules! impl_typecheck {
     ($static_name:ident, $func_name:ident, $type_name:ident) => (
         fn $func_name(arg: &RDatum) -> bool {
@@ -226,6 +245,7 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("procedure?", &PRIM_PROCEDURE),
         ("null?", &PRIM_NULL),
         ("car", &PRIM_CAR),
-        ("cdr", &PRIM_CDR)
+        ("cdr", &PRIM_CDR),
+        ("zero?", &PRIM_ZERO)
     ]
 }
