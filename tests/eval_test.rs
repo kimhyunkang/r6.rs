@@ -6,6 +6,7 @@ use r6::compiler::Compiler;
 use r6::base::libbase;
 use r6::parser::Parser;
 
+
 macro_rules! assert_evaluates_to {
     ($src:expr, $expected:expr) => (
         {
@@ -49,6 +50,11 @@ fn lexical_scoping() {
 #[test]
 fn lambda_test() {
     assert_evaluates_to!("((lambda (x) (+ x x)) 4)", "8");
+}
+
+#[test]
+fn var_arg_test() {
+    assert_evaluates_to!("((lambda (x y . z) z) 3 4 5 6)", "(5 6)");
 }
 
 #[test]

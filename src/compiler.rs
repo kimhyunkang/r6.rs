@@ -93,7 +93,7 @@ impl<'g> Compiler<'g> {
     }
 
     fn compile_block(&self, static_scope: &[Vec<CowString<'static>>],
-                      args: &[CowString<'static>], body: &RDatum)
+                     args: &[CowString<'static>], var_arg: bool, body: &RDatum)
             -> Result<CodeGenContext, CompileError>
     {
         let mut ctx = CodeGenContext {
@@ -103,6 +103,11 @@ impl<'g> Compiler<'g> {
 
         if body == &Datum::Nil {
             return Err(CompileError { kind: CompileErrorKind::EmptyBody });
+        }
+
+        if var_arg {
+            // The last arg is variable argument list
+            ctx.code.push(Inst::RollArgs(args.len()-1));
         }
 
         let mut first = true;
@@ -235,21 +240,40 @@ impl<'g> Compiler<'g> {
                 nenv
             };
 
-            let new_args = {
+            let (new_args, var_arg) = {
                 let mut nargs = Vec::new();
-                for arg in cur_args.iter() {
-                    if let Ok(Datum::Sym(s)) = arg {
-                        nargs.push(s)
-                    } else {
-                        return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+                let mut var_arg = false;
+                let mut iter = cur_args.clone();
+
+                loop {
+                    let (val, next) = match iter {
+                        Datum::Cons(ref ptr) => ptr.borrow().clone(),
+                        Datum::Sym(ref s) => {
+                            nargs.push(s.clone());
+                            var_arg = true;
+                            break;
+                        },
+                        Datum::Nil => {
+                            break;
+                        }
+                        _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                    };
+                    match val {
+                        Datum::Sym(ref s) => {
+                            nargs.push(s.clone())
+                        },
+                        _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                     }
+                    iter = next;
                 }
-                nargs
+
+                (nargs, var_arg)
             };
 
             let block_ctx = try!(self.compile_block(
                     new_scope.as_slice(),
                     new_args.as_slice(),
+                    var_arg,
                     body
             ));
 

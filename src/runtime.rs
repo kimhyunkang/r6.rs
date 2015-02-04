@@ -192,6 +192,8 @@ pub enum Inst {
     PopArg(MemRef),
     /// pop value from the stack and remove it
     DropArg,
+    /// roll args [n..] into a list
+    RollArgs(usize),
     /// call the function in (stack_top - n)
     Call(usize),
     /// pop the call stack frame, and return to the call site
@@ -523,6 +525,15 @@ impl Runtime {
             },
             Inst::DropArg => {
                 self.arg_stack.pop();
+                self.frame.pc += 1;
+                true
+            },
+            Inst::RollArgs(n) => {
+                let vararg_start = self.frame.stack_bottom + n;
+                let list: RDatum = self.arg_stack[vararg_start ..].iter().map(Clone::clone).collect();
+                self.arg_stack.truncate(vararg_start);
+                self.push_stack(list);
+                self.frame.arg_size = n+1;
                 self.frame.pc += 1;
                 true
             },
