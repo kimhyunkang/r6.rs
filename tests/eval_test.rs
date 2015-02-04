@@ -6,7 +6,6 @@ use r6::compiler::Compiler;
 use r6::base::libbase;
 use r6::parser::Parser;
 
-
 macro_rules! assert_evaluates_to {
     ($src:expr, $expected:expr) => (
         {
@@ -34,6 +33,31 @@ macro_rules! assert_evaluates_to {
             let result = runtime.run();
             if !((result == expected) && (expected == result)) {
                 panic!("test failed: expected `{:?}` but got `{:?}`", expected, result);
+            }
+        }
+    )
+}
+
+macro_rules! assert_evaluates_datum {
+    ($src:expr, $expected:expr) => (
+        {
+            let mut src_reader = BufReader::new($src.as_bytes());
+            let mut src_parser = Parser::new(&mut src_reader);
+            let sourcecode = match src_parser.parse_datum() {
+                Ok(code) => code,
+                Err(e) => panic!("failed to parse source: {:?}", e)
+            };
+
+            let base = libbase();
+            let compiler = Compiler::new(&base);
+            let bytecode = match compiler.compile(&sourcecode) {
+                Ok(code) => code,
+                Err(e) => panic!("compile failure: {:?}", e)
+            };
+            let mut runtime = Runtime::new(bytecode);
+            let result = runtime.run();
+            if !((result == $expected) && ($expected == result)) {
+                panic!("test failed: expected `{:?}` but got `{:?}`", $expected, result);
             }
         }
     )
@@ -92,6 +116,17 @@ fn let_star_test() {
 #[test]
 fn letrec_test() {
     assert_evaluates_to!("(letrec ((even? (lambda (n) (if (zero? n) #t (odd? (- n 1))))) (odd? (lambda (n) (if (zero? n) #f (even? (- n 1)))))) (even? 8))", "#t");
+}
+
+#[test]
+fn letrec_undefined_test() {
+    use r6::datum::Datum;
+    use r6::runtime::RuntimeData;
+
+    assert_evaluates_datum!(
+        "(letrec ((quicksand quicksand)) quicksand)",
+        Datum::Ext(RuntimeData::Undefined)
+    );
 }
 
 #[test]

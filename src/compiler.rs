@@ -292,14 +292,19 @@ impl<'g> Compiler<'g> {
 
         ctx.code.push(Inst::PushFrame(0));
 
+        for _ in 0..exprs.len() {
+            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+        }
+
         let new_scope = {
             let mut nenv = static_scope.to_vec();
             nenv.push(args.to_vec());
             nenv
         };
 
-        for expr in exprs.iter() {
+        for (i, expr) in exprs.iter().enumerate() {
             try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, expr));
+            ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
