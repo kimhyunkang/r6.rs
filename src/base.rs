@@ -16,6 +16,7 @@ pub fn libbase() -> HashMap<CowString<'static>, EnvVar> {
     lib.insert(Cow::Borrowed("let"), EnvVar::Syntax(Syntax::Let));
     lib.insert(Cow::Borrowed("let*"), EnvVar::Syntax(Syntax::LetStar));
     lib.insert(Cow::Borrowed("letrec"), EnvVar::Syntax(Syntax::LetRec));
+    lib.insert(Cow::Borrowed("letrec*"), EnvVar::Syntax(Syntax::LetRecStar));
     lib.insert(Cow::Borrowed("set!"), EnvVar::Syntax(Syntax::Set));
     lib.insert(Cow::Borrowed("quote"), EnvVar::Syntax(Syntax::Quote));
     return lib;

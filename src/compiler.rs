@@ -26,6 +26,9 @@ pub enum Syntax {
     /// `letrec`
     LetRec,
 
+    /// `letrec*`
+    LetRecStar,
+
     /// `set!`
     Set,
 
@@ -463,22 +466,23 @@ impl<'g> Compiler<'g> {
             &Datum::Cons(ref ptr) =>
                 if let (Datum::Sym(ref n), ref t) = *ptr.borrow() {
                     match self.global_env.get(n) {
-                        Some(&EnvVar::Syntax(Syntax::Lambda)) =>
-                            self.compile_lambda(static_scope, args, ctx, t),
-                        Some(&EnvVar::Syntax(Syntax::If)) =>
-                            self.compile_if(static_scope, args, ctx, t),
-                        Some(&EnvVar::Syntax(Syntax::Let)) =>
-                            self.compile_let(static_scope, args, ctx, t),
-                        Some(&EnvVar::Syntax(Syntax::LetStar)) =>
-                            self.compile_let_star(static_scope, args, ctx, t),
-                        Some(&EnvVar::Syntax(Syntax::LetRec)) =>
-                            self.compile_letrec(static_scope, args, ctx, t),
-                        Some(&EnvVar::Syntax(Syntax::Set)) =>
-                            self.compile_set(static_scope, args, ctx, t),
-                        Some(&EnvVar::Syntax(Syntax::Quote)) =>
-                            self.compile_quote(ctx, t),
-                        _ =>
-                            self.compile_call(static_scope, args, ctx, datum)
+                        Some(&EnvVar::Syntax(ref syn)) => match syn {
+                            &Syntax::Lambda =>
+                                self.compile_lambda(static_scope, args, ctx, t),
+                            &Syntax::If =>
+                                self.compile_if(static_scope, args, ctx, t),
+                            &Syntax::Let =>
+                                self.compile_let(static_scope, args, ctx, t),
+                            &Syntax::LetStar =>
+                                self.compile_let_star(static_scope, args, ctx, t),
+                            &Syntax::LetRec | &Syntax::LetRecStar =>
+                                self.compile_letrec(static_scope, args, ctx, t),
+                            &Syntax::Set =>
+                                self.compile_set(static_scope, args, ctx, t),
+                            &Syntax::Quote =>
+                                self.compile_quote(ctx, t)
+                        },
+                        _ => self.compile_call(static_scope, args, ctx, datum)
                     }
                 } else {
                     self.compile_call(static_scope, args, ctx, datum)
@@ -505,6 +509,7 @@ impl fmt::Debug for Syntax {
             Syntax::Let => write!(f, "let"),
             Syntax::LetStar => write!(f, "let*"),
             Syntax::LetRec => write!(f, "letrec"),
+            Syntax::LetRecStar => write!(f, "letrec*"),
             Syntax::Set => write!(f, "set!"),
             Syntax::Quote => write!(f, "quote")
         }
