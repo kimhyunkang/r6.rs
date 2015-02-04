@@ -90,6 +90,11 @@ fn let_star_test() {
 }
 
 #[test]
+fn letrec_test() {
+    assert_evaluates_to!("(letrec ((even? (lambda (n) (if (zero? n) #t (odd? (- n 1))))) (odd? (lambda (n) (if (zero? n) #f (even? (- n 1)))))) (even? 8))", "#t");
+}
+
+#[test]
 fn set_test() {
     assert_evaluates_to!("(let ((x 23)) (set! x 24) x)", "24");
 }

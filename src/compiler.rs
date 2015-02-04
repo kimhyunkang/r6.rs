@@ -23,6 +23,9 @@ pub enum Syntax {
     /// `let*`
     LetStar,
 
+    /// `letrec`
+    LetRec,
+
     /// `set!`
     Set,
 
@@ -278,6 +281,42 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
+    fn compile_letrec(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                      ctx: &mut CodeGenContext, tail: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let (syms, exprs, body) = try!(self.get_form(tail));
+
+        ctx.code.push(Inst::PushFrame(0));
+
+        let new_scope = {
+            let mut nenv = static_scope.to_vec();
+            nenv.push(args.to_vec());
+            nenv
+        };
+
+        for expr in exprs.iter() {
+            try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, expr));
+        }
+
+        ctx.code.push(Inst::SetArgSize(syms.len()));
+
+        if body == Datum::Nil {
+            return Err(CompileError { kind: CompileErrorKind::EmptyBody });
+        }
+
+        for expr in body.iter() {
+            match expr {
+                Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
+                Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
+            }
+        }
+
+        ctx.code.push(Inst::PopFrame);
+
+        Ok(())
+    }
+
     fn compile_lambda(&self, static_scope: &[Vec<CowString<'static>>],
                       args: &[CowString<'static>], ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
@@ -432,6 +471,8 @@ impl<'g> Compiler<'g> {
                             self.compile_let(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::LetStar)) =>
                             self.compile_let_star(static_scope, args, ctx, t),
+                        Some(&EnvVar::Syntax(Syntax::LetRec)) =>
+                            self.compile_letrec(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::Set)) =>
                             self.compile_set(static_scope, args, ctx, t),
                         Some(&EnvVar::Syntax(Syntax::Quote)) =>
@@ -463,6 +504,7 @@ impl fmt::Debug for Syntax {
             Syntax::If => write!(f, "if"),
             Syntax::Let => write!(f, "let"),
             Syntax::LetStar => write!(f, "let*"),
+            Syntax::LetRec => write!(f, "letrec"),
             Syntax::Set => write!(f, "set!"),
             Syntax::Quote => write!(f, "quote")
         }
