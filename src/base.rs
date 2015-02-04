@@ -11,13 +11,10 @@ pub fn libbase() -> HashMap<CowString<'static>, EnvVar> {
     for &(name, func) in libprimitive().iter() {
         lib.insert(Cow::Borrowed(name), EnvVar::PrimFunc(name, func));
     }
-    lib.insert(Cow::Borrowed("lambda"), EnvVar::Syntax(Syntax::Lambda));
-    lib.insert(Cow::Borrowed("if"), EnvVar::Syntax(Syntax::If));
-    lib.insert(Cow::Borrowed("let"), EnvVar::Syntax(Syntax::Let));
-    lib.insert(Cow::Borrowed("let*"), EnvVar::Syntax(Syntax::LetStar));
-    lib.insert(Cow::Borrowed("letrec"), EnvVar::Syntax(Syntax::LetRec));
-    lib.insert(Cow::Borrowed("letrec*"), EnvVar::Syntax(Syntax::LetRecStar));
-    lib.insert(Cow::Borrowed("set!"), EnvVar::Syntax(Syntax::Set));
-    lib.insert(Cow::Borrowed("quote"), EnvVar::Syntax(Syntax::Quote));
+
+    for syn in Syntax::iter() {
+        lib.insert(Cow::Borrowed(syn.name()), EnvVar::Syntax(syn));
+    }
+
     return lib;
 }

@@ -2,6 +2,7 @@ use std::string::CowString;
 use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
@@ -9,7 +10,7 @@ use runtime::{Inst, MemRef, RDatum, RuntimeData};
 use primitive::PrimFunc;
 
 /// Syntax variables
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, FromPrimitive)]
 pub enum Syntax {
     /// `lambda`
     Lambda,
@@ -34,6 +35,40 @@ pub enum Syntax {
 
     /// `quote`
     Quote
+}
+
+#[derive(Copy)]
+pub struct SyntaxIter {
+    index: usize
+}
+
+impl Iterator for SyntaxIter {
+    type Item = Syntax;
+
+    fn next(&mut self) -> Option<Syntax> {
+        let res = FromPrimitive::from_uint(self.index);
+        self.index += 1;
+        res
+    }
+}
+
+impl Syntax {
+    pub fn iter() -> SyntaxIter {
+        SyntaxIter { index: 0 }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            &Syntax::Lambda => "lambda",
+            &Syntax::If => "if",
+            &Syntax::Let => "let",
+            &Syntax::LetStar => "let*",
+            &Syntax::LetRec => "letrec",
+            &Syntax::LetRecStar => "letrec*",
+            &Syntax::Set => "set!",
+            &Syntax::Quote => "quote"
+        }
+    }
 }
 
 /// Environment variables in the global environment
@@ -508,16 +543,7 @@ impl<'g> Compiler<'g> {
 
 impl fmt::Debug for Syntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Syntax::Lambda => write!(f, "lambda"),
-            Syntax::If => write!(f, "if"),
-            Syntax::Let => write!(f, "let"),
-            Syntax::LetStar => write!(f, "let*"),
-            Syntax::LetRec => write!(f, "letrec"),
-            Syntax::LetRecStar => write!(f, "letrec*"),
-            Syntax::Set => write!(f, "set!"),
-            Syntax::Quote => write!(f, "quote")
-        }
+        write!(f, "{}", self.name())
     }
 }
 
