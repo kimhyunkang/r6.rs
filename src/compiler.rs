@@ -176,14 +176,14 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_let(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                   ctx: &mut CodeGenContext, tail: &RDatum)
-            -> Result<(), CompileError>
+    fn get_form(&self, form: &RDatum)
+            -> Result<(Vec<CowString<'static>>, Vec<RDatum>, RDatum), CompileError>
     {
-        if let &Datum::Cons(ref ptr) = tail {
-            let (ref bindings, ref body) = *ptr.borrow();
+        if let &Datum::Cons(ref ptr) = form {
+            let (ref binding_form, ref body) = *ptr.borrow();
             let mut syms = Vec::new();
-            for b in bindings.iter() {
+            let mut exprs = Vec::new();
+            for b in binding_form.iter() {
                 match b {
                     Ok(datum) => {
                         let binding:Vec<RDatum> = match datum.iter().collect() {
@@ -193,7 +193,7 @@ impl<'g> Compiler<'g> {
                         match binding.as_slice() {
                             [Datum::Sym(ref sym), ref expr] => {
                                 syms.push(sym.clone());
-                                try!(self.compile_expr(static_scope, args, ctx, expr));
+                                exprs.push(expr.clone());
                             },
                             _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                         };
@@ -201,31 +201,42 @@ impl<'g> Compiler<'g> {
                     Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 }
             }
-            ctx.code.push(Inst::PushFrame(syms.len()));
-
-            let new_scope = {
-                let mut nenv = static_scope.to_vec();
-                nenv.push(args.to_vec());
-                nenv
-            };
-
-            if body == &Datum::Nil {
-                return Err(CompileError { kind: CompileErrorKind::EmptyBody });
-            }
-
-            for expr in body.iter() {
-                match expr {
-                    Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
-                    Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
-                }
-            }
-
-            ctx.code.push(Inst::PopFrame);
-
-            Ok(())
+            Ok((syms, exprs, body.clone()))
         } else {
-            return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+            Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
+    }
+
+    fn compile_let(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                   ctx: &mut CodeGenContext, tail: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let (syms, exprs, body) = try!(self.get_form(tail));
+        for expr in exprs.iter() {
+            try!(self.compile_expr(static_scope, args, ctx, expr));
+        }
+        ctx.code.push(Inst::PushFrame(syms.len()));
+
+        let new_scope = {
+            let mut nenv = static_scope.to_vec();
+            nenv.push(args.to_vec());
+            nenv
+        };
+
+        if body == Datum::Nil {
+            return Err(CompileError { kind: CompileErrorKind::EmptyBody });
+        }
+
+        for expr in body.iter() {
+            match expr {
+                Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
+                Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
+            }
+        }
+
+        ctx.code.push(Inst::PopFrame);
+
+        Ok(())
     }
 
     fn compile_lambda(&self, static_scope: &[Vec<CowString<'static>>],
