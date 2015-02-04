@@ -200,6 +200,8 @@ pub enum Inst {
     Return,
     /// push the call stack without jumping, and move stack_bottom to (stack_top - n)
     PushFrame(usize),
+    /// set arg_size to n, letting PopFrame or Return pop the correct number of arg_stack
+    SetArgSize(usize),
     /// pop the call stack without jumping
     PopFrame,
     /// jump to the given pc
@@ -486,6 +488,11 @@ impl Runtime {
                 mem::swap(&mut self.frame, self.call_stack.last_mut().unwrap());
                 true
             },
+            Inst::SetArgSize(n) => {
+                self.frame.arg_size = n;
+                self.frame.pc += 1;
+                true
+            }
             Inst::PopFrame => {
                 let pc = self.frame.pc;
                 self.pop_call_stack();

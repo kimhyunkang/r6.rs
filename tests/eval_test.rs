@@ -85,6 +85,11 @@ fn let_test() {
 }
 
 #[test]
+fn let_star_test() {
+    assert_evaluates_to!("(let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))", "70");
+}
+
+#[test]
 fn set_test() {
     assert_evaluates_to!("(let ((x 23)) (set! x 24) x)", "24");
 }
