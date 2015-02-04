@@ -109,6 +109,11 @@ fn let_test() {
 }
 
 #[test]
+fn override_syntax_test() {
+    assert_evaluates_to!("(let ((if (lambda (x) x))) (if 3))", "3");
+}
+
+#[test]
 fn let_star_test() {
     assert_evaluates_to!("(let ((x 2) (y 3)) (let* ((x 7) (z (+ x y))) (* z x)))", "70");
 }

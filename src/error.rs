@@ -2,6 +2,8 @@ use std::old_io::IoError;
 use std::error::{Error, FromError};
 use std::fmt;
 
+use compiler::Syntax;
+
 /// Possible parser errors
 #[derive(Debug, PartialEq)]
 pub enum ParserErrorKind {
@@ -79,7 +81,7 @@ pub enum CompileErrorKind {
     /// Trying to apply non-function constant
     NotCallable,
     /// Trying to refer a syntax variable
-    SyntaxReference,
+    SyntaxReference(Syntax),
     /// Trying to refer an unbound variable
     UnboundVariable
 }

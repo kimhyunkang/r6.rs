@@ -113,12 +113,46 @@ impl<'g> Compiler<'g> {
         return Ok(ctx.code);
     }
 
-    fn compile_call(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                    ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_app(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                   ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
+        let (callee, c_args) = match datum {
+            &Datum::Cons(ref ptr) => ptr.borrow().clone(),
+            _ => return Err(CompileError { kind: CompileErrorKind::NullEval })
+        };
+
+        if let Datum::Sym(ref s) = callee {
+            match self.find_var(static_scope, args, ctx, s) {
+                Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
+                Err(e) => match e.kind {
+                    CompileErrorKind::SyntaxReference(syn) => {
+                        return match syn {
+                            Syntax::Lambda =>
+                                self.compile_lambda(static_scope, args, ctx, &c_args),
+                            Syntax::If =>
+                                self.compile_if(static_scope, args, ctx, &c_args),
+                            Syntax::Let =>
+                                self.compile_let(static_scope, args, ctx, &c_args),
+                            Syntax::LetStar =>
+                                self.compile_let_star(static_scope, args, ctx, &c_args),
+                            Syntax::LetRec | Syntax::LetRecStar =>
+                                self.compile_letrec(static_scope, args, ctx, &c_args),
+                            Syntax::Set =>
+                                self.compile_set(static_scope, args, ctx, &c_args),
+                            Syntax::Quote =>
+                                self.compile_quote(ctx, &c_args)
+                        };
+                    },
+                    _ => return Err(e)
+                }
+            }
+        } else {
+            try!(self.compile_expr(static_scope, args, ctx, &callee));
+        }
+
         let mut arg_count = 0;
-        for d in datum.iter() {
+        for d in c_args.iter() {
             match d {
                 Ok(d) => {
                     try!(self.compile_expr(static_scope, args, ctx, &d));
@@ -128,12 +162,8 @@ impl<'g> Compiler<'g> {
             }
         }
 
-        if arg_count == 0 {
-            Err(CompileError { kind: CompileErrorKind::NullEval })
-        } else {
-            ctx.code.push(Inst::Call(arg_count - 1));
-            Ok(())
-        }
+        ctx.code.push(Inst::Call(arg_count));
+        Ok(())
     }
 
     fn compile_body(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
@@ -424,8 +454,8 @@ impl<'g> Compiler<'g> {
 
         match self.global_env.get(sym) {
             Some(data) => match data {
-                &EnvVar::Syntax(_) =>
-                    Err(CompileError { kind: CompileErrorKind::SyntaxReference }),
+                &EnvVar::Syntax(ref s) =>
+                    Err(CompileError { kind: CompileErrorKind::SyntaxReference(s.clone()) }),
                 &EnvVar::PrimFunc(ref name, func) => {
                     Ok(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
                                         name.clone(),
@@ -485,30 +515,8 @@ impl<'g> Compiler<'g> {
             -> Result<(), CompileError>
     {
         match datum {
-            &Datum::Cons(ref ptr) =>
-                if let (Datum::Sym(ref n), ref t) = *ptr.borrow() {
-                    match self.global_env.get(n) {
-                        Some(&EnvVar::Syntax(ref syn)) => match syn {
-                            &Syntax::Lambda =>
-                                self.compile_lambda(static_scope, args, ctx, t),
-                            &Syntax::If =>
-                                self.compile_if(static_scope, args, ctx, t),
-                            &Syntax::Let =>
-                                self.compile_let(static_scope, args, ctx, t),
-                            &Syntax::LetStar =>
-                                self.compile_let_star(static_scope, args, ctx, t),
-                            &Syntax::LetRec | &Syntax::LetRecStar =>
-                                self.compile_letrec(static_scope, args, ctx, t),
-                            &Syntax::Set =>
-                                self.compile_set(static_scope, args, ctx, t),
-                            &Syntax::Quote =>
-                                self.compile_quote(ctx, t)
-                        },
-                        _ => self.compile_call(static_scope, args, ctx, datum)
-                    }
-                } else {
-                    self.compile_call(static_scope, args, ctx, datum)
-                },
+            &Datum::Cons(_) =>
+                self.compile_app(static_scope, args, ctx, datum),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
                 let ptr = try!(self.find_var(static_scope, args, ctx, sym));
