@@ -9,6 +9,8 @@ use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
 use primitive::PrimFunc;
 
+use log::LogLevel;
+
 /// RuntimeData contains runtime values not representable in standard syntax
 #[derive(Clone)]
 pub enum RuntimeData {
@@ -414,7 +416,22 @@ impl Runtime {
     }
 
     fn step(&mut self) -> bool {
-        match self.fetch() {
+        let inst = self.fetch();
+
+        if log_enabled!(LogLevel::Debug) {
+            debug!("Arg Stack:");
+            for (i, arg) in self.arg_stack.iter().enumerate() {
+                debug!("  [{:?}]: {:?}", i, arg);
+            }
+            debug!("Call Stack:");
+            for (i, frame) in self.call_stack.iter().enumerate() {
+                debug!("  [{:?}]: {:?}", i, frame);
+            }
+            debug!("  [top]: {:?}", self.frame);
+            debug!("Fetch: {:?}", inst);
+        }
+
+        match inst {
             Inst::Nop => {
                 self.frame.pc += 1;
                 true
