@@ -47,6 +47,11 @@ fn lexical_scoping() {
 }
 
 #[test]
+fn lambda_test() {
+    assert_evaluates_to!("((lambda (x) (+ x x)) 4)", "8");
+}
+
+#[test]
 fn if_expression_test() {
     assert_evaluates_to!("(if #t 1 0)", "1");
     assert_evaluates_to!("(if #f 1 0)", "0");
