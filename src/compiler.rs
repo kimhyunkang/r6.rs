@@ -136,22 +136,12 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_block(&self, static_scope: &[Vec<CowString<'static>>],
-                     args: &[CowString<'static>], var_arg: bool, body: &RDatum)
-            -> Result<CodeGenContext, CompileError>
+    fn compile_body(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                    ctx: &mut CodeGenContext, body: &RDatum)
+            -> Result<(), CompileError>
     {
-        let mut ctx = CodeGenContext {
-            code: Vec::new(),
-            link_size: 0
-        };
-
         if body == &Datum::Nil {
             return Err(CompileError { kind: CompileErrorKind::EmptyBody });
-        }
-
-        if var_arg {
-            // The last arg is variable argument list
-            ctx.code.push(Inst::RollArgs(args.len()-1));
         }
 
         let mut first = true;
@@ -164,11 +154,30 @@ impl<'g> Compiler<'g> {
             }
 
             if let Ok(e) = expr {
-                try!(self.compile_expr(static_scope, args, &mut ctx, &e));
+                try!(self.compile_expr(static_scope, args, ctx, &e));
             } else {
                 return Err(CompileError { kind: CompileErrorKind::DottedBody });
             }
         }
+
+        Ok(())
+    }
+
+    fn compile_block(&self, static_scope: &[Vec<CowString<'static>>],
+                     args: &[CowString<'static>], var_arg: bool, body: &RDatum)
+            -> Result<CodeGenContext, CompileError>
+    {
+        let mut ctx = CodeGenContext {
+            code: Vec::new(),
+            link_size: 0
+        };
+
+        if var_arg {
+            // The last arg is variable argument list
+            ctx.code.push(Inst::RollArgs(args.len()-1));
+        }
+
+        try!(self.compile_body(static_scope, args, &mut ctx, body));
 
         ctx.code.push(Inst::Return);
 
@@ -267,16 +276,7 @@ impl<'g> Compiler<'g> {
             nenv
         };
 
-        if body == Datum::Nil {
-            return Err(CompileError { kind: CompileErrorKind::EmptyBody });
-        }
-
-        for expr in body.iter() {
-            match expr {
-                Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
-                Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
-            }
-        }
+        try!(self.compile_body(new_scope.as_slice(), syms.as_slice(), ctx, &body));
 
         ctx.code.push(Inst::PopFrame);
 
@@ -303,16 +303,7 @@ impl<'g> Compiler<'g> {
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
 
-        if body == Datum::Nil {
-            return Err(CompileError { kind: CompileErrorKind::EmptyBody });
-        }
-
-        for expr in body.iter() {
-            match expr {
-                Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
-                Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
-            }
-        }
+        try!(self.compile_body(new_scope.as_slice(), syms.as_slice(), ctx, &body));
 
         ctx.code.push(Inst::PopFrame);
 
@@ -344,16 +335,7 @@ impl<'g> Compiler<'g> {
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
 
-        if body == Datum::Nil {
-            return Err(CompileError { kind: CompileErrorKind::EmptyBody });
-        }
-
-        for expr in body.iter() {
-            match expr {
-                Ok(e) => try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, &e)),
-                Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedBody })
-            }
-        }
+        try!(self.compile_body(new_scope.as_slice(), syms.as_slice(), ctx, &body));
 
         ctx.code.push(Inst::PopFrame);
 
