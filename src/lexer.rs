@@ -14,6 +14,8 @@ pub enum Token {
     OpenParen,
     /// `)`
     CloseParen,
+    /// `#(`
+    OpenVectorParen,
     /// `.`
     Dot,
     /// `'`
@@ -35,6 +37,7 @@ impl fmt::Debug for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Token::OpenParen => write!(f, "OpenParen"),
+            Token::OpenVectorParen => write!(f, "OpenVectorParen"),
             Token::CloseParen => write!(f, "CloseParen"),
             Token::Dot => write!(f, "Dot"),
             Token::Quote => write!(f, "Quote"),
@@ -179,6 +182,7 @@ impl <'a> Lexer<'a> {
                     self.lex_numeric(s).map(|s| wrap(line, col, Token::Numeric(s)))
                 },
                 '\\' => self.lex_char().map(|s| wrap(line, col, Token::Character(s))),
+                '(' => Ok(wrap(line, col, Token::OpenVectorParen)),
                 _ => Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
             }
         } else if c == '"' {

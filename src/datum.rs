@@ -21,6 +21,8 @@ pub enum Datum<T> {
     Char(char),
     /// String
     String(String),
+    /// Vector
+    Vector(Rc<RefCell<Vec<Datum<T>>>>),
     /// Numeric value
     Num(Number),
     /// `()`
@@ -69,6 +71,18 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
             Datum::String(ref s) => write!(f, "{:?}", s),
+            Datum::Vector(ref ptr) => {
+                let vec = ptr.borrow();
+                if vec.is_empty() {
+                    write!(f, "#()")
+                } else {
+                    try!(write!(f, "#({:?}", vec[0]));
+                    for x in vec[1..].iter() {
+                        try!(write!(f, " {:?}", x));
+                    }
+                    write!(f, ")")
+                }
+            },
             Datum::Num(ref n) => write!(f, "{}", n),
             Datum::Ext(ref x) => x.fmt(f),
             Datum::Nil => write!(f, "()"),
@@ -145,6 +159,8 @@ mod test {
     use number::Number;
     use std::borrow::Cow;
     use std::num::FromPrimitive;
+    use std::rc::Rc;
+    use std::cell::RefCell;
 
     fn compare_fmt(s: &str, datum: Datum<()>) {
         assert_eq!(s.to_string(), format!("{:?}", datum))
@@ -157,6 +173,12 @@ mod test {
         compare_fmt("(a)", list!(sym!("a")));
         compare_fmt("(a b)", list!(sym!("a"), sym!("b")));
         compare_fmt("(a . b)", cons(sym!("a"), sym!("b")));
+    }
+
+    #[test]
+    fn test_vec_fmt() {
+        compare_fmt("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
+        compare_fmt("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
     }
 
     #[test]

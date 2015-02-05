@@ -3,6 +3,8 @@ use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
 use std::iter::range_step;
 use std::fmt::Writer;
 use std::borrow::Cow;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use phf;
 use unicode;
@@ -329,6 +331,9 @@ impl <'a> Parser<'a> {
         match tok.token {
             Token::Identifier(ident) => Ok(Datum::Sym(ident)),
             Token::OpenParen => self.parse_list(),
+            Token::OpenVectorParen => self.parse_vector().map(|v|
+                Datum::Vector(Rc::new(RefCell::new(v)))
+            ),
             Token::True => Ok(Datum::Bool(true)),
             Token::False => Ok(Datum::Bool(false)),
             Token::Character(ref ch) => match parse_char(ch.as_slice()) {
@@ -401,6 +406,16 @@ impl <'a> Parser<'a> {
             Ok(cons(head, tail))
         }
     }
+
+    fn parse_vector<T>(&mut self) -> Result<Vec<Datum<T>>, ParserError> {
+        let mut vec = Vec::new();
+
+        while !try!(self.consume_if(&Token::CloseParen)) {
+            vec.push(try!(self.parse_datum()))
+        }
+
+        return Ok(vec);
+    }
 }
 
 #[cfg(test)]
@@ -408,6 +423,8 @@ mod test {
     use std::old_io::BufReader;
     use std::borrow::Cow;
     use std::num::{Float, FromPrimitive};
+    use std::rc::Rc;
+    use std::cell::RefCell;
     use error::ParserError;
     use super::Parser;
     use datum::{Datum, cons};
@@ -486,6 +503,12 @@ mod test {
         test_parse_ok!("#i+1/2-1/4i", Datum::Num(Number::new_inexact(0.5, -0.25)));
         test_parse_ok!("+inf.0", Datum::Num(Number::Real(Real::Flonum(Float::infinity()))));
         test_parse_ok!("-inf.0", Datum::Num(Number::Real(Real::Flonum(Float::neg_infinity()))));
+    }
+
+    #[test]
+    fn test_vector() {
+        test_parse_ok!("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
+        test_parse_ok!("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
     }
 
     #[test]
