@@ -16,6 +16,8 @@ pub enum Token {
     CloseParen,
     /// `#(`
     OpenVectorParen,
+    /// `#vu8(`
+    OpenBytesParen,
     /// `.`
     Dot,
     /// `'`
@@ -38,6 +40,7 @@ impl fmt::Debug for Token {
         match *self {
             Token::OpenParen => write!(f, "OpenParen"),
             Token::OpenVectorParen => write!(f, "OpenVectorParen"),
+            Token::OpenBytesParen => write!(f, "OpenBytesParen"),
             Token::CloseParen => write!(f, "CloseParen"),
             Token::Dot => write!(f, "Dot"),
             Token::Quote => write!(f, "Quote"),
@@ -180,6 +183,16 @@ impl <'a> Lexer<'a> {
                 'b' | 'B' | 'o' | 'O' | 'd' | 'D' | 'x' | 'X' | 'i' | 'I' | 'e' | 'E' => {
                     let s = format!("{}{}", c, c0);
                     self.lex_numeric(s).map(|s| wrap(line, col, Token::Numeric(s)))
+                },
+                'v' | 'u' => {
+                    let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
+                    let delim = try!(self.consume());
+                    let prefix = format!("{}{}{}", c0, rest_prefix, delim);
+                    if prefix.as_slice() == "vu8(" || prefix.as_slice() == "u8(" {
+                        Ok(wrap(line, col, Token::OpenBytesParen))
+                    } else {
+                        Err(self.make_error(ParserErrorKind::InvalidToken(prefix)))
+                    }
                 },
                 '\\' => self.lex_char().map(|s| wrap(line, col, Token::Character(s))),
                 '(' => Ok(wrap(line, col, Token::OpenVectorParen)),

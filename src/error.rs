@@ -22,6 +22,8 @@ pub enum ParserErrorKind {
     InvalidStringLiteral,
     /// Parser met un-parseable token
     InvalidToken(String),
+    /// Non-byte datum found in byte vector representation
+    ByteVectorElement,
     /// Parser met IoError while reading the underlying stream
     UnderlyingError(IoError)
 }

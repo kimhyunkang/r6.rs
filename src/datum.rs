@@ -23,6 +23,8 @@ pub enum Datum<T> {
     String(String),
     /// Vector
     Vector(Rc<RefCell<Vec<Datum<T>>>>),
+    /// Byte vector
+    Bytes(Rc<RefCell<Vec<u8>>>),
     /// Numeric value
     Num(Number),
     /// `()`
@@ -79,6 +81,18 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
                     try!(write!(f, "#({:?}", vec[0]));
                     for x in vec[1..].iter() {
                         try!(write!(f, " {:?}", x));
+                    }
+                    write!(f, ")")
+                }
+            },
+            Datum::Bytes(ref ptr) => {
+                let vec = ptr.borrow();
+                if vec.is_empty() {
+                    write!(f, "#vu8()")
+                } else {
+                    try!(write!(f, "#vu8({}", vec[0]));
+                    for x in vec[1..].iter() {
+                        try!(write!(f, " {}", x));
                     }
                     write!(f, ")")
                 }
@@ -179,6 +193,12 @@ mod test {
     fn test_vec_fmt() {
         compare_fmt("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
         compare_fmt("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
+    }
+
+    #[test]
+    fn test_bytes_fmt() {
+        compare_fmt("#vu8(1 2 3)", Datum::Bytes(Rc::new(RefCell::new(vec![1, 2, 3]))));
+        compare_fmt("#vu8()", Datum::Bytes(Rc::new(RefCell::new(Vec::new()))));
     }
 
     #[test]

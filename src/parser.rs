@@ -239,7 +239,7 @@ fn parse_real(exactness: Exactness, radix: usize, rep: &str) -> Result<(Real, us
         };
 
         if exact {
-            Real::Rational(r)
+            Real::Rational(r).reduce()
         } else {
             Real::Flonum(rat2flo(&r))
         }
@@ -334,6 +334,21 @@ impl <'a> Parser<'a> {
             Token::OpenVectorParen => self.parse_vector().map(|v|
                 Datum::Vector(Rc::new(RefCell::new(v)))
             ),
+            Token::OpenBytesParen => {
+                let v:Vec<Datum<T>> = try!(self.parse_vector());
+                let bytes:Result<Vec<u8>, ParserError> = v.iter().map(|d|
+                    match d {
+                        &Datum::Num(Number::Real(Real::Fixnum(n))) if 0 <= n && n <= 0xff =>
+                            Ok(n as u8),
+                        _ =>
+                            Err(ParserError {
+                                line: tok.line,
+                                column: tok.column,
+                                kind: ParserErrorKind::ByteVectorElement
+                            })
+                    }).collect();
+                bytes.map(|v| Datum::Bytes(Rc::new(RefCell::new(v))))
+            },
             Token::True => Ok(Datum::Bool(true)),
             Token::False => Ok(Datum::Bool(false)),
             Token::Character(ref ch) => match parse_char(ch.as_slice()) {
@@ -509,6 +524,12 @@ mod test {
     fn test_vector() {
         test_parse_ok!("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
         test_parse_ok!("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
+    }
+
+    #[test]
+    fn test_bytes() {
+        test_parse_ok!("#vu8()", Datum::Bytes(Rc::new(RefCell::new(Vec::new()))));
+        test_parse_ok!("#vu8(1 2 3)", Datum::Bytes(Rc::new(RefCell::new(vec![1, 2, 3]))));
     }
 
     #[test]
