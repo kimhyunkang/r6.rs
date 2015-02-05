@@ -225,6 +225,7 @@ impl_typecheck!(PRIM_SYMBOL, is_symbol, Sym);
 impl_typecheck!(PRIM_NUMBER, is_number, Num);
 impl_typecheck!(PRIM_CHAR, is_char, Char);
 impl_typecheck!(PRIM_STRING, is_string, String);
+impl_typecheck!(PRIM_VECTOR, is_vector, Vector);
 impl_typecheck!(PRIM_PROCEDURE, is_procedure, Callable);
 impl_typecheck!(PRIM_NULL, is_null, Null);
 
@@ -242,6 +243,7 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("number?", &PRIM_NUMBER),
         ("char?", &PRIM_CHAR),
         ("string?", &PRIM_STRING),
+        ("vector?", &PRIM_VECTOR),
         ("procedure?", &PRIM_PROCEDURE),
         ("null?", &PRIM_NULL),
         ("car", &PRIM_CAR),

@@ -183,6 +183,9 @@ fn typecheck_test() {
 
     assert_evaluates_to!(r#"(null? (list))"#, "#t");
     assert_evaluates_to!(r#"(null? (list 1 2))"#, "#f");
+
+    assert_evaluates_to!(r#"(vector? #(a b c))"#, "#t");
+    assert_evaluates_to!(r#"(vector? (list 1 2))"#, "#f");
 }
 
 #[test]
