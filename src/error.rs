@@ -84,6 +84,8 @@ pub enum CompileErrorKind {
     NotCallable,
     /// Trying to refer a syntax variable
     SyntaxReference(Syntax),
+    /// `define` is not allowed in this context
+    DefineContext,
     /// Trying to refer an unbound variable
     UnboundVariable
 }

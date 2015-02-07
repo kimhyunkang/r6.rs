@@ -30,6 +30,9 @@ pub enum Syntax {
     /// `letrec*`
     LetRecStar,
 
+    /// `define`
+    Define,
+
     /// `set!`
     Set,
 
@@ -65,6 +68,7 @@ impl Syntax {
             &Syntax::LetStar => "let*",
             &Syntax::LetRec => "letrec",
             &Syntax::LetRecStar => "letrec*",
+            &Syntax::Define => "define",
             &Syntax::Set => "set!",
             &Syntax::Quote => "quote"
         }
@@ -94,6 +98,7 @@ struct CodeGenContext {
     link_size: usize
 }
 
+#[derive(Clone)]
 struct LexicalContext {
     static_scope: Vec<Vec<CowString<'static>>>,
     args: Vec<CowString<'static>>
@@ -106,6 +111,16 @@ impl LexicalContext {
             args: args
         }
     }
+
+    fn push_arg(&mut self, arg: CowString<'static>) {
+        self.args.push(arg);
+    }
+}
+
+enum Def {
+    Proc(RDatum, Vec<RDatum>),
+    Expr(RDatum),
+    Void
 }
 
 impl<'g> Compiler<'g> {
@@ -155,6 +170,10 @@ impl<'g> Compiler<'g> {
                                 self.compile_let_star(env, ctx, &c_args),
                             Syntax::LetRec | Syntax::LetRecStar =>
                                 self.compile_letrec(env, ctx, &c_args),
+                            Syntax::Define =>
+                                return Err(CompileError {
+                                    kind: CompileErrorKind::DefineContext
+                                }),
                             Syntax::Set =>
                                 self.compile_set(env, ctx, &c_args),
                             Syntax::Quote =>
@@ -183,27 +202,125 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
+    fn parse_define(&self, env: &LexicalContext, def: &RDatum)
+            -> Result<Option<(CowString<'static>, Def)>, CompileError>
+    {
+        let list: Vec<RDatum> = match def.iter().collect() {
+            Ok(l) => l,
+            _ => return Ok(None)
+        };
+
+        if list.len() == 0 {
+            return Ok(None);
+        }
+
+        if let Datum::Sym(ref sym) = list[0] {
+            if let Err(e) = self.find_var(env, sym) {
+                if let CompileErrorKind::SyntaxReference(Syntax::Define) = e.kind {
+                    match &list[1..] {
+                        [Datum::Sym(ref v)] =>
+                            return Ok(Some((v.clone(), Def::Void))),
+                        [Datum::Sym(ref v), ref e] =>
+                            return Ok(Some((v.clone(), Def::Expr(e.clone())))),
+                        [Datum::Cons(ref form), ..] => {
+                            let pair = form.borrow();
+                            if let Datum::Sym(ref v) = pair.0 {
+                                return Ok(Some((
+                                        v.clone(),
+                                        Def::Proc(pair.1.clone(), list[2..].to_vec())
+                                )));
+                            } else {
+                                return Err(CompileError {
+                                    kind: CompileErrorKind::BadSyntax
+                                })
+                            }
+                        },
+                        _ =>
+                            return Err(CompileError {
+                                kind: CompileErrorKind::BadSyntax
+                            })
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
     fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &RDatum)
             -> Result<(), CompileError>
     {
-        if body == &Datum::Nil {
+        let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+        match res {
+            Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_slice()),
+            Err(_) => Err(CompileError {
+                kind: CompileErrorKind::DottedBody
+            })
+        }
+    }
+
+    fn compile_exprs(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[RDatum])
+            -> Result<(), CompileError>
+    {
+        if body.is_empty() {
             return Err(CompileError { kind: CompileErrorKind::EmptyBody });
+        }
+
+        let mut def_vars = Vec::new();
+        let mut defs = Vec::new();
+
+        for expr in body.iter() {
+            match try!(self.parse_define(env, &expr)) {
+                Some((var, def)) => {
+                    def_vars.push(var);
+                    defs.push(def);
+                },
+                None => break
+            }
+        }
+
+        let mut mod_env = env.clone();
+        for var in def_vars.iter() {
+            mod_env.push_arg(var.clone());
+            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+        }
+
+        for (i, def) in defs.iter().enumerate() {
+            match def {
+                &Def::Proc(ref formals, ref body) => {
+                    let proc_ctx = try!(self.compile_proc(&mod_env, formals, body));
+                    ctx.code.push(Inst::PushArg(MemRef::Closure(
+                            Rc::new(proc_ctx.code),
+                            proc_ctx.link_size
+                    )));
+                    ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
+                },
+                &Def::Expr(ref expr) => {
+                    try!(self.compile_expr(&mod_env, ctx, expr));
+                    ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
+                },
+                &Def::Void => ()
+            }
+        }
+
+        ctx.code.push(Inst::SetArgSize(mod_env.args.len()));
+
+        if def_vars.len() == body.len() {
+            return Err(CompileError {
+                kind: CompileErrorKind::EmptyBody
+            });
         }
 
         let mut first = true;
 
-        for expr in body.iter() {
+        for expr in body[def_vars.len() ..].iter() {
             if first {
                 first = false;
             } else {
                 ctx.code.push(Inst::DropArg);
             }
 
-            if let Ok(e) = expr {
-                try!(self.compile_expr(env, ctx, &e));
-            } else {
-                return Err(CompileError { kind: CompileErrorKind::DottedBody });
-            }
+            try!(self.compile_expr(&mod_env, ctx, &expr));
         }
 
         Ok(())
@@ -359,62 +476,76 @@ impl<'g> Compiler<'g> {
     {
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.borrow();
+            let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+            match res {
+                Ok(exprs) => {
+                    let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_slice()));
 
-            let (new_args, var_arg) = {
-                let mut nargs = Vec::new();
-                let mut var_arg = false;
-                let mut iter = cur_args.clone();
+                    ctx.code.push(Inst::PushArg(MemRef::Closure(
+                            Rc::new(block_ctx.code),
+                            block_ctx.link_size
+                    )));
 
-                loop {
-                    let (val, next) = match iter {
-                        Datum::Cons(ref ptr) => ptr.borrow().clone(),
-                        Datum::Sym(ref s) => {
-                            nargs.push(s.clone());
-                            var_arg = true;
-                            break;
-                        },
-                        Datum::Nil => {
-                            break;
-                        }
-                        _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                    };
-                    match val {
-                        Datum::Sym(ref s) => {
-                            nargs.push(s.clone())
-                        },
-                        _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                    }
-                    iter = next;
-                }
-
-                (nargs, var_arg)
-            };
-
-            let mut block_ctx = CodeGenContext {
-                code: Vec::new(),
-                link_size: 0
-            };
-
-            if var_arg {
-                // The last arg is variable argument list
-                block_ctx.code.push(Inst::RollArgs(new_args.len()-1));
+                    return Ok(());
+                },
+                Err(()) =>
+                    Err(CompileError { kind: CompileErrorKind::DottedBody })
             }
-
-            let new_env = env.update_arg(new_args);
-
-            try!(self.compile_body(&new_env, &mut block_ctx, body));
-
-            block_ctx.code.push(Inst::Return);
-
-            ctx.code.push(Inst::PushArg(MemRef::Closure(
-                    Rc::new(block_ctx.code),
-                    block_ctx.link_size
-            )));
-
-            return Ok(());
         } else {
             return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
+    }
+
+    fn compile_proc(&self, env: &LexicalContext, formals: &RDatum, body: &[RDatum])
+            -> Result<CodeGenContext, CompileError>
+    {
+        let (new_args, var_arg) = {
+            let mut nargs = Vec::new();
+            let mut var_arg = false;
+            let mut iter = formals.clone();
+
+            loop {
+                let (val, next) = match iter {
+                    Datum::Cons(ref ptr) => ptr.borrow().clone(),
+                    Datum::Sym(ref s) => {
+                        nargs.push(s.clone());
+                        var_arg = true;
+                        break;
+                    },
+                    Datum::Nil => {
+                        break;
+                    }
+                    _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                };
+                match val {
+                    Datum::Sym(ref s) => {
+                        nargs.push(s.clone())
+                    },
+                    _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                }
+                iter = next;
+            }
+
+            (nargs, var_arg)
+        };
+
+        let mut ctx = CodeGenContext {
+            code: Vec::new(),
+            link_size: 0
+        };
+
+        if var_arg {
+            // The last arg is variable argument list
+            ctx.code.push(Inst::RollArgs(new_args.len()-1));
+        }
+
+        let new_env = env.update_arg(new_args);
+
+        try!(self.compile_exprs(&new_env, &mut ctx, body));
+
+        ctx.code.push(Inst::Return);
+
+        return Ok(ctx);
     }
 
     fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &CowString<'static>)
@@ -581,6 +712,7 @@ mod test {
         let compiler = Compiler::new(&env);
 
         let f = vec![
+            Inst::SetArgSize(1),
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
@@ -606,6 +738,7 @@ mod test {
         let compiler = Compiler::new(&env);
 
         let f = vec![
+            Inst::SetArgSize(1),
             Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
@@ -613,6 +746,7 @@ mod test {
             Inst::Return
         ];
         let g = vec![
+            Inst::SetArgSize(1),
             Inst::PushArg(MemRef::Closure(Rc::new(f), 1)),
             Inst::Return
         ];

@@ -89,6 +89,11 @@ fn var_arg_test() {
 }
 
 #[test]
+fn local_define_test() {
+    assert_evaluates_to!("(let ((x 5)) (define (foo y) (bar x y)) (define (bar a b) (+ (* a b) a)) (foo (+ x 3)))", "45");
+}
+
+#[test]
 fn if_expression_test() {
     assert_evaluates_to!("(if #t 1 0)", "1");
     assert_evaluates_to!("(if #f 1 0)", "0");
