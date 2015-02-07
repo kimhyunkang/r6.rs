@@ -94,6 +94,11 @@ struct CodeGenContext {
     link_size: usize
 }
 
+struct LexicalContext {
+    static_scope: Vec<Vec<CowString<'static>>>,
+    args: Vec<CowString<'static>>
+}
+
 impl<'g> Compiler<'g> {
     /// Creates a new compiler with given environment
     pub fn new<'a>(global_env: &'a HashMap<CowString<'static>, EnvVar>) -> Compiler<'a> {
@@ -108,13 +113,16 @@ impl<'g> Compiler<'g> {
             code: Vec::new(),
             link_size: 0
         };
-        try!(self.compile_expr(&[], &[], &mut ctx, datum));
+        let env = LexicalContext {
+            static_scope: Vec::new(),
+            args: Vec::new()
+        };
+        try!(self.compile_expr(&env, &mut ctx, datum));
         ctx.code.push(Inst::Return);
         return Ok(ctx.code);
     }
 
-    fn compile_app(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                   ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
         let (callee, c_args) = match datum {
@@ -123,23 +131,23 @@ impl<'g> Compiler<'g> {
         };
 
         if let Datum::Sym(ref s) = callee {
-            match self.compile_ref(static_scope, args, ctx, s) {
+            match self.compile_ref(env, ctx, s) {
                 Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
                 Err(e) => match e.kind {
                     CompileErrorKind::SyntaxReference(syn) => {
                         return match syn {
                             Syntax::Lambda =>
-                                self.compile_lambda(static_scope, args, ctx, &c_args),
+                                self.compile_lambda(env, ctx, &c_args),
                             Syntax::If =>
-                                self.compile_if(static_scope, args, ctx, &c_args),
+                                self.compile_if(env, ctx, &c_args),
                             Syntax::Let =>
-                                self.compile_let(static_scope, args, ctx, &c_args),
+                                self.compile_let(env, ctx, &c_args),
                             Syntax::LetStar =>
-                                self.compile_let_star(static_scope, args, ctx, &c_args),
+                                self.compile_let_star(env, ctx, &c_args),
                             Syntax::LetRec | Syntax::LetRecStar =>
-                                self.compile_letrec(static_scope, args, ctx, &c_args),
+                                self.compile_letrec(env, ctx, &c_args),
                             Syntax::Set =>
-                                self.compile_set(static_scope, args, ctx, &c_args),
+                                self.compile_set(env, ctx, &c_args),
                             Syntax::Quote =>
                                 self.compile_quote(ctx, &c_args)
                         };
@@ -148,14 +156,14 @@ impl<'g> Compiler<'g> {
                 }
             }
         } else {
-            try!(self.compile_expr(static_scope, args, ctx, &callee));
+            try!(self.compile_expr(env, ctx, &callee));
         }
 
         let mut arg_count = 0;
         for d in c_args.iter() {
             match d {
                 Ok(d) => {
-                    try!(self.compile_expr(static_scope, args, ctx, &d));
+                    try!(self.compile_expr(env, ctx, &d));
                     arg_count += 1;
                 },
                 Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedEval })
@@ -166,8 +174,7 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_body(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                    ctx: &mut CodeGenContext, body: &RDatum)
+    fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &RDatum)
             -> Result<(), CompileError>
     {
         if body == &Datum::Nil {
@@ -184,7 +191,7 @@ impl<'g> Compiler<'g> {
             }
 
             if let Ok(e) = expr {
-                try!(self.compile_expr(static_scope, args, ctx, &e));
+                try!(self.compile_expr(env, ctx, &e));
             } else {
                 return Err(CompileError { kind: CompileErrorKind::DottedBody });
             }
@@ -193,8 +200,7 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_block(&self, static_scope: &[Vec<CowString<'static>>],
-                     args: &[CowString<'static>], var_arg: bool, body: &RDatum)
+    fn compile_block(&self, env: &LexicalContext, var_arg: bool, body: &RDatum)
             -> Result<CodeGenContext, CompileError>
     {
         let mut ctx = CodeGenContext {
@@ -204,18 +210,17 @@ impl<'g> Compiler<'g> {
 
         if var_arg {
             // The last arg is variable argument list
-            ctx.code.push(Inst::RollArgs(args.len()-1));
+            ctx.code.push(Inst::RollArgs(env.args.len()-1));
         }
 
-        try!(self.compile_body(static_scope, args, &mut ctx, body));
+        try!(self.compile_body(env, &mut ctx, body));
 
         ctx.code.push(Inst::Return);
 
         return Ok(ctx);
     }
 
-    fn compile_if(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                  ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_if(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
         let exprs:Vec<RDatum> = match tail.iter().collect() {
@@ -227,13 +232,13 @@ impl<'g> Compiler<'g> {
             let cond = &exprs[0];
             let then_expr = &exprs[1];
 
-            try!(self.compile_expr(static_scope, args, ctx, cond));
+            try!(self.compile_expr(env, ctx, cond));
 
             let cond_jump_pc = ctx.code.len();
             // placeholder to replace with JumpIfFalse
             ctx.code.push(Inst::Nop);
 
-            try!(self.compile_expr(static_scope, args, ctx, then_expr));
+            try!(self.compile_expr(env, ctx, then_expr));
 
             let jump_pc = ctx.code.len();
             // push placeholder to replace with Jump
@@ -244,7 +249,7 @@ impl<'g> Compiler<'g> {
             if exprs.len() == 3 {
                 let else_expr = &exprs[2];
 
-                try!(self.compile_expr(static_scope, args, ctx, else_expr));
+                try!(self.compile_expr(env, ctx, else_expr));
             } else {
                 ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
             }
@@ -290,58 +295,55 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_let(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                   ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_let(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
         for expr in exprs.iter() {
-            try!(self.compile_expr(static_scope, args, ctx, expr));
+            try!(self.compile_expr(env, ctx, expr));
         }
         ctx.code.push(Inst::PushFrame(syms.len()));
 
-        let new_scope = {
-            let mut nenv = static_scope.to_vec();
-            nenv.push(args.to_vec());
-            nenv
+        let new_env = LexicalContext {
+            static_scope: env.static_scope.clone() + &[env.args.clone()],
+            args: syms
         };
 
-        try!(self.compile_body(new_scope.as_slice(), syms.as_slice(), ctx, &body));
+        try!(self.compile_body(&new_env, ctx, &body));
 
         ctx.code.push(Inst::PopFrame);
 
         Ok(())
     }
 
-    fn compile_let_star(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                        ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_let_star(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
 
         ctx.code.push(Inst::PushFrame(0));
 
-        let new_scope = {
-            let mut nenv = static_scope.to_vec();
-            nenv.push(args.to_vec());
-            nenv
+        let mut new_env = LexicalContext {
+            static_scope: env.static_scope.clone() + &[env.args.clone()],
+            args: Vec::new()
         };
 
         for (i, expr) in exprs.iter().enumerate() {
-            try!(self.compile_expr(new_scope.as_slice(), &syms[0..i], ctx, expr));
+            new_env.args = syms[0..i].to_vec();
+            try!(self.compile_expr(&new_env, ctx, expr));
         }
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
 
-        try!(self.compile_body(new_scope.as_slice(), syms.as_slice(), ctx, &body));
+        new_env.args = syms;
+        try!(self.compile_body(&new_env, ctx, &body));
 
         ctx.code.push(Inst::PopFrame);
 
         Ok(())
     }
 
-    fn compile_letrec(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                      ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_letrec(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
@@ -352,37 +354,32 @@ impl<'g> Compiler<'g> {
             ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
         }
 
-        let new_scope = {
-            let mut nenv = static_scope.to_vec();
-            nenv.push(args.to_vec());
-            nenv
+        let arg_size = syms.len();
+        let new_env = LexicalContext {
+            static_scope: env.static_scope.clone() + &[env.args.clone()],
+            args: syms
         };
 
         for (i, expr) in exprs.iter().enumerate() {
-            try!(self.compile_expr(new_scope.as_slice(), syms.as_slice(), ctx, expr));
+            try!(self.compile_expr(&new_env, ctx, expr));
             ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
 
-        ctx.code.push(Inst::SetArgSize(syms.len()));
+        ctx.code.push(Inst::SetArgSize(arg_size));
 
-        try!(self.compile_body(new_scope.as_slice(), syms.as_slice(), ctx, &body));
+        try!(self.compile_body(&new_env, ctx, &body));
 
         ctx.code.push(Inst::PopFrame);
 
         Ok(())
     }
 
-    fn compile_lambda(&self, static_scope: &[Vec<CowString<'static>>],
-                      args: &[CowString<'static>], ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_lambda(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.borrow();
-            let new_scope = {
-                let mut nenv = static_scope.to_vec();
-                nenv.push(args.to_vec());
-                nenv
-            };
+            let new_scope = env.static_scope.clone() + &[env.args.clone()];
 
             let (new_args, var_arg) = {
                 let mut nargs = Vec::new();
@@ -414,12 +411,11 @@ impl<'g> Compiler<'g> {
                 (nargs, var_arg)
             };
 
-            let block_ctx = try!(self.compile_block(
-                    new_scope.as_slice(),
-                    new_args.as_slice(),
-                    var_arg,
-                    body
-            ));
+            let new_env = LexicalContext {
+                static_scope: new_scope,
+                args: new_args
+            };
+            let block_ctx = try!(self.compile_block(&new_env, var_arg, body));
 
             ctx.code.push(Inst::PushArg(MemRef::Closure(
                     Rc::new(block_ctx.code),
@@ -432,11 +428,10 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_ref(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                   ctx: &mut CodeGenContext, sym: &CowString<'static>)
+    fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &CowString<'static>)
             -> Result<MemRef, CompileError>
     {
-        let ptr = self.find_var(static_scope, args, sym);
+        let ptr = self.find_var(env, sym);
         match ptr {
             Ok(MemRef::UpValue(i, _)) => {
                 if ctx.link_size < i+1 {
@@ -448,16 +443,15 @@ impl<'g> Compiler<'g> {
         return ptr;
     }
 
-    fn find_var(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                sym: &CowString<'static>)
+    fn find_var(&self, env: &LexicalContext, sym: &CowString<'static>)
             -> Result<MemRef, CompileError>
     {
-        if let Some(i) = range(0, args.len()).find(|&i| args[i] == *sym) {
+        if let Some(i) = (0..env.args.len()).find(|&i| env.args[i] == *sym) {
             return Ok(MemRef::Arg(i));
         }
 
         // (0, static_scope[-1]), (1, static_scope[-2]), (2, static_scope[-3]), ...
-        for (i, up_args) in static_scope.iter().rev().enumerate() {
+        for (i, up_args) in env.static_scope.iter().rev().enumerate() {
             for (j, arg) in up_args.iter().enumerate() {
                 if *arg == *sym {
                     return Ok(MemRef::UpValue(i, j));
@@ -484,8 +478,7 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_set(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                   ctx: &mut CodeGenContext, formal: &RDatum)
+    fn compile_set(&self, env: &LexicalContext, ctx: &mut CodeGenContext, formal: &RDatum)
             -> Result<(), CompileError>
     {
         let assignment:Vec<RDatum> = match formal.iter().collect() {
@@ -494,8 +487,8 @@ impl<'g> Compiler<'g> {
         };
         match assignment.as_slice() {
             [Datum::Sym(ref sym), ref expr] => {
-                try!(self.compile_expr(static_scope, args, ctx, expr));
-                let ptr = try!(self.compile_ref(static_scope, args, ctx, sym));
+                try!(self.compile_expr(env, ctx, expr));
+                let ptr = try!(self.compile_ref(env, ctx, sym));
                 ctx.code.push(Inst::PopArg(ptr));
                 ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
                 Ok(())
@@ -523,16 +516,15 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_expr(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                    ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_expr(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
         match datum {
             &Datum::Cons(_) =>
-                self.compile_app(static_scope, args, ctx, datum),
+                self.compile_app(env, ctx, datum),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
-                let ptr = try!(self.compile_ref(static_scope, args, ctx, sym));
+                let ptr = try!(self.compile_ref(env, ctx, sym));
                 ctx.code.push(Inst::PushArg(ptr));
                 return Ok(());
             },
