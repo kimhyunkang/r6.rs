@@ -433,8 +433,6 @@ impl<'g> Compiler<'g> {
             try!(self.compile_expr(&new_env, ctx, expr));
         }
 
-        ctx.code.push(Inst::SetArgSize(syms.len()));
-
         new_env.args = syms;
         try!(self.compile_body(&new_env, ctx, &body));
 
@@ -461,8 +459,6 @@ impl<'g> Compiler<'g> {
             try!(self.compile_expr(&new_env, ctx, expr));
             ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
-
-        ctx.code.push(Inst::SetArgSize(arg_size));
 
         try!(self.compile_body(&new_env, ctx, &body));
 
