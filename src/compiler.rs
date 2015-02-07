@@ -379,7 +379,6 @@ impl<'g> Compiler<'g> {
     {
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.borrow();
-            let new_scope = env.static_scope.clone() + &[env.args.clone()];
 
             let (new_args, var_arg) = {
                 let mut nargs = Vec::new();
@@ -411,10 +410,7 @@ impl<'g> Compiler<'g> {
                 (nargs, var_arg)
             };
 
-            let new_env = LexicalContext {
-                static_scope: new_scope,
-                args: new_args
-            };
+            let new_env = env.update_arg(new_args);
             let block_ctx = try!(self.compile_block(&new_env, var_arg, body));
 
             ctx.code.push(Inst::PushArg(MemRef::Closure(
