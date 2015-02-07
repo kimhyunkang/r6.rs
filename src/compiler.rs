@@ -99,6 +99,15 @@ struct LexicalContext {
     args: Vec<CowString<'static>>
 }
 
+impl LexicalContext {
+    fn update_arg(&self, args: Vec<CowString<'static>>) -> LexicalContext {
+        LexicalContext {
+            static_scope: self.static_scope.clone() + &[self.args.clone()],
+            args: args
+        }
+    }
+}
+
 impl<'g> Compiler<'g> {
     /// Creates a new compiler with given environment
     pub fn new<'a>(global_env: &'a HashMap<CowString<'static>, EnvVar>) -> Compiler<'a> {
@@ -304,10 +313,7 @@ impl<'g> Compiler<'g> {
         }
         ctx.code.push(Inst::PushFrame(syms.len()));
 
-        let new_env = LexicalContext {
-            static_scope: env.static_scope.clone() + &[env.args.clone()],
-            args: syms
-        };
+        let new_env = env.update_arg(syms);
 
         try!(self.compile_body(&new_env, ctx, &body));
 
@@ -323,10 +329,7 @@ impl<'g> Compiler<'g> {
 
         ctx.code.push(Inst::PushFrame(0));
 
-        let mut new_env = LexicalContext {
-            static_scope: env.static_scope.clone() + &[env.args.clone()],
-            args: Vec::new()
-        };
+        let mut new_env = env.update_arg(Vec::new());
 
         for (i, expr) in exprs.iter().enumerate() {
             new_env.args = syms[0..i].to_vec();
@@ -355,10 +358,7 @@ impl<'g> Compiler<'g> {
         }
 
         let arg_size = syms.len();
-        let new_env = LexicalContext {
-            static_scope: env.static_scope.clone() + &[env.args.clone()],
-            args: syms
-        };
+        let new_env = env.update_arg(syms);
 
         for (i, expr) in exprs.iter().enumerate() {
             try!(self.compile_expr(&new_env, ctx, expr));
