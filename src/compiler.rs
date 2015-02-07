@@ -123,7 +123,7 @@ impl<'g> Compiler<'g> {
         };
 
         if let Datum::Sym(ref s) = callee {
-            match self.find_var(static_scope, args, ctx, s) {
+            match self.compile_ref(static_scope, args, ctx, s) {
                 Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
                 Err(e) => match e.kind {
                     CompileErrorKind::SyntaxReference(syn) => {
@@ -432,8 +432,24 @@ impl<'g> Compiler<'g> {
         }
     }
 
+    fn compile_ref(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
+                   ctx: &mut CodeGenContext, sym: &CowString<'static>)
+            -> Result<MemRef, CompileError>
+    {
+        let ptr = self.find_var(static_scope, args, sym);
+        match ptr {
+            Ok(MemRef::UpValue(i, _)) => {
+                if ctx.link_size < i+1 {
+                    ctx.link_size = i+1;
+                }
+            },
+            _ => ()
+        };
+        return ptr;
+    }
+
     fn find_var(&self, static_scope: &[Vec<CowString<'static>>], args: &[CowString<'static>],
-                ctx: &mut CodeGenContext, sym: &CowString<'static>)
+                sym: &CowString<'static>)
             -> Result<MemRef, CompileError>
     {
         if let Some(i) = range(0, args.len()).find(|&i| args[i] == *sym) {
@@ -444,9 +460,6 @@ impl<'g> Compiler<'g> {
         for (i, up_args) in static_scope.iter().rev().enumerate() {
             for (j, arg) in up_args.iter().enumerate() {
                 if *arg == *sym {
-                    if ctx.link_size < i+1 {
-                        ctx.link_size = i+1;
-                    }
                     return Ok(MemRef::UpValue(i, j));
                 }
             }
@@ -482,7 +495,7 @@ impl<'g> Compiler<'g> {
         match assignment.as_slice() {
             [Datum::Sym(ref sym), ref expr] => {
                 try!(self.compile_expr(static_scope, args, ctx, expr));
-                let ptr = try!(self.find_var(static_scope, args, ctx, sym));
+                let ptr = try!(self.compile_ref(static_scope, args, ctx, sym));
                 ctx.code.push(Inst::PopArg(ptr));
                 ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
                 Ok(())
@@ -519,7 +532,7 @@ impl<'g> Compiler<'g> {
                 self.compile_app(static_scope, args, ctx, datum),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
-                let ptr = try!(self.find_var(static_scope, args, ctx, sym));
+                let ptr = try!(self.compile_ref(static_scope, args, ctx, sym));
                 ctx.code.push(Inst::PushArg(ptr));
                 return Ok(());
             },
