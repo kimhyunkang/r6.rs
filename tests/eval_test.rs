@@ -1,14 +1,21 @@
 extern crate r6;
+extern crate env_logger;
 
 use std::old_io::BufReader;
+use std::sync::{Once, ONCE_INIT};
 use r6::runtime::Runtime;
 use r6::compiler::Compiler;
 use r6::base::libbase;
 use r6::parser::Parser;
 
+static START: Once = ONCE_INIT;
+
 macro_rules! assert_evaluates_to {
     ($src:expr, $expected:expr) => (
         {
+            START.call_once(|| {
+                env_logger::init().unwrap();
+            });
             let mut src_reader = BufReader::new($src.as_bytes());
             let mut src_parser = Parser::new(&mut src_reader);
             let sourcecode = match src_parser.parse_datum() {
