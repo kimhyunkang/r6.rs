@@ -209,26 +209,6 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_block(&self, env: &LexicalContext, var_arg: bool, body: &RDatum)
-            -> Result<CodeGenContext, CompileError>
-    {
-        let mut ctx = CodeGenContext {
-            code: Vec::new(),
-            link_size: 0
-        };
-
-        if var_arg {
-            // The last arg is variable argument list
-            ctx.code.push(Inst::RollArgs(env.args.len()-1));
-        }
-
-        try!(self.compile_body(env, &mut ctx, body));
-
-        ctx.code.push(Inst::Return);
-
-        return Ok(ctx);
-    }
-
     fn compile_if(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
@@ -410,8 +390,21 @@ impl<'g> Compiler<'g> {
                 (nargs, var_arg)
             };
 
+            let mut block_ctx = CodeGenContext {
+                code: Vec::new(),
+                link_size: 0
+            };
+
+            if var_arg {
+                // The last arg is variable argument list
+                block_ctx.code.push(Inst::RollArgs(new_args.len()-1));
+            }
+
             let new_env = env.update_arg(new_args);
-            let block_ctx = try!(self.compile_block(&new_env, var_arg, body));
+
+            try!(self.compile_body(&new_env, &mut block_ctx, body));
+
+            block_ctx.code.push(Inst::Return);
 
             ctx.code.push(Inst::PushArg(MemRef::Closure(
                     Rc::new(block_ctx.code),
