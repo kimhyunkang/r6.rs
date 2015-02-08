@@ -452,7 +452,6 @@ impl<'g> Compiler<'g> {
             ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
         }
 
-        let arg_size = syms.len();
         let new_env = env.update_arg(syms);
 
         for (i, expr) in exprs.iter().enumerate() {
