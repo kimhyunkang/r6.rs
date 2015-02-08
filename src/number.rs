@@ -226,7 +226,14 @@ fn coerce_arith<R, E, I>(lhs: &Number, rhs: &Number,
 {
     coerce(lhs, rhs, 
            |x, y| Number::Real(r_op(x, y)),
-           |x, y| Number::ECmplx(e_op(x, y)),
+           |x, y| {
+               let res = e_op(x, y);
+               if res.im.is_zero() {
+                   Number::Real(Real::Rational(res.re).reduce())
+               } else {
+                   Number::ECmplx(res)
+               }
+           },
            |x, y| Number::ICmplx(i_op(x, y))
     )
 }
