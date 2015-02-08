@@ -68,6 +68,13 @@ impl Real {
             _ => true
         }
     }
+
+    pub fn is_integer(&self) -> bool {
+        match self {
+            &Real::Flonum(f) => f.is_finite() && f.trunc() == f,
+            _ => true
+        }
+    }
 }
 
 impl Zero for Real {

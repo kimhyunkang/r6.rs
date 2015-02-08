@@ -217,3 +217,28 @@ fn number_predicates_test() {
     assert_evaluates_to!("(zero? -0.0)", "#t");
     assert_evaluates_to!("(zero? +nan.0)", "#f");
 }
+
+#[test]
+fn number_type_test() {
+    assert_evaluates_to!("(complex? 3+4i)", "#t");
+    assert_evaluates_to!("(complex? 3)", "#t");
+    assert_evaluates_to!("(real? 3)", "#t");
+    assert_evaluates_to!("(real? -2.5+0.0i)", "#f");
+    assert_evaluates_to!("(real? -2.5+0i)", "#t");
+    assert_evaluates_to!("(real? -2.5)", "#t");
+    assert_evaluates_to!("(real? #e1e10)", "#t");
+    assert_evaluates_to!("(rational? 6/10)", "#t");
+    assert_evaluates_to!("(rational? 6/3)", "#t");
+    assert_evaluates_to!("(rational? 2)", "#t");
+    assert_evaluates_to!("(integer? 3+0i)", "#t");
+    assert_evaluates_to!("(integer? 3.0)", "#t");
+    assert_evaluates_to!("(integer? 8/4)", "#t");
+    assert_evaluates_to!("(number? +nan.0)", "#t");
+    assert_evaluates_to!("(complex? +nan.0)", "#t");
+    assert_evaluates_to!("(real? +nan.0)", "#t");
+    assert_evaluates_to!("(rational? +nan.0)", "#f");
+    assert_evaluates_to!("(complex? +inf.0)", "#t");
+    assert_evaluates_to!("(real? -inf.0)", "#t");
+    assert_evaluates_to!("(rational? -inf.0)", "#f");
+    assert_evaluates_to!("(integer? -inf.0)", "#f");
+}

@@ -190,7 +190,11 @@ fn parse_numerical_tower(exactness: Exactness, radix: usize, rep: &str) -> Resul
             let im_part = &rep[re_end ..];
             let (im, im_end) = try!(parse_real(exactness, radix, im_part));
             if im_end+1 == im_part.len() && im_part.char_at(im_end) == 'i' {
-                Ok(Number::new(re, im))
+                if im.is_exact() && im.is_zero() {
+                    Ok(Number::Real(re))
+                } else {
+                    Ok(Number::new(re, im))
+                }
             } else {
                 Err("Suffix `i` not found at the end of complex literal".to_string())
             }

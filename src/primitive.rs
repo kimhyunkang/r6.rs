@@ -1,8 +1,11 @@
 use std::iter::FromIterator;
+use std::num::Float;
 
 use num::{Zero, One};
 
 use number::Number;
+use real::Real;
+use datum::Datum;
 use error::{RuntimeError, RuntimeErrorKind};
 use runtime::{DatumCast, RDatum, DatumType};
 
@@ -207,7 +210,39 @@ fn zero(arg: Number) -> bool {
     arg.is_zero()
 }
 
+/// `(zero? x)`
 pub static PRIM_ZERO: F1<Number, bool> = F1 { f1: zero };
+
+fn is_real(arg: &RDatum) -> bool {
+    match arg {
+        &Datum::Num(Number::Real(_)) => true,
+        _ => false
+    }
+}
+
+/// `(real? x)`
+pub static PRIM_REAL: R1<bool> = R1 { f1: is_real };
+
+fn is_rational(arg: &RDatum) -> bool {
+    match arg {
+        &Datum::Num(Number::Real(Real::Flonum(f))) => f.is_finite(),
+        &Datum::Num(Number::Real(_)) => true,
+        _ => false
+    }
+}
+
+/// `(rational? x)`
+pub static PRIM_RATIONAL: R1<bool> = R1 { f1: is_rational };
+
+fn is_integer(arg: &RDatum) -> bool {
+    match arg {
+        &Datum::Num(Number::Real(ref r)) => r.is_integer(),
+        _ => false
+    }
+}
+
+/// `(integer? x)`
+pub static PRIM_INTEGER: R1<bool> = R1 { f1: is_integer };
 
 macro_rules! impl_typecheck {
     ($static_name:ident, $func_name:ident, $type_name:ident) => (
@@ -248,6 +283,11 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("null?", &PRIM_NULL),
         ("car", &PRIM_CAR),
         ("cdr", &PRIM_CDR),
-        ("zero?", &PRIM_ZERO)
+        ("zero?", &PRIM_ZERO),
+        // complex? is synonym to number?
+        ("complex?", &PRIM_NUMBER),
+        ("real?", &PRIM_REAL),
+        ("rational?", &PRIM_RATIONAL),
+        ("integer?", &PRIM_INTEGER)
     ]
 }
