@@ -122,18 +122,18 @@ pub type RDatum = Datum<RuntimeData>;
 /// Types with implementing DatumCast trait can cast from/to Datum
 pub trait DatumCast {
     /// Casts Datum into Self, possibly raising error
-    fn unwrap(datum: &RDatum) -> Result<Self, RuntimeError>;
+    fn unwrap(datum: RDatum) -> Result<Self, RuntimeError>;
     /// Casts Self into Datum
     fn wrap(self) -> RDatum;
 }
 
 impl DatumCast for Number {
-    fn unwrap(datum: &RDatum) -> Result<Number, RuntimeError> {
+    fn unwrap(datum: RDatum) -> Result<Number, RuntimeError> {
         match datum {
-            &Datum::Num(ref n) => Ok(n.clone()),
+            Datum::Num(n) => Ok(n),
             _ => Err(RuntimeError {
                 kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Num, but received {:?}", DatumType::get_type(datum))
+                desc: format!("expected Num, but received {:?}", DatumType::get_type(&datum))
             })
         }
     }
@@ -144,12 +144,12 @@ impl DatumCast for Number {
 }
 
 impl DatumCast for bool {
-    fn unwrap(datum: &RDatum) -> Result<bool, RuntimeError> {
+    fn unwrap(datum: RDatum) -> Result<bool, RuntimeError> {
         match datum {
-            &Datum::Bool(b) => Ok(b),
+            Datum::Bool(b) => Ok(b),
             _ => Err(RuntimeError {
                 kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Bool, but received {:?}", DatumType::get_type(datum))
+                desc: format!("expected Bool, but received {:?}", DatumType::get_type(&datum))
             })
         }
     }
@@ -160,12 +160,12 @@ impl DatumCast for bool {
 }
 
 impl DatumCast for (RDatum, RDatum) {
-    fn unwrap(datum: &RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
+    fn unwrap(datum: RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
         match datum {
-            &Datum::Cons(ref c) => Ok(c.borrow().clone()),
+            Datum::Cons(c) => Ok(c.borrow().clone()),
             _ => Err(RuntimeError {
                 kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Pair, but received {:?}", DatumType::get_type(datum))
+                desc: format!("expected Pair, but received {:?}", DatumType::get_type(&datum))
             })
         }
     }
@@ -449,17 +449,19 @@ impl Runtime {
                 let datum = self.arg_stack[top - n - 1].clone();
                 match datum {
                     Datum::Ext(RuntimeData::PrimFunc(_, f)) => {
-                        let dummy_closure = Closure {
-                            code: Rc::new(Vec::new()),
-                            static_link: None
+                        let args = if n == 0 {
+                            Vec::new()
+                        } else {
+                            self.arg_stack.split_off(top-n)
                         };
-                        self.push_call_stack(n, dummy_closure);
-                        let res = match f.call(&self.arg_stack[top - n ..]) {
+                        let res = match f.call(args) {
                             Ok(x) => x,
                             Err(e) => panic!(e)
                         };
-                        self.pop_call_stack();
-                        self.arg_stack.truncate(top - n - 1);
+                        match self.arg_stack.pop() {
+                            None => panic!("arg_stack size mismatch"),
+                            Some(_) => ()
+                        };
                         self.push_stack(res);
                         self.frame.pc += 1;
                         true
