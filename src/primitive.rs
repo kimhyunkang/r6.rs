@@ -29,8 +29,8 @@ pub struct F1<T0, R> {
     f1: fn(T0) -> R
 }
 
-pub struct R1<R> {
-    f1: fn(&RDatum) -> R
+pub struct R1<T0, R> {
+    r1: fn(&T0) -> R
 }
 
 impl<T> PrimFunc for Fold<T> where T: DatumCast {
@@ -82,7 +82,7 @@ impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
     }
 }
 
-impl<R: DatumCast> PrimFunc for R1<R> {
+impl<R: DatumCast> PrimFunc for R1<RDatum, R> {
     fn call(&self, args: &[RDatum]) -> Result<RDatum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
@@ -90,7 +90,7 @@ impl<R: DatumCast> PrimFunc for R1<R> {
                 desc: format!("Expected 1 argument, received {:?}", args.len())
             });
         }
-        let f = self.f1;
+        let f = self.r1;
 
         Ok(f(&args[0]).wrap())
     }
@@ -221,7 +221,7 @@ fn is_real(arg: &RDatum) -> bool {
 }
 
 /// `(real? x)`
-pub static PRIM_REAL: R1<bool> = R1 { f1: is_real };
+pub static PRIM_REAL: R1<RDatum, bool> = R1 { r1: is_real };
 
 fn is_rational(arg: &RDatum) -> bool {
     match arg {
@@ -232,7 +232,7 @@ fn is_rational(arg: &RDatum) -> bool {
 }
 
 /// `(rational? x)`
-pub static PRIM_RATIONAL: R1<bool> = R1 { f1: is_rational };
+pub static PRIM_RATIONAL: R1<RDatum, bool> = R1 { r1: is_rational };
 
 fn is_integer(arg: &RDatum) -> bool {
     match arg {
@@ -242,7 +242,7 @@ fn is_integer(arg: &RDatum) -> bool {
 }
 
 /// `(integer? x)`
-pub static PRIM_INTEGER: R1<bool> = R1 { f1: is_integer };
+pub static PRIM_INTEGER: R1<RDatum, bool> = R1 { r1: is_integer };
 
 macro_rules! impl_typecheck {
     ($static_name:ident, $func_name:ident, $type_name:ident) => (
@@ -250,7 +250,7 @@ macro_rules! impl_typecheck {
             DatumType::get_type(arg) == DatumType::$type_name
         }
 
-        pub static $static_name: R1<bool> = R1 { f1: $func_name };
+        pub static $static_name: R1<RDatum, bool> = R1 { r1: $func_name };
     )
 }
 
