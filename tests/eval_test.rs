@@ -262,3 +262,11 @@ fn number_eq_test() {
     assert_evaluates_to!("(> +nan.0 2)", "#f");
     assert_evaluates_to!("(> +nan.0 +nan.0)", "#f");
 }
+
+#[test]
+fn and_or_test() {
+    assert_evaluates_to!("(and (= 2 2) (> 2 1))", "#t");
+    assert_evaluates_to!("(and (= 2 2) (< 2 1))", "#f");
+    assert_evaluates_to!("(and 1 2 'c '(f g))", "(f g)");
+    assert_evaluates_to!("(and)", "#t");
+}

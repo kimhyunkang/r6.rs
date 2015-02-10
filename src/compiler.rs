@@ -37,7 +37,10 @@ pub enum Syntax {
     Set,
 
     /// `quote`
-    Quote
+    Quote,
+
+    /// `and`
+    And,
 }
 
 #[derive(Copy)]
@@ -70,7 +73,8 @@ impl Syntax {
             &Syntax::LetRecStar => "letrec*",
             &Syntax::Define => "define",
             &Syntax::Set => "set!",
-            &Syntax::Quote => "quote"
+            &Syntax::Quote => "quote",
+            &Syntax::And => "and"
         }
     }
 }
@@ -177,7 +181,9 @@ impl<'g> Compiler<'g> {
                             Syntax::Set =>
                                 self.compile_set(env, ctx, &c_args),
                             Syntax::Quote =>
-                                self.compile_quote(ctx, &c_args)
+                                self.compile_quote(ctx, &c_args),
+                            Syntax::And =>
+                                self.compile_and(env, ctx, &c_args)
                         };
                     },
                     _ => return Err(e)
@@ -630,6 +636,38 @@ impl<'g> Compiler<'g> {
             },
             _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
+    }
+
+    fn compile_and(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut placeholders = Vec::new();
+        let exprs: Vec<RDatum> = match preds.iter().collect() {
+            Ok(v) => v,
+            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        };
+        if exprs.is_empty() {
+            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Bool(true))));
+            return Ok(());
+        }
+
+        try!(self.compile_expr(env, ctx, &exprs[0]));
+
+        for expr in exprs[1..].iter() {
+            placeholders.push(ctx.code.len());
+            // placeholder for JumpIfFalse
+            ctx.code.push(Inst::Nop);
+            // Drop the value if the test fails
+            ctx.code.push(Inst::DropArg);
+            try!(self.compile_expr(env, ctx, &expr));
+        }
+
+        let jump_pc = ctx.code.len();
+        for pc in placeholders.into_iter() {
+            ctx.code[pc] = Inst::JumpIfFalse(jump_pc);
+        }
+
+        Ok(())
     }
 
     fn compile_expr(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
