@@ -487,7 +487,7 @@ impl Runtime {
                     pc: self.frame.pc+1,
                     stack_bottom: self.arg_stack.len() - n,
                     arg_size: n,
-                    self_link: Rc::new(RefCell::new(ScopePtr::Stack(idx)))
+                    self_link: Rc::new(RefCell::new(ScopePtr::Stack(idx+1)))
                 };
 
                 self.call_stack.push(new_frame);
