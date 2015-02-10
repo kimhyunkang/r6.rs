@@ -242,3 +242,23 @@ fn number_type_test() {
     assert_evaluates_to!("(rational? -inf.0)", "#f");
     assert_evaluates_to!("(integer? -inf.0)", "#f");
 }
+
+#[test]
+fn number_eq_test() {
+    assert_evaluates_to!("(= 2 2)", "#t");
+    assert_evaluates_to!("(= +inf.0 +inf.0)", "#t");
+    assert_evaluates_to!("(= -inf.0 +inf.0)", "#f");
+    assert_evaluates_to!("(= -inf.0 -inf.0)", "#t");
+
+    assert_evaluates_to!("(< -inf.0 2 +inf.0)", "#t");
+    assert_evaluates_to!("(> +inf.0 2 -inf.0)", "#t");
+
+    assert_evaluates_to!("(= +nan.0 2)", "#f");
+    assert_evaluates_to!("(= +nan.0 +nan.0)", "#f");
+
+    assert_evaluates_to!("(< +nan.0 2)", "#f");
+    assert_evaluates_to!("(< +nan.0 +nan.0)", "#f");
+
+    assert_evaluates_to!("(> +nan.0 2)", "#f");
+    assert_evaluates_to!("(> +nan.0 +nan.0)", "#f");
+}

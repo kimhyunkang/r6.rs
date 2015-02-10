@@ -5,6 +5,7 @@ use std::fmt;
 use std::ops::DerefMut;
 
 use number::Number;
+use real::Real;
 use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
 use primitive::PrimFunc;
@@ -140,6 +141,22 @@ impl DatumCast for Number {
 
     fn wrap(self) -> RDatum{
         Datum::Num(self)
+    }
+}
+
+impl DatumCast for Real {
+    fn unwrap(datum: RDatum) -> Result<Real, RuntimeError> {
+        match datum {
+            Datum::Num(Number::Real(n)) => Ok(n),
+            _ => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: format!("expected Real, but received {:?}", DatumType::get_type(&datum))
+            })
+        }
+    }
+
+    fn wrap(self) -> RDatum {
+        Datum::Num(Number::Real(self))
     }
 }
 

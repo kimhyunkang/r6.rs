@@ -1,5 +1,6 @@
 use std::iter::FromIterator;
 use std::num::Float;
+use std::cmp::PartialOrd;
 
 use num::{Zero, One};
 
@@ -19,6 +20,10 @@ pub struct Fold<P> {
 
 pub struct Fold1<P> {
     fold1: fn(P, Vec<P>) -> P
+}
+
+pub struct FoldR2<P, R> {
+    fold_r2: fn(&P, &P, &[P]) -> R
 }
 
 pub struct Fold1Err<P> {
@@ -81,6 +86,21 @@ impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
                 f(v0, vs).map(|res| res.wrap())
             }
         )
+    }
+}
+
+impl<P: DatumCast, R: DatumCast> PrimFunc for FoldR2<P, R> {
+    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+        if args.len() < 2 {
+            return Err(RuntimeError {
+                kind: RuntimeErrorKind::NumArgs,
+                desc: format!("Expected 2 or more argument, received {:?}", args.len())
+            });
+        }
+
+        let vs: Vec<P> = try!(args.into_iter().map(DatumCast::unwrap).collect());
+        let f = self.fold_r2;
+        Ok(DatumCast::wrap(f(&vs[0], &vs[1], &vs[2..])))
     }
 }
 
@@ -257,6 +277,32 @@ fn is_integer(arg: &RDatum) -> bool {
 /// `(integer? x)`
 pub static PRIM_INTEGER: R1<RDatum, bool> = R1 { r1: is_integer };
 
+macro_rules! impl_num_comp {
+    ($type_name:ident, $static_name:ident, $func_name:ident, $op:ident) => (
+        fn $func_name(arg0: &$type_name, arg1: &$type_name, args: &[$type_name]) -> bool {
+            if !arg0.$op(arg1) {
+                return false;
+            }
+            let mut last_arg = arg1;
+            for arg in args.iter() {
+                if !last_arg.$op(arg) {
+                    return false;
+                }
+                last_arg = arg;
+            }
+            return true;
+        }
+
+        pub static $static_name: FoldR2<$type_name, bool> = FoldR2 { fold_r2: $func_name };
+    )
+}
+
+impl_num_comp!(Number, PRIM_NUM_EQ, num_eq, eq);
+impl_num_comp!(Real, PRIM_LT, real_lt, lt);
+impl_num_comp!(Real, PRIM_GT, real_gt, gt);
+impl_num_comp!(Real, PRIM_LE, real_le, le);
+impl_num_comp!(Real, PRIM_GE, real_ge, ge);
+
 macro_rules! impl_typecheck {
     ($static_name:ident, $func_name:ident, $type_name:ident) => (
         fn $func_name(arg: &RDatum) -> bool {
@@ -301,6 +347,11 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("complex?", &PRIM_NUMBER),
         ("real?", &PRIM_REAL),
         ("rational?", &PRIM_RATIONAL),
-        ("integer?", &PRIM_INTEGER)
+        ("integer?", &PRIM_INTEGER),
+        ("=", &PRIM_NUM_EQ),
+        ("<", &PRIM_LT),
+        (">", &PRIM_GT),
+        ("<=", &PRIM_LE),
+        (">=", &PRIM_GE)
     ]
 }
