@@ -509,8 +509,8 @@ impl Runtime {
                 self.frame.pc = pc;
                 true
             },
-            Inst::JumpIfFalse(pc) => match self.arg_stack.pop() {
-                Some(Datum::Bool(false)) => {
+            Inst::JumpIfFalse(pc) => match self.arg_stack.last() {
+                Some(&Datum::Bool(false)) => {
                     self.frame.pc = pc;
                     true
                 },

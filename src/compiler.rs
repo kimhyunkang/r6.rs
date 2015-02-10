@@ -351,6 +351,7 @@ impl<'g> Compiler<'g> {
             ctx.code.push(Inst::Nop);
 
             ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
+            ctx.code.push(Inst::DropArg);
 
             if exprs.len() == 3 {
                 let else_expr = &exprs[2];
