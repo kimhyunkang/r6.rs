@@ -12,16 +12,14 @@
 #![feature(collections)]
 #![feature(unicode)]
 
+#![plugin(phf_macros)]
+#![plugin(regex_macros)]
+
 // This line should be at the top of the extern link list,
 // because some weird compiler bug lets log imported from rustc, not crates.io log
 #[macro_use] extern crate log;
 
-#[plugin]
-extern crate phf_macros;
 extern crate phf;
-#[plugin]
-#[no_link]
-extern crate regex_macros;
 extern crate regex;
 extern crate unicode;
 extern crate num;
