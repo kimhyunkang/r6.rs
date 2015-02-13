@@ -1,3 +1,5 @@
+#![feature(io)]
+
 extern crate r6;
 extern crate env_logger;
 
