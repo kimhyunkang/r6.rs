@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::mem;
 use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
 use std::iter::range_step;
@@ -21,8 +22,8 @@ use num::rational::{Ratio, BigRational};
 use num::complex::Complex;
 
 /// Parser parses character stream into a Datum
-pub struct Parser<'a> {
-    lexer: Lexer<'a>,
+pub struct Parser<R> {
+    lexer: Lexer<R>,
     token_buf: Option<TokenWrapper>
 }
 
@@ -320,9 +321,9 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
     }
 }
 
-impl <'a> Parser<'a> {
+impl <R: Read + Sized> Parser<R> {
     /// Create new parser from io::Buffer
-    pub fn new<'r>(stream: &'r mut Buffer) -> Parser<'r> {
+    pub fn new(stream: R) -> Parser<R> {
         Parser {
             lexer: Lexer::new(stream),
             token_buf: None
@@ -439,7 +440,6 @@ impl <'a> Parser<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::old_io::BufReader;
     use std::borrow::Cow;
     use std::num::{Float, FromPrimitive};
     use std::rc::Rc;
@@ -452,8 +452,7 @@ mod test {
 
     macro_rules! test_parse_ok {
         ($s:expr, $e:expr) => ({
-            let mut reader = BufReader::new($s.as_bytes());
-            let mut parser = Parser::new(&mut reader);
+            let mut parser = Parser::new($s.as_bytes());
             let res: Result<Datum<()>, ParserError> = parser.parse_datum();
 
             assert_eq!(res, Ok($e))
@@ -538,8 +537,7 @@ mod test {
 
     #[test]
     fn test_parse_nan() {
-        let mut reader = BufReader::new("+nan.0".as_bytes());
-        let mut parser = Parser::new(&mut reader);
+        let mut parser = Parser::new("+nan.0".as_bytes());
         let res: Result<Datum<()>, ParserError> = parser.parse_datum();
 
         match res {

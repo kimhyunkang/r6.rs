@@ -1,9 +1,6 @@
-#![feature(io)]
-
 extern crate r6;
 extern crate env_logger;
 
-use std::old_io::BufReader;
 use std::sync::{Once, ONCE_INIT};
 use r6::runtime::Runtime;
 use r6::compiler::Compiler;
@@ -18,15 +15,13 @@ macro_rules! assert_evaluates_to {
             START.call_once(|| {
                 env_logger::init().unwrap();
             });
-            let mut src_reader = BufReader::new($src.as_bytes());
-            let mut src_parser = Parser::new(&mut src_reader);
+            let mut src_parser = Parser::new($src.as_bytes());
             let sourcecode = match src_parser.parse_datum() {
                 Ok(code) => code,
                 Err(e) => panic!("failed to parse source: {:?}", e)
             };
 
-            let mut res_reader = BufReader::new($expected.as_bytes());
-            let mut res_parser = Parser::new(&mut res_reader);
+            let mut res_parser = Parser::new($expected.as_bytes());
             let expected = match res_parser.parse_datum() {
                 Ok(val) => val,
                 Err(e) => panic!("failed to parse result: {:?}", e)
@@ -50,8 +45,7 @@ macro_rules! assert_evaluates_to {
 macro_rules! assert_evaluates_datum {
     ($src:expr, $expected:expr) => (
         {
-            let mut src_reader = BufReader::new($src.as_bytes());
-            let mut src_parser = Parser::new(&mut src_reader);
+            let mut src_parser = Parser::new($src.as_bytes());
             let sourcecode = match src_parser.parse_datum() {
                 Ok(code) => code,
                 Err(e) => panic!("failed to parse source: {:?}", e)

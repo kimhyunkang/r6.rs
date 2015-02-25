@@ -1,4 +1,4 @@
-use std::old_io::IoError;
+use std::io::CharsError;
 use std::error::{Error, FromError};
 use std::fmt;
 
@@ -24,8 +24,8 @@ pub enum ParserErrorKind {
     InvalidToken(String),
     /// Non-byte datum found in byte vector representation
     ByteVectorElement,
-    /// Parser met IoError while reading the underlying stream
-    UnderlyingError(IoError)
+    /// Parser met CharsError while reading the underlying stream
+    UnderlyingError(CharsError)
 }
 
 /// Parser error
@@ -55,8 +55,8 @@ impl fmt::Display for ParserError {
     }
 }
 
-impl FromError<IoError> for ParserError {
-    fn from_error(err: IoError) -> ParserError {
+impl FromError<CharsError> for ParserError {
+    fn from_error(err: CharsError) -> ParserError {
         ParserError {
             line: 0,
             column: 0,

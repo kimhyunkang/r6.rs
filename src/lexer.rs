@@ -1,4 +1,4 @@
-use std::old_io::{IoError, IoErrorKind};
+use std::io::{Read, ReadExt, Chars, CharsError};
 use std::borrow::Cow;
 use std::fmt;
 use std::num;
@@ -103,20 +103,30 @@ fn is_delim(c: char) -> bool {
 }
 
 /// Lexer transforms character stream into a token stream
-pub struct Lexer<'a> {
+pub struct Lexer<R> {
     line: usize,
     column: usize,
-    stream: &'a mut (Buffer+'a),
+    stream: Chars<R>,
     lookahead_buf: Option<char>,
 }
 
-impl <'a> Lexer<'a> {
+macro_rules! try_consume {
+    ($this:ident) => (
+        match $this.consume() {
+            Some(Ok(c)) => c,
+            Some(Err(e)) => return Err($this.make_error(ParserErrorKind::UnderlyingError(e))),
+            None => return Err($this.make_error(ParserErrorKind::UnexpectedEOF))
+        }
+    )
+}
+
+impl <R: Read + Sized> Lexer<R> {
     /// Creates new Lexer from io::Buffer
-    pub fn new<'r>(stream: &'r mut Buffer) -> Lexer<'r> {
+    pub fn new(stream: R) -> Lexer<R> {
         Lexer {
             line: 1,
             column: 1,
-            stream: stream,
+            stream: stream.chars(),
             lookahead_buf: None,
         }
     }
@@ -128,11 +138,10 @@ impl <'a> Lexer<'a> {
         let line = self.line;
         let col = self.column;
         let c = match self.consume() {
-            Err(e) => match e.kind {
-                IoErrorKind::EndOfFile => return Ok(wrap(line, col, Token::EOF)),
-                _ => return Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
-            },
-            Ok(c) => c
+            Some(Ok(c)) => c,
+            None => return Ok(wrap(line, col, Token::EOF)),
+            Some(Err(e)) =>
+                return Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
         };
 
         let end_of_token = try!(self.is_end_of_token());
@@ -152,12 +161,10 @@ impl <'a> Lexer<'a> {
                 Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
             } else {
                 match self.lookahead() {
-                    Ok('>') => self.lex_ident("-".to_string()).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s)))),
-                    Ok(_) => self.lex_numeric("-".to_string()).map(|s| wrap(line, col, Token::Numeric(s))),
-                    Err(e) => match e.kind {
-                        IoErrorKind::EndOfFile => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-")))),
-                        _ => Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
-                    }
+                    Some(Ok('>')) => self.lex_ident("-".to_string()).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s)))),
+                    Some(Ok(_)) => self.lex_numeric("-".to_string()).map(|s| wrap(line, col, Token::Numeric(s))),
+                    Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+                    None => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
                 }
             }
         } else if c == '(' {
@@ -169,13 +176,7 @@ impl <'a> Lexer<'a> {
         } else if c == '\'' {
             Ok(wrap(line, col, Token::Quote))
         } else if c == '#' {
-            let c0 = match self.consume() {
-                Err(e) => return Err(match e.kind {
-                    IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
-                    _ => self.make_error(ParserErrorKind::UnderlyingError(e))
-                }),
-                Ok(x) => x
-            };
+            let c0 = try_consume!(self);
             match c0 {
                 't' | 'T' => Ok(wrap(line, col, Token::True)),
                 'f' | 'F' => Ok(wrap(line, col, Token::False)),
@@ -185,7 +186,7 @@ impl <'a> Lexer<'a> {
                 },
                 'v' | 'u' => {
                     let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
-                    let delim = try!(self.consume());
+                    let delim = try_consume!(self);
                     let prefix = format!("{}{}{}", c0, rest_prefix, delim);
                     if prefix.as_slice() == "vu8(" || prefix.as_slice() == "u8(" {
                         Ok(wrap(line, col, Token::OpenBytesParen))
@@ -209,11 +210,9 @@ impl <'a> Lexer<'a> {
 
     fn is_end_of_token(&mut self) -> Result<bool, ParserError> {
         match self.lookahead() {
-            Ok(c) => Ok(is_whitespace(c) || is_delim(c)),
-            Err(e) => match e.kind {
-                IoErrorKind::EndOfFile => Ok(true),
-                _ => Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
-            }
+            Some(Ok(c)) => Ok(is_whitespace(c) || is_delim(c)),
+            Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+            None => Ok(true)
         }
     }
 
@@ -225,13 +224,7 @@ impl <'a> Lexer<'a> {
     }
 
     fn lex_char(&mut self) -> Result<String, ParserError> {
-        let c = match self.consume() {
-            Ok(c) => c,
-            Err(e) => return Err(self.make_error(match e.kind {
-                IoErrorKind::EndOfFile => ParserErrorKind::UnexpectedEOF,
-                _ => ParserErrorKind::UnderlyingError(e)
-            }))
-        };
+        let c = try_consume!(self);
 
         let mut s = String::new();
         s.push(c);
@@ -243,36 +236,24 @@ impl <'a> Lexer<'a> {
     fn lex_string(&mut self) -> Result<String, ParserError> {
         let mut s = String::new();
         loop {
-            match self.consume() {
-                Err(e) => return Err(match e.kind {
-                    IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
-                    _ => self.make_error(ParserErrorKind::UnderlyingError(e))
-                }),
-                Ok('"') => return Ok(s),
-                Ok('\\') => match self.consume() {
-                    Err(e) => return Err(match e.kind {
-                        IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
-                        _ => self.make_error(ParserErrorKind::UnderlyingError(e))
-                    }),
-                    Ok('a') => s.push('\x07'),
-                    Ok('b') => s.push('\x08'),
-                    Ok('t') => s.push('\t'),
-                    Ok('n') => s.push('\n'),
-                    Ok('v') => s.push('\x0b'),
-                    Ok('f') => s.push('\x0c'),
-                    Ok('r') => s.push('\r'),
-                    Ok('"') => s.push('"'),
-                    Ok('\\') => s.push('\\'),
-                    Ok('x') => {
+            match try_consume!(self) {
+                '"' => return Ok(s),
+                '\\' => match try_consume!(self) {
+                    'a' => s.push('\x07'),
+                    'b' => s.push('\x08'),
+                    't' => s.push('\t'),
+                    'n' => s.push('\n'),
+                    'v' => s.push('\x0b'),
+                    'f' => s.push('\x0c'),
+                    'r' => s.push('\r'),
+                    '"' => s.push('"'),
+                    '\\' => s.push('\\'),
+                    'x' => {
                         let mut hex_str = String::new();
                         loop {
-                            match self.consume() {
-                                Ok(';') => break,
-                                Ok(c) => hex_str.push(c),
-                                Err(e) => return Err(match e.kind {
-                                    IoErrorKind::EndOfFile => self.make_error(ParserErrorKind::UnexpectedEOF),
-                                    _ => self.make_error(ParserErrorKind::UnderlyingError(e))
-                                }),
+                            match try_consume!(self) {
+                                ';' => break,
+                                c => hex_str.push(c)
                             }
                         }
                         if hex_str.len() == 0 {
@@ -287,11 +268,11 @@ impl <'a> Lexer<'a> {
                             None => return Err(self.make_error(ParserErrorKind::InvalidUnicodeRange(code)))
                         }
                     },
-                    Ok(c) =>
+                    c =>
                         if c.is_whitespace() {
                             try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
                             if c != '\n' {
-                                if let Ok('\n') = self.consume() {
+                                if let Some(Ok('\n')) = self.consume() {
                                     try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
                                 } else {
                                     return Err(self.make_error(ParserErrorKind::InvalidStringLiteral))
@@ -303,7 +284,7 @@ impl <'a> Lexer<'a> {
                             return Err(self.make_error(ParserErrorKind::InvalidStringEscape(s)))
                         }
                 },
-                Ok(c) => s.push(c),
+                c => s.push(c),
             }
         }
     }
@@ -323,15 +304,17 @@ impl <'a> Lexer<'a> {
         }
     }
 
-    fn lookahead(&mut self) -> Result<char, IoError> {
-        Ok(match self.lookahead_buf {
-            Some(c) => c,
+    fn lookahead(&mut self) -> Option<Result<char, CharsError>> {
+        match self.lookahead_buf {
+            Some(c) => Some(Ok(c)),
             None => {
-                let c = try!(self.stream.read_char());
-                self.lookahead_buf = Some(c);
+                let c = self.stream.next();
+                if let Some(Ok(ch)) = c {
+                    self.lookahead_buf = Some(ch);
+                }
                 c
             }
-        })
+        }
     }
 
     fn advance(&mut self, c: char) {
@@ -360,33 +343,35 @@ impl <'a> Lexer<'a> {
         };
 
         loop {
-            match self.stream.read_char() {
-                Ok(c) => if f(c) {
+            match self.stream.next() {
+                Some(Ok(c)) => if f(c) {
                     self.advance(c);
                     s.push(c);
                 } else {
                     self.lookahead_buf = Some(c);
                     return Ok(s);
                 },
-                Err(e) => match e.kind {
-                    IoErrorKind::EndOfFile => return Ok(s),
-                    _ => return Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
-                }
+                Some(Err(e)) =>
+                    return Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+                None => return Ok(s)
             }
         }
     }
 
-    fn consume(&mut self) -> Result<char, IoError> {
+    fn consume(&mut self) -> Option<Result<char, CharsError>> {
         let c = match self.lookahead_buf {
             Some(c) => {
                 self.lookahead_buf = None;
-                c
+                Some(Ok(c))
             },
-            None => try!(self.stream.read_char())
+            None => self.stream.next()
         };
 
-        self.advance(c);
-        Ok(c)
+        if let Some(Ok(ch)) = c {
+            self.advance(ch);
+        }
+
+        c
     }
 
     fn consume_whitespace(&mut self) -> Result<bool, ParserError> {
@@ -395,18 +380,16 @@ impl <'a> Lexer<'a> {
             let whitespace = try!(self.read_while(is_whitespace));
             consumed = consumed || whitespace.len() > 0;
             match self.lookahead() {
-                Ok(';') => {
+                Some(Ok(';')) => {
                     consumed = true;
                     try!(self.read_while(|c| c != '\n'));
                     if self.lookahead_buf.is_some() {
                         self.lookahead_buf = None
                     }
                 },
-                Ok(_) => return Ok(consumed),
-                Err(e) => match e.kind {
-                    IoErrorKind::EndOfFile => return Ok(consumed),
-                    _ => return Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
-                }
+                Some(Ok(_)) | None => return Ok(consumed),
+                Some(Err(e)) => 
+                    return Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
             }
         }
     }
