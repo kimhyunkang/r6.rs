@@ -1,4 +1,4 @@
-use std::string::CowString;
+use std::borrow::Cow;
 use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -94,7 +94,7 @@ pub enum EnvVar {
 /// Compiler compiles Datum into a bytecode evaluates it
 pub struct Compiler<'g> {
     /// Global environment
-    global_env: &'g HashMap<CowString<'static>, EnvVar>
+    global_env: &'g HashMap<Cow<'static, str>, EnvVar>
 }
 
 struct CodeGenContext {
@@ -104,19 +104,19 @@ struct CodeGenContext {
 
 #[derive(Clone)]
 struct LexicalContext {
-    static_scope: Vec<Vec<CowString<'static>>>,
-    args: Vec<CowString<'static>>
+    static_scope: Vec<Vec<Cow<'static, str>>>,
+    args: Vec<Cow<'static, str>>
 }
 
 impl LexicalContext {
-    fn update_arg(&self, args: Vec<CowString<'static>>) -> LexicalContext {
+    fn update_arg(&self, args: Vec<Cow<'static, str>>) -> LexicalContext {
         LexicalContext {
             static_scope: self.static_scope.clone() + &[self.args.clone()],
             args: args
         }
     }
 
-    fn push_arg(&mut self, arg: CowString<'static>) {
+    fn push_arg(&mut self, arg: Cow<'static, str>) {
         self.args.push(arg);
     }
 }
@@ -129,7 +129,7 @@ enum Def {
 
 impl<'g> Compiler<'g> {
     /// Creates a new compiler with given environment
-    pub fn new<'a>(global_env: &'a HashMap<CowString<'static>, EnvVar>) -> Compiler<'a> {
+    pub fn new<'a>(global_env: &'a HashMap<Cow<'static, str>, EnvVar>) -> Compiler<'a> {
         Compiler {
             global_env: global_env
         }
@@ -209,7 +209,7 @@ impl<'g> Compiler<'g> {
     }
 
     fn parse_define(&self, env: &LexicalContext, def: &RDatum)
-            -> Result<Option<(CowString<'static>, Def)>, CompileError>
+            -> Result<Option<(Cow<'static, str>, Def)>, CompileError>
     {
         let list: Vec<RDatum> = match def.iter().collect() {
             Ok(l) => l,
@@ -378,7 +378,7 @@ impl<'g> Compiler<'g> {
     }
 
     fn get_form(&self, form: &RDatum)
-            -> Result<(Vec<CowString<'static>>, Vec<RDatum>, RDatum), CompileError>
+            -> Result<(Vec<Cow<'static, str>>, Vec<RDatum>, RDatum), CompileError>
     {
         if let &Datum::Cons(ref ptr) = form {
             let (ref binding_form, ref body) = *ptr.borrow();
@@ -550,7 +550,7 @@ impl<'g> Compiler<'g> {
         return Ok(ctx);
     }
 
-    fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &CowString<'static>)
+    fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &Cow<'static, str>)
             -> Result<MemRef, CompileError>
     {
         let ptr = self.find_var(env, sym);
@@ -565,7 +565,7 @@ impl<'g> Compiler<'g> {
         return ptr;
     }
 
-    fn find_var(&self, env: &LexicalContext, sym: &CowString<'static>)
+    fn find_var(&self, env: &LexicalContext, sym: &Cow<'static, str>)
             -> Result<MemRef, CompileError>
     {
         if let Some(i) = (0..env.args.len()).find(|&i| env.args[i] == *sym) {

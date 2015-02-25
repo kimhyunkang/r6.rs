@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::string::CowString;
 use std::borrow::Cow;
 
 use compiler::{EnvVar, Syntax};
 use primitive::libprimitive;
 
 /// Compiles the global env from `base`
-pub fn libbase() -> HashMap<CowString<'static>, EnvVar> {
+pub fn libbase() -> HashMap<Cow<'static, str>, EnvVar> {
     let mut lib = HashMap::new();
     for &(name, func) in libprimitive().iter() {
         lib.insert(Cow::Borrowed(name), EnvVar::PrimFunc(name, func));

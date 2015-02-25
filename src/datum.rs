@@ -1,4 +1,3 @@
-use std::string::CowString;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::iter::{FromIterator, IntoIterator};
@@ -14,7 +13,7 @@ use number::Number;
 #[derive(PartialEq, Clone)]
 pub enum Datum<T> {
     /// Symbol
-    Sym(CowString<'static>),
+    Sym(Cow<'static, str>),
     /// Boolean
     Bool(bool),
     /// Character

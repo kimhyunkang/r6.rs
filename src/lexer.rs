@@ -1,5 +1,4 @@
 use std::old_io::{IoError, IoErrorKind};
-use std::string::CowString;
 use std::borrow::Cow;
 use std::fmt;
 use std::num;
@@ -22,7 +21,7 @@ pub enum Token {
     Dot,
     /// `'`
     Quote,
-    Identifier(CowString<'static>),
+    Identifier(Cow<'static, str>),
     /// `#t`
     True,
     /// `#f`
