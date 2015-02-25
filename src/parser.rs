@@ -84,7 +84,7 @@ enum Exactness {
 
 static PREFIX_PATTERN:Regex = regex!(r"^(?i)(#([iebodx])){0,2}");
 
-fn parse_prefix(prefix: &str) -> Result<(Exactness, usize), String> {
+fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     let mut exactness = Exactness::Unspecified;
     let mut radix = 0;
     for i in range_step(1, prefix.len(), 2) {
@@ -155,7 +155,7 @@ fn pow(base: &BigInt, exp: usize) -> BigInt {
     }
 }
 
-fn parse_numerical_tower(exactness: Exactness, radix: usize, rep: &str) -> Result<Number, String> {
+fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<Number, String> {
     if rep == "-i" {
         return Ok(Number::new_int(0, -1));
     } else if rep == "+i" {
@@ -203,7 +203,7 @@ fn parse_numerical_tower(exactness: Exactness, radix: usize, rep: &str) -> Resul
     }
 }
 
-fn parse_real(exactness: Exactness, radix: usize, rep: &str) -> Result<(Real, usize), String> {
+fn parse_real(exactness: Exactness, radix: u32, rep: &str) -> Result<(Real, usize), String> {
     let pattern = match radix {
         2  => &BIN_REAL_PATTERN,
         8  => &OCT_REAL_PATTERN,
@@ -252,7 +252,7 @@ fn parse_real(exactness: Exactness, radix: usize, rep: &str) -> Result<(Real, us
     return Ok((re, re_part.len()));
 }
 
-fn parse_rational(radix: usize, rep: &str, captures: Captures)
+fn parse_rational(radix: u32, rep: &str, captures: Captures)
         -> Result<(BigRational, bool), String>
 {
     if radix != 10 {
