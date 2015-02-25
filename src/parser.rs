@@ -1,7 +1,7 @@
 use std::mem;
 use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
 use std::iter::range_step;
-use std::fmt::Writer;
+use std::fmt::Write;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::cell::RefCell;

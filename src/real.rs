@@ -2,7 +2,7 @@ use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::num::{Float, FromPrimitive, ToPrimitive, FromStrRadix};
 use std::cmp::min;
 use std::fmt;
-use std::fmt::Writer;
+use std::fmt::Write;
 use std::{f64, isize};
 use std::cmp::Ordering;
 
