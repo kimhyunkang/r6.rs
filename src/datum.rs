@@ -1,7 +1,7 @@
 use std::string::CowString;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::iter::FromIterator;
+use std::iter::{FromIterator, IntoIterator};
 use std::fmt;
 use std::borrow::Cow;
 
@@ -152,7 +152,7 @@ impl<T: Clone> Iterator for DatumIter<T> {
 }
 
 impl<T> FromIterator<Datum<T>> for Datum<T> {
-    fn from_iter<Iter: Iterator<Item=Datum<T>> >(iterator: Iter) -> Datum<T> {
+    fn from_iter<Iter: IntoIterator<Item=Datum<T>> >(iterator: Iter) -> Datum<T> {
         let list:Vec<Datum<T>> = FromIterator::from_iter(iterator);
         let mut res = Datum::Nil;
         for d in list.into_iter().rev() {
