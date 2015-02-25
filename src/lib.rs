@@ -3,7 +3,6 @@
 //! r6.rs is an attempt to implement R6RS Scheme in Rust language
 
 #![feature(plugin)]
-#![feature(slicing_syntax)]
 #![feature(box_syntax)]
 
 #![feature(core)]
