@@ -7,23 +7,10 @@ use std::ops::DerefMut;
 use number::Number;
 use real::Real;
 use error::{RuntimeErrorKind, RuntimeError};
-use datum::Datum;
+use datum::{Datum, Object};
 use primitive::PrimFunc;
 
 use log::LogLevel;
-
-/// RuntimeData contains runtime values not representable in standard syntax
-#[derive(Clone)]
-pub enum RuntimeData {
-    /// Primitive Function
-    PrimFunc(&'static str, &'static (PrimFunc + 'static)),
-
-    /// Compiled Closure
-    Closure(Closure),
-
-    /// Undefined value
-    Undefined
-}
 
 /// Compiled closure object 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,11 +21,70 @@ pub struct Closure {
     static_link: Option<StaticLink>
 }
 
+impl Object for Closure {
+    fn get_primfunc(&self) -> Option<&NativeProc> {
+        None
+    }
+
+    fn get_closure(&self) -> Option<&Closure> {
+        Some(self)
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(r) = rhs.get_closure() {
+            self == r
+        } else {
+            false
+        }
+    }
+}
+
 impl Closure {
     pub fn new(code: Rc<Vec<Inst>>, static_link: Option<StaticLink>) -> Closure {
         Closure {
             code: code,
             static_link: static_link
+        }
+    }
+}
+
+pub struct NativeProc {
+    name: &'static str,
+    code: &'static (PrimFunc + 'static)
+}
+
+impl NativeProc {
+    pub fn new(name: &'static str, code: &'static (PrimFunc + 'static)) -> NativeProc {
+        NativeProc { name: name, code: code }
+    }
+}
+
+impl fmt::Debug for NativeProc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "#<primitive: {}>", self.name)
+    }
+}
+
+impl PartialEq for NativeProc {
+    fn eq(&self, rhs: &NativeProc) -> bool {
+        self.name == rhs.name
+    }
+}
+
+impl Object for NativeProc {
+    fn get_primfunc(&self) -> Option<&NativeProc> {
+        Some(self)
+    }
+
+    fn get_closure(&self) -> Option<&Closure> {
+        None
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(r) = rhs.get_primfunc() {
+            self == r
+        } else {
+            false
         }
     }
 }
@@ -71,54 +117,15 @@ impl DatumType {
             &Datum::Bytes(_) => DatumType::Bytes,
             &Datum::Num(_) => DatumType::Num,
             &Datum::Nil => DatumType::Null,
+            &Datum::Undefined => DatumType::Undefined,
             &Datum::Cons(_) => DatumType::Pair,
-            &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
-            &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
-            &Datum::Ext(RuntimeData::Undefined) => DatumType::Undefined
-        }
-    }
-}
-
-impl fmt::Debug for RuntimeData {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &RuntimeData::PrimFunc(name, _) =>
-                write!(f, "<primitive: {:?}>", name),
-            &RuntimeData::Closure(ref closure) =>
-                write!(f, "<procedure {:?}: {:?}>", closure.static_link, closure.code),
-            &RuntimeData::Undefined =>
-                write!(f, "<undefined>")
-        }
-    }
-}
-
-impl PartialEq for RuntimeData {
-    fn eq(&self, other: &RuntimeData) -> bool {
-        match self {
-            &RuntimeData::PrimFunc(ref n0, _) =>
-                if let &RuntimeData::PrimFunc(ref n1, _) = other {
-                    *n0 == *n1
-                } else {
-                    false
-                },
-            &RuntimeData::Closure(ref c0) =>
-                if let &RuntimeData::Closure(ref c1) = other {
-                    *c0 == *c1
-                } else {
-                    false
-                },
-            &RuntimeData::Undefined =>
-                if let &RuntimeData::Undefined = other {
-                    true
-                } else {
-                    false
-                },
+            &Datum::Ptr(_) => DatumType::Callable
         }
     }
 }
 
 /// RDatum contains RuntimeData in addition to normal Datum
-pub type RDatum = Datum<RuntimeData>;
+pub type RDatum = Datum;
 
 /// Types with implementing DatumCast trait can cast from/to Datum
 pub trait DatumCast {
@@ -377,12 +384,10 @@ impl Runtime {
             MemRef::Arg(idx) => self.get_stack_val(idx),
             MemRef::UpValue(i, j) => self.get_upvalue(i, j),
             MemRef::Const(val) => val.clone(),
-            MemRef::Closure(code, _) => Datum::Ext(RuntimeData::Closure(
-                Closure {
-                    code: code.clone(),
-                    static_link: Some(self.frame.self_link.clone())
-                }
-            ))
+            MemRef::Closure(code, _) => Datum::Ptr(Rc::new(box Closure {
+                code: code.clone(),
+                static_link: Some(self.frame.self_link.clone())
+            }))
         }
     }
 
@@ -464,14 +469,14 @@ impl Runtime {
             Inst::Call(n) => {
                 let top = self.arg_stack.len();
                 let datum = self.arg_stack[top - n - 1].clone();
-                match datum {
-                    Datum::Ext(RuntimeData::PrimFunc(_, f)) => {
+                if let Datum::Ptr(ref ptr) = datum {
+                    if let Some(native) = ptr.get_primfunc() {
                         let args = if n == 0 {
                             Vec::new()
                         } else {
                             self.arg_stack.split_off(top-n)
                         };
-                        let res = match f.call(args) {
+                        let res = match native.code.call(args) {
                             Ok(x) => x,
                             Err(e) => panic!(e)
                         };
@@ -481,15 +486,17 @@ impl Runtime {
                         };
                         self.push_stack(res);
                         self.frame.pc += 1;
-                        true
-                    }, 
-                    Datum::Ext(RuntimeData::Closure(closure)) => {
-                        self.push_call_stack(n, closure);
-                        true
-                    },
-                    _ => {
-                        panic!("Not callable")
+                        return true;
                     }
+
+                    if let Some(closure) = ptr.get_closure() {
+                        self.push_call_stack(n, closure.clone());
+                        return true;
+                    }
+
+                    panic!("Not callable");
+                } else {
+                    panic!("Not callable");
                 }
             },
             Inst::PushFrame(n) => {
@@ -597,7 +604,7 @@ impl Runtime {
 #[cfg(test)]
 mod test {
     use std::rc::Rc;
-    use super::{Inst, MemRef, Runtime, RuntimeData};
+    use super::{Inst, MemRef, Runtime, NativeProc};
     use datum::Datum;
     use primitive::PRIM_ADD;
     use number::Number;
@@ -605,7 +612,7 @@ mod test {
     #[test]
     fn test_runtime() {
         let code = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -619,9 +626,9 @@ mod test {
     #[test]
     fn test_nested_call() {
         let code = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -636,7 +643,7 @@ mod test {
     #[test]
     fn test_lambda() {
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -656,7 +663,7 @@ mod test {
     #[test]
     fn test_closure() {
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::Call(2),

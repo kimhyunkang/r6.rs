@@ -134,11 +134,10 @@ fn letrec_test() {
 #[test]
 fn letrec_undefined_test() {
     use r6::datum::Datum;
-    use r6::runtime::RuntimeData;
 
     assert_evaluates_datum!(
         "(letrec ((quicksand quicksand)) quicksand)",
-        Datum::Ext(RuntimeData::Undefined)
+        Datum::Undefined
     );
 }
 

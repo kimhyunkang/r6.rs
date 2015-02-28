@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::iter::{FromIterator, IntoIterator};
@@ -5,13 +6,14 @@ use std::fmt;
 use std::borrow::Cow;
 
 use number::Number;
+use runtime::{Closure, NativeProc};
 
 /// Datum is the primary data type of Scheme
 /// Datum is a generic type here to make parser somewhat independent from runtime
 /// Ext can hold runtime data not representable in datum syntax, such as primitive function or I/O
 /// ports
-#[derive(PartialEq, Clone)]
-pub enum Datum<T> {
+#[derive(Clone)]
+pub enum Datum {
     /// Symbol
     Sym(Cow<'static, str>),
     /// Boolean
@@ -21,20 +23,47 @@ pub enum Datum<T> {
     /// String
     String(String),
     /// Vector
-    Vector(Rc<RefCell<Vec<Datum<T>>>>),
+    Vector(Rc<RefCell<Vec<Datum>>>),
     /// Byte vector
     Bytes(Rc<RefCell<Vec<u8>>>),
     /// Numeric value
     Num(Number),
     /// `()`
     Nil,
+    /// `undefined`
+    Undefined,
     /// Pair
-    Cons(Rc<RefCell<(Datum<T>, Datum<T>)>>),
-    /// Extra values
-    Ext(T)
+    Cons(Rc<RefCell<(Datum, Datum)>>),
+    /// Pointer values
+    Ptr(Rc<Box<Object>>)
 }
 
-fn write_cons<T: fmt::Debug>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
+impl PartialEq for Datum {
+    fn eq(&self, rhs: &Datum) -> bool {
+        match (self, rhs) {
+            (&Datum::Sym(ref l), &Datum::Sym(ref r)) => l == r,
+            (&Datum::Bool(l), &Datum::Bool(r)) => l == r,
+            (&Datum::Char(l), &Datum::Char(r)) => l == r,
+            (&Datum::String(ref l), &Datum::String(ref r)) => l == r,
+            (&Datum::Vector(ref l), &Datum::Vector(ref r)) => l == r,
+            (&Datum::Bytes(ref l), &Datum::Bytes(ref r)) => l == r,
+            (&Datum::Num(ref l), &Datum::Num(ref r)) => l == r,
+            (&Datum::Nil, &Datum::Nil) => true,
+            (&Datum::Undefined, &Datum::Undefined) => true,
+            (&Datum::Cons(ref l), &Datum::Cons(ref r)) => l == r,
+            (&Datum::Ptr(ref l), &Datum::Ptr(ref r)) => l.obj_eq(r.deref().deref()),
+            _ => false
+        }
+    }
+}
+
+pub trait Object: fmt::Debug {
+    fn get_primfunc(&self) -> Option<&NativeProc>;
+    fn get_closure(&self) -> Option<&Closure>;
+    fn obj_eq(&self, &Object) -> bool;
+}
+
+fn write_cons(tail: &Datum, f: &mut fmt::Formatter) -> fmt::Result {
     match tail {
         &Datum::Nil => {
             write!(f, ")")
@@ -64,7 +93,7 @@ fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Datum<T> {
+impl fmt::Debug for Datum {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             Datum::Sym(ref s) => write!(f, "{}", s),
@@ -97,8 +126,8 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
                 }
             },
             Datum::Num(ref n) => write!(f, "{}", n),
-            Datum::Ext(ref x) => x.fmt(f),
             Datum::Nil => write!(f, "()"),
+            Datum::Undefined => write!(f, "#<undefined>"),
             Datum::Cons(ref ptr) => {
                 let pair = ptr.borrow();
                 if let Datum::Sym(ref s) = pair.0 {
@@ -113,28 +142,30 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
                 }
                 try!(write!(f, "({:?}", pair.0));
                 write_cons(&pair.1, f)
-            }
+            },
+            Datum::Ptr(ref ptr) => 
+                write!(f, "{:?}", *ptr)
         }
     }
 }
 
-impl<T: Clone> Datum<T> {
+impl Datum {
     /// Iterate the values if it's a proper list
-    pub fn iter(&self) -> DatumIter<T> {
+    pub fn iter(&self) -> DatumIter {
         DatumIter { ptr: self.clone() }
     }
 }
 
 /// If the datum is a proper list, iterate the values in the list.
 /// If it's not a list, returns Err(()) when the iterator meets non-null cdr
-pub struct DatumIter<T> {
-    ptr: Datum<T>
+pub struct DatumIter {
+    ptr: Datum
 }
 
-impl<T: Clone> Iterator for DatumIter<T> {
-    type Item = Result<Datum<T>, ()>;
+impl Iterator for DatumIter {
+    type Item = Result<Datum, ()>;
 
-    fn next(&mut self) -> Option<Result<Datum<T>, ()>> {
+    fn next(&mut self) -> Option<Result<Datum, ()>> {
         let (val, next) = match self.ptr {
             Datum::Nil => return None,
             Datum::Cons(ref ptr) => {
@@ -150,9 +181,9 @@ impl<T: Clone> Iterator for DatumIter<T> {
     }
 }
 
-impl<T> FromIterator<Datum<T>> for Datum<T> {
-    fn from_iter<Iter: IntoIterator<Item=Datum<T>> >(iterator: Iter) -> Datum<T> {
-        let list:Vec<Datum<T>> = FromIterator::from_iter(iterator);
+impl FromIterator<Datum> for Datum {
+    fn from_iter<Iter: IntoIterator<Item=Datum> >(iterator: Iter) -> Datum {
+        let list:Vec<Datum> = FromIterator::from_iter(iterator);
         let mut res = Datum::Nil;
         for d in list.into_iter().rev() {
             res = cons(d, res);
@@ -162,7 +193,7 @@ impl<T> FromIterator<Datum<T>> for Datum<T> {
 }
 
 /// `cons` the values into a pair
-pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
+pub fn cons(head: Datum, tail: Datum) -> Datum {
     Datum::Cons(Rc::new(RefCell::new((head, tail))))
 }
 
@@ -175,7 +206,7 @@ mod test {
     use std::rc::Rc;
     use std::cell::RefCell;
 
-    fn compare_fmt(s: &str, datum: Datum<()>) {
+    fn compare_fmt(s: &str, datum: Datum) {
         assert_eq!(s.to_string(), format!("{:?}", datum))
     }
 
@@ -210,7 +241,7 @@ mod test {
     fn test_iter() {
         let n1 = FromPrimitive::from_int(1).unwrap();
         let n2 = FromPrimitive::from_int(2).unwrap();
-        let list: Datum<()> = list!(num!(1), num!(2));
+        let list: Datum = list!(num!(1), num!(2));
 
         assert_eq!(Ok(vec![Datum::Num(n1), Datum::Num(n2)]), list.iter().collect());
     }

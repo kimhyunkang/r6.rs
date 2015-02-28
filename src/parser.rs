@@ -331,7 +331,7 @@ impl <R: Read + Sized> Parser<R> {
     }
 
     /// Parse next datum
-    pub fn parse_datum<T>(&mut self) -> Result<Datum<T>, ParserError> {
+    pub fn parse_datum(&mut self) -> Result<Datum, ParserError> {
         let tok = try!(self.consume_token());
         match tok.token {
             Token::Identifier(ident) => Ok(Datum::Sym(ident)),
@@ -340,7 +340,7 @@ impl <R: Read + Sized> Parser<R> {
                 Datum::Vector(Rc::new(RefCell::new(v)))
             ),
             Token::OpenBytesParen => {
-                let v:Vec<Datum<T>> = try!(self.parse_vector());
+                let v:Vec<Datum> = try!(self.parse_vector());
                 let bytes:Result<Vec<u8>, ParserError> = v.iter().map(|d|
                     match d {
                         &Datum::Num(Number::Real(Real::Fixnum(n))) if 0 <= n && n <= 0xff =>
@@ -410,7 +410,7 @@ impl <R: Read + Sized> Parser<R> {
         }
     }
 
-    fn parse_list<T>(&mut self) -> Result<Datum<T>, ParserError> {
+    fn parse_list(&mut self) -> Result<Datum, ParserError> {
         if try!(self.consume_if(&Token::CloseParen)) {
             return Ok(Datum::Nil);
         }
@@ -427,7 +427,7 @@ impl <R: Read + Sized> Parser<R> {
         }
     }
 
-    fn parse_vector<T>(&mut self) -> Result<Vec<Datum<T>>, ParserError> {
+    fn parse_vector(&mut self) -> Result<Vec<Datum>, ParserError> {
         let mut vec = Vec::new();
 
         while !try!(self.consume_if(&Token::CloseParen)) {
@@ -453,7 +453,7 @@ mod test {
     macro_rules! test_parse_ok {
         ($s:expr, $e:expr) => ({
             let mut parser = Parser::new($s.as_bytes());
-            let res: Result<Datum<()>, ParserError> = parser.parse_datum();
+            let res: Result<Datum, ParserError> = parser.parse_datum();
 
             assert_eq!(res, Ok($e))
         })
@@ -538,7 +538,7 @@ mod test {
     #[test]
     fn test_parse_nan() {
         let mut parser = Parser::new("+nan.0".as_bytes());
-        let res: Result<Datum<()>, ParserError> = parser.parse_datum();
+        let res: Result<Datum, ParserError> = parser.parse_datum();
 
         match res {
             Ok(Datum::Num(Number::Real(Real::Flonum(n)))) => if !n.is_nan() {

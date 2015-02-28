@@ -6,7 +6,7 @@ use std::num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
-use runtime::{Inst, MemRef, RDatum, RuntimeData};
+use runtime::{Inst, MemRef, RDatum, NativeProc};
 use primitive::PrimFunc;
 
 /// Syntax variables
@@ -288,7 +288,7 @@ impl<'g> Compiler<'g> {
         let mut mod_env = env.clone();
         for var in def_vars.iter() {
             mod_env.push_arg(var.clone());
-            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Undefined)));
         }
 
         for (i, def) in defs.iter().enumerate() {
@@ -364,7 +364,7 @@ impl<'g> Compiler<'g> {
 
                 try!(self.compile_expr(env, ctx, else_expr));
             } else {
-                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Undefined)));
             }
 
             // Currently code[ctx.code.len()] is out of range, but Return will be pushed at the
@@ -456,7 +456,7 @@ impl<'g> Compiler<'g> {
         ctx.code.push(Inst::PushFrame(0));
 
         for _ in 0..exprs.len() {
-            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Undefined)));
         }
 
         let new_env = env.update_arg(syms);
@@ -586,10 +586,10 @@ impl<'g> Compiler<'g> {
                 &EnvVar::Syntax(ref s) =>
                     Err(CompileError { kind: CompileErrorKind::SyntaxReference(s.clone()) }),
                 &EnvVar::PrimFunc(ref name, func) => {
-                    Ok(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
+                    Ok(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new(
                                         name.clone(),
                                         func
-                    ))))
+                    )))))
                 },
                 &EnvVar::Procedure(ref code) => {
                     Ok(MemRef::Closure(code.clone(), 0))
@@ -612,7 +612,7 @@ impl<'g> Compiler<'g> {
                 try!(self.compile_expr(env, ctx, expr));
                 let ptr = try!(self.compile_ref(env, ctx, sym));
                 ctx.code.push(Inst::PopArg(ptr));
-                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Undefined)));
                 Ok(())
             },
             _ =>
@@ -701,7 +701,7 @@ mod test {
     use std::borrow::Cow;
     use std::rc::Rc;
     use datum::Datum;
-    use runtime::{Inst, MemRef, RuntimeData};
+    use runtime::{Inst, MemRef, NativeProc};
     use base::libbase;
     use primitive::PRIM_ADD;
     use number::Number;
@@ -712,7 +712,7 @@ mod test {
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1 ,0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2 ,0)))),
             Inst::Call(2),
@@ -727,9 +727,9 @@ mod test {
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -747,7 +747,7 @@ mod test {
 
         let f = vec![
             Inst::SetArgSize(1),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
@@ -773,7 +773,7 @@ mod test {
 
         let f = vec![
             Inst::SetArgSize(1),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::Call(2),
