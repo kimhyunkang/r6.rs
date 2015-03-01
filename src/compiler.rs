@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::borrow::Cow;
 use std::fmt;
 use std::collections::HashMap;
@@ -150,15 +151,12 @@ impl<'g> Compiler<'g> {
         return Ok(ctx.code);
     }
 
-    fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &(RDatum, RDatum))
             -> Result<(), CompileError>
     {
-        let (callee, c_args) = match datum {
-            &Datum::Cons(ref ptr) => ptr.borrow().clone(),
-            _ => return Err(CompileError { kind: CompileErrorKind::NullEval })
-        };
+        let (ref callee, ref c_args) = *datum;
 
-        if let Datum::Ptr(ref p) = callee {
+        if let &Datum::Ptr(ref p) = callee {
             if let Some(s) = p.get_sym() {
                 match self.compile_ref(env, ctx, s) {
                     Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
@@ -701,8 +699,8 @@ impl<'g> Compiler<'g> {
             -> Result<(), CompileError>
     {
         match datum {
-            &Datum::Cons(_) =>
-                self.compile_app(env, ctx, datum),
+            &Datum::Cons(ref ptr) =>
+                self.compile_app(env, ctx, ptr.borrow().deref()),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Ptr(ref p) => {
                 if let Some(sym) = p.get_sym() {
