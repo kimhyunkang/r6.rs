@@ -14,8 +14,6 @@ use runtime::{Closure, NativeProc};
 /// ports
 #[derive(Clone)]
 pub enum Datum {
-    /// Symbol
-    Sym(Cow<'static, str>),
     /// Boolean
     Bool(bool),
     /// Character
@@ -38,10 +36,44 @@ pub enum Datum {
     Ptr(Rc<Box<Object>>)
 }
 
+/// Type representation of Datum
+#[derive(Debug, Copy, PartialEq)]
+pub enum DatumType {
+    Sym,
+    Bool,
+    Char,
+    String,
+    Vector,
+    Bytes,
+    Num,
+    Pair,
+    Null,
+    Callable,
+    Undefined
+}
+
+impl DatumType {
+    /// Get the type of datum
+    pub fn get_type(datum: &Datum) -> DatumType {
+        match datum {
+            &Datum::Bool(_) => DatumType::Bool,
+            &Datum::Char(_) => DatumType::Char,
+            &Datum::String(_) => DatumType::String,
+            &Datum::Vector(_) => DatumType::Vector,
+            &Datum::Bytes(_) => DatumType::Bytes,
+            &Datum::Num(_) => DatumType::Num,
+            &Datum::Nil => DatumType::Null,
+            &Datum::Undefined => DatumType::Undefined,
+            &Datum::Cons(_) => DatumType::Pair,
+            &Datum::Ptr(ref p) => p.get_type()
+        }
+    }
+}
+
+
 impl PartialEq for Datum {
     fn eq(&self, rhs: &Datum) -> bool {
         match (self, rhs) {
-            (&Datum::Sym(ref l), &Datum::Sym(ref r)) => l == r,
             (&Datum::Bool(l), &Datum::Bool(r)) => l == r,
             (&Datum::Char(l), &Datum::Char(r)) => l == r,
             (&Datum::String(ref l), &Datum::String(ref r)) => l == r,
@@ -57,10 +89,31 @@ impl PartialEq for Datum {
     }
 }
 
-pub trait Object: fmt::Debug {
-    fn get_primfunc(&self) -> Option<&NativeProc>;
-    fn get_closure(&self) -> Option<&Closure>;
+pub trait Object: fmt::Display {
+    fn get_primfunc(&self) -> Option<&NativeProc> { None }
+    fn get_closure(&self) -> Option<&Closure> { None }
+    fn get_sym(&self) -> Option<&str> { None }
     fn obj_eq(&self, &Object) -> bool;
+    fn get_type(&self) -> DatumType;
+}
+
+/// Symbol
+impl Object for Cow<'static, str> {
+    fn get_sym(&self) -> Option<&str> {
+        Some(self.deref())
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(s) = rhs.get_sym() {
+            self.deref() == s
+        } else {
+            false
+        }
+    }
+
+    fn get_type(&self) -> DatumType {
+        DatumType::Sym
+    }
 }
 
 fn write_cons(tail: &Datum, f: &mut fmt::Formatter) -> fmt::Result {
@@ -96,7 +149,6 @@ fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
 impl fmt::Debug for Datum {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            Datum::Sym(ref s) => write!(f, "{}", s),
             Datum::Bool(true) => write!(f, "#t"),
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
@@ -130,8 +182,8 @@ impl fmt::Debug for Datum {
             Datum::Undefined => write!(f, "#<undefined>"),
             Datum::Cons(ref ptr) => {
                 let pair = ptr.borrow();
-                if let Datum::Sym(ref s) = pair.0 {
-                    if *s == Cow::Borrowed("quote") {
+                if let Datum::Ptr(ref p) = pair.0 {
+                    if let Some("quote") = p.get_sym() {
                         if let Datum::Cons(ref tail) = pair.1 {
                             let tail_ptr = tail.borrow();
                             if let Datum::Nil = tail_ptr.1 {
@@ -144,7 +196,7 @@ impl fmt::Debug for Datum {
                 write_cons(&pair.1, f)
             },
             Datum::Ptr(ref ptr) => 
-                write!(f, "{:?}", *ptr)
+                write!(f, "{}", *ptr)
         }
     }
 }

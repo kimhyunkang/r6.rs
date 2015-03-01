@@ -334,7 +334,7 @@ impl <R: Read + Sized> Parser<R> {
     pub fn parse_datum(&mut self) -> Result<Datum, ParserError> {
         let tok = try!(self.consume_token());
         match tok.token {
-            Token::Identifier(ident) => Ok(Datum::Sym(ident)),
+            Token::Identifier(ident) => Ok(Datum::Ptr(Rc::new(box ident))),
             Token::OpenParen => self.parse_list(),
             Token::OpenVectorParen => self.parse_vector().map(|v|
                 Datum::Vector(Rc::new(RefCell::new(v)))
@@ -370,7 +370,7 @@ impl <R: Read + Sized> Parser<R> {
                 })
             },
             Token::Quote => self.parse_datum().map(|v|
-                cons(Datum::Sym(Cow::Borrowed("quote")), cons(v, Datum::Nil))
+                cons(Datum::Ptr(Rc::new(box Cow::Borrowed("quote"))), cons(v, Datum::Nil))
             ),
             _ => Err(unexpected_token(&tok, "Datum or OpenParen".to_string()))
         }

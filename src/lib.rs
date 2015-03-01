@@ -31,7 +31,7 @@ macro_rules! list{
 
 macro_rules! sym{
     ($e:expr) => (
-        Datum::Sym(Cow::Borrowed($e))
+        Datum::Ptr(Rc::new(box Cow::Borrowed($e)))
     )
 }
 

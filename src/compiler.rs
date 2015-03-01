@@ -158,35 +158,37 @@ impl<'g> Compiler<'g> {
             _ => return Err(CompileError { kind: CompileErrorKind::NullEval })
         };
 
-        if let Datum::Sym(ref s) = callee {
-            match self.compile_ref(env, ctx, s) {
-                Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
-                Err(e) => match e.kind {
-                    CompileErrorKind::SyntaxReference(syn) => {
-                        return match syn {
-                            Syntax::Lambda =>
-                                self.compile_lambda(env, ctx, &c_args),
-                            Syntax::If =>
-                                self.compile_if(env, ctx, &c_args),
-                            Syntax::Let =>
-                                self.compile_let(env, ctx, &c_args),
-                            Syntax::LetStar =>
-                                self.compile_let_star(env, ctx, &c_args),
-                            Syntax::LetRec | Syntax::LetRecStar =>
-                                self.compile_letrec(env, ctx, &c_args),
-                            Syntax::Define =>
-                                return Err(CompileError {
-                                    kind: CompileErrorKind::DefineContext
-                                }),
-                            Syntax::Set =>
-                                self.compile_set(env, ctx, &c_args),
-                            Syntax::Quote =>
-                                self.compile_quote(ctx, &c_args),
-                            Syntax::And =>
-                                self.compile_and(env, ctx, &c_args)
-                        };
-                    },
-                    _ => return Err(e)
+        if let Datum::Ptr(ref p) = callee {
+            if let Some(s) = p.get_sym() {
+                match self.compile_ref(env, ctx, s) {
+                    Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
+                    Err(e) => match e.kind {
+                        CompileErrorKind::SyntaxReference(syn) => {
+                            return match syn {
+                                Syntax::Lambda =>
+                                    self.compile_lambda(env, ctx, &c_args),
+                                Syntax::If =>
+                                    self.compile_if(env, ctx, &c_args),
+                                Syntax::Let =>
+                                    self.compile_let(env, ctx, &c_args),
+                                Syntax::LetStar =>
+                                    self.compile_let_star(env, ctx, &c_args),
+                                Syntax::LetRec | Syntax::LetRecStar =>
+                                    self.compile_letrec(env, ctx, &c_args),
+                                Syntax::Define =>
+                                    return Err(CompileError {
+                                        kind: CompileErrorKind::DefineContext
+                                    }),
+                                Syntax::Set =>
+                                    self.compile_set(env, ctx, &c_args),
+                                Syntax::Quote =>
+                                    self.compile_quote(ctx, &c_args),
+                                Syntax::And =>
+                                    self.compile_and(env, ctx, &c_args)
+                            };
+                        },
+                        _ => return Err(e)
+                    }
                 }
             }
         } else {
@@ -220,31 +222,49 @@ impl<'g> Compiler<'g> {
             return Ok(None);
         }
 
-        if let Datum::Sym(ref sym) = list[0] {
-            if let Err(e) = self.find_var(env, sym) {
-                if let CompileErrorKind::SyntaxReference(Syntax::Define) = e.kind {
-                    match &list[1..] {
-                        [Datum::Sym(ref v)] =>
-                            return Ok(Some((v.clone(), Def::Void))),
-                        [Datum::Sym(ref v), ref e] =>
-                            return Ok(Some((v.clone(), Def::Expr(e.clone())))),
-                        [Datum::Cons(ref form), ..] => {
-                            let pair = form.borrow();
-                            if let Datum::Sym(ref v) = pair.0 {
-                                return Ok(Some((
-                                        v.clone(),
-                                        Def::Proc(pair.1.clone(), list[2..].to_vec())
-                                )));
-                            } else {
-                                return Err(CompileError {
-                                    kind: CompileErrorKind::BadSyntax
-                                })
-                            }
-                        },
-                        _ =>
+        if let Datum::Ptr(ref p) = list[0] {
+            if let Some(sym) = p.get_sym() {
+                if let Err(e) = self.find_var(env, sym) {
+                    if let CompileErrorKind::SyntaxReference(Syntax::Define) = e.kind {
+                        if list.len() == 1 {
                             return Err(CompileError {
                                 kind: CompileErrorKind::BadSyntax
                             })
+                        }
+                        match list[1] {
+                            Datum::Ptr(ref vptr) =>
+                                if let Some(v) = vptr.get_sym() {
+                                    match &list[2..] {
+                                        [] =>
+                                            return Ok(Some((Cow::Owned(v.to_string()), Def::Void))),
+                                        [ref e] =>
+                                            return Ok(Some((Cow::Owned(v.to_string()), Def::Expr(e.clone())))),
+                                        _ =>
+                                            return Err(CompileError {
+                                                kind: CompileErrorKind::BadSyntax
+                                            })
+                                    }
+                                },
+                            Datum::Cons(ref form) => {
+                                let pair = form.borrow();
+                                if let Datum::Ptr(ref vptr) = pair.0 {
+                                    if let Some(v) = vptr.get_sym() {
+                                        return Ok(Some((
+                                                Cow::Owned(v.to_string()),
+                                                Def::Proc(pair.1.clone(), list[2..].to_vec())
+                                        )));
+                                    }
+                                }
+
+                                return Err(CompileError {
+                                    kind: CompileErrorKind::BadSyntax
+                                })
+                            },
+                            _ =>
+                                return Err(CompileError {
+                                    kind: CompileErrorKind::BadSyntax
+                                })
+                        }
                     }
                 }
             }
@@ -385,22 +405,22 @@ impl<'g> Compiler<'g> {
             let mut syms = Vec::new();
             let mut exprs = Vec::new();
             for b in binding_form.iter() {
-                match b {
-                    Ok(datum) => {
-                        let binding:Vec<RDatum> = match datum.iter().collect() {
-                            Ok(v) => v,
-                            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                        };
-                        match binding.as_slice() {
-                            [Datum::Sym(ref sym), ref expr] => {
-                                syms.push(sym.clone());
-                                exprs.push(expr.clone());
-                            },
-                            _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                        };
-                    },
-                    Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                if let Ok(datum) = b {
+                    let binding:Vec<RDatum> = match datum.iter().collect() {
+                        Ok(v) => v,
+                        Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                    };
+
+                    if let [Datum::Ptr(ref p), ref expr] = binding.as_slice() {
+                        if let Some(ref sym) = p.get_sym() {
+                            syms.push(Cow::Owned(sym.to_string()));
+                            exprs.push(expr.clone());
+                            continue;
+                        }
+                    }
                 }
+
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
             Ok((syms, exprs, body.clone()))
         } else {
@@ -509,23 +529,29 @@ impl<'g> Compiler<'g> {
             loop {
                 let (val, next) = match iter {
                     Datum::Cons(ref ptr) => ptr.borrow().clone(),
-                    Datum::Sym(ref s) => {
-                        nargs.push(s.clone());
-                        var_arg = true;
-                        break;
-                    },
+                    Datum::Ptr(ref p) =>
+                        if let Some(s) = p.get_sym() {
+                            nargs.push(Cow::Owned(s.to_string()));
+                            var_arg = true;
+                            break;
+                        } else {
+                            return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+                        },
                     Datum::Nil => {
                         break;
                     }
                     _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 };
-                match val {
-                    Datum::Sym(ref s) => {
-                        nargs.push(s.clone())
-                    },
-                    _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+
+                if let Datum::Ptr(ref p) = val {
+                    if let Some(s) = p.get_sym() {
+                        nargs.push(Cow::Owned(s.to_string()));
+                        iter = next;
+                        continue;
+                    }
                 }
-                iter = next;
+
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
             (nargs, var_arg)
@@ -550,7 +576,7 @@ impl<'g> Compiler<'g> {
         return Ok(ctx);
     }
 
-    fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &Cow<'static, str>)
+    fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &str)
             -> Result<MemRef, CompileError>
     {
         let ptr = self.find_var(env, sym);
@@ -565,17 +591,17 @@ impl<'g> Compiler<'g> {
         return ptr;
     }
 
-    fn find_var(&self, env: &LexicalContext, sym: &Cow<'static, str>)
+    fn find_var(&self, env: &LexicalContext, sym: &str)
             -> Result<MemRef, CompileError>
     {
-        if let Some(i) = (0..env.args.len()).find(|&i| env.args[i] == *sym) {
+        if let Some(i) = (0..env.args.len()).find(|&i| *env.args[i] == *sym) {
             return Ok(MemRef::Arg(i));
         }
 
         // (0, static_scope[-1]), (1, static_scope[-2]), (2, static_scope[-3]), ...
         for (i, up_args) in env.static_scope.iter().rev().enumerate() {
             for (j, arg) in up_args.iter().enumerate() {
-                if *arg == *sym {
+                if **arg == *sym {
                     return Ok(MemRef::UpValue(i, j));
                 }
             }
@@ -607,17 +633,18 @@ impl<'g> Compiler<'g> {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
-        match assignment.as_slice() {
-            [Datum::Sym(ref sym), ref expr] => {
+
+        if let [Datum::Ptr(ref p), ref expr] = assignment.as_slice() {
+            if let Some(sym) = p.get_sym() {
                 try!(self.compile_expr(env, ctx, expr));
                 let ptr = try!(self.compile_ref(env, ctx, sym));
                 ctx.code.push(Inst::PopArg(ptr));
                 ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Undefined)));
-                Ok(())
-            },
-            _ =>
-                return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                return Ok(())
+            }
         }
+
+        Err(CompileError { kind: CompileErrorKind::BadSyntax })
     }
 
     fn compile_quote(&self, ctx: &mut CodeGenContext, items: &RDatum)
@@ -677,10 +704,15 @@ impl<'g> Compiler<'g> {
             &Datum::Cons(_) =>
                 self.compile_app(env, ctx, datum),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
-            &Datum::Sym(ref sym) => {
-                let ptr = try!(self.compile_ref(env, ctx, sym));
-                ctx.code.push(Inst::PushArg(ptr));
-                return Ok(());
+            &Datum::Ptr(ref p) => {
+                if let Some(sym) = p.get_sym() {
+                    let ptr = try!(self.compile_ref(env, ctx, sym));
+                    ctx.code.push(Inst::PushArg(ptr));
+                } else {
+                    ctx.code.push(Inst::PushArg(MemRef::Const(datum.clone())));
+                }
+
+                Ok(())
             },
             _ => {
                 ctx.code.push(Inst::PushArg(MemRef::Const(datum.clone())));

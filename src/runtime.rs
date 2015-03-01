@@ -7,7 +7,7 @@ use std::ops::DerefMut;
 use number::Number;
 use real::Real;
 use error::{RuntimeErrorKind, RuntimeError};
-use datum::{Datum, Object};
+use datum::{Datum, DatumType, Object};
 use primitive::PrimFunc;
 
 use log::LogLevel;
@@ -21,11 +21,13 @@ pub struct Closure {
     static_link: Option<StaticLink>
 }
 
-impl Object for Closure {
-    fn get_primfunc(&self) -> Option<&NativeProc> {
-        None
+impl fmt::Display for Closure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "#<procedure: [{:?}] {:?}>", self.static_link, self.code)
     }
+}
 
+impl Object for Closure {
     fn get_closure(&self) -> Option<&Closure> {
         Some(self)
     }
@@ -36,6 +38,10 @@ impl Object for Closure {
         } else {
             false
         }
+    }
+
+    fn get_type(&self) -> DatumType {
+        DatumType::Callable
     }
 }
 
@@ -59,7 +65,7 @@ impl NativeProc {
     }
 }
 
-impl fmt::Debug for NativeProc {
+impl fmt::Display for NativeProc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "#<primitive: {}>", self.name)
     }
@@ -76,10 +82,6 @@ impl Object for NativeProc {
         Some(self)
     }
 
-    fn get_closure(&self) -> Option<&Closure> {
-        None
-    }
-
     fn obj_eq(&self, rhs: &Object) -> bool {
         if let Some(r) = rhs.get_primfunc() {
             self == r
@@ -87,40 +89,9 @@ impl Object for NativeProc {
             false
         }
     }
-}
 
-/// Type representation of RDatum
-#[derive(Debug, Copy, PartialEq)]
-pub enum DatumType {
-    Sym,
-    Bool,
-    Char,
-    String,
-    Vector,
-    Bytes,
-    Num,
-    Pair,
-    Null,
-    Callable,
-    Undefined
-}
-
-impl DatumType {
-    /// Get the type of datum
-    pub fn get_type(datum: &RDatum) -> DatumType {
-        match datum {
-            &Datum::Sym(_) => DatumType::Sym,
-            &Datum::Bool(_) => DatumType::Bool,
-            &Datum::Char(_) => DatumType::Char,
-            &Datum::String(_) => DatumType::String,
-            &Datum::Vector(_) => DatumType::Vector,
-            &Datum::Bytes(_) => DatumType::Bytes,
-            &Datum::Num(_) => DatumType::Num,
-            &Datum::Nil => DatumType::Null,
-            &Datum::Undefined => DatumType::Undefined,
-            &Datum::Cons(_) => DatumType::Pair,
-            &Datum::Ptr(_) => DatumType::Callable
-        }
+    fn get_type(&self) -> DatumType {
+        DatumType::Callable
     }
 }
 

@@ -6,9 +6,9 @@ use num::{Zero, One};
 
 use number::Number;
 use real::Real;
-use datum::Datum;
+use datum::{Datum, DatumType};
 use error::{RuntimeError, RuntimeErrorKind};
-use runtime::{DatumCast, RDatum, DatumType};
+use runtime::{DatumCast, RDatum};
 
 pub trait PrimFunc {
     fn call(&self, Vec<RDatum>) -> Result<RDatum, RuntimeError>;
