@@ -8,10 +8,10 @@ use number::Number;
 use real::Real;
 use datum::{Datum, DatumType};
 use error::{RuntimeError, RuntimeErrorKind};
-use runtime::{DatumCast, RDatum};
+use runtime::DatumCast;
 
 pub trait PrimFunc {
-    fn call(&self, Vec<RDatum>) -> Result<RDatum, RuntimeError>;
+    fn call(&self, Vec<Datum>) -> Result<Datum, RuntimeError>;
 }
 
 pub struct Fold<P> {
@@ -39,22 +39,22 @@ pub struct R1<T0, R> {
 }
 
 impl<T> PrimFunc for Fold<T> where T: DatumCast {
-    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    fn call(&self, args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
         let f = self.fold;
         p_args.map(|v| f(v).wrap())
     }
 }
 
-impl PrimFunc for Fold<RDatum> {
-    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+impl PrimFunc for Fold<Datum> {
+    fn call(&self, args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         let f = self.fold;
         Ok(f(args))
     }
 }
 
 impl<T> PrimFunc for Fold1<T> where T: DatumCast {
-    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    fn call(&self, args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
         let f = self.fold1;
         p_args.and_then(|mut vs|
@@ -72,7 +72,7 @@ impl<T> PrimFunc for Fold1<T> where T: DatumCast {
 }
 
 impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
-    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    fn call(&self, args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
         let f = self.fold1;
         p_args.and_then(|mut vs|
@@ -90,7 +90,7 @@ impl<T> PrimFunc for Fold1Err<T> where T: DatumCast {
 }
 
 impl<P: DatumCast, R: DatumCast> PrimFunc for FoldR2<P, R> {
-    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    fn call(&self, args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         if args.len() < 2 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
@@ -104,8 +104,8 @@ impl<P: DatumCast, R: DatumCast> PrimFunc for FoldR2<P, R> {
     }
 }
 
-impl<R: DatumCast> PrimFunc for R1<RDatum, R> {
-    fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+impl<R: DatumCast> PrimFunc for R1<Datum, R> {
+    fn call(&self, mut args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
@@ -119,7 +119,7 @@ impl<R: DatumCast> PrimFunc for R1<RDatum, R> {
 }
 
 impl<T0: DatumCast, R: DatumCast> PrimFunc for R1<T0, R> {
-    fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    fn call(&self, mut args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
@@ -132,8 +132,8 @@ impl<T0: DatumCast, R: DatumCast> PrimFunc for R1<T0, R> {
     }
 }
 
-impl<T0: DatumCast> PrimFunc for F1<T0, RDatum> {
-    fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+impl<T0: DatumCast> PrimFunc for F1<T0, Datum> {
+    fn call(&self, mut args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
@@ -145,7 +145,7 @@ impl<T0: DatumCast> PrimFunc for F1<T0, RDatum> {
 }
 
 impl<T0: DatumCast, R: DatumCast> PrimFunc for F1<T0, R> {
-    fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    fn call(&self, mut args: Vec<Datum>) -> Result<Datum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
@@ -221,32 +221,32 @@ fn div(arg0: Number, args: Vec<Number>) -> Result<Number, RuntimeError> {
 /// `(/ n0 n1 ...)`
 pub static PRIM_DIV:Fold1Err<Number> = Fold1Err { fold1: div };
 
-fn list(args: Vec<RDatum>) -> RDatum {
+fn list(args: Vec<Datum>) -> Datum {
     debug!("list: args = {:?}", args);
     FromIterator::from_iter(args.into_iter())
 }
 
 /// `(list a0 a1 ...)`
-pub static PRIM_LIST:Fold<RDatum> = Fold { fold: list };
+pub static PRIM_LIST:Fold<Datum> = Fold { fold: list };
 
-fn car(arg: (RDatum, RDatum)) -> RDatum {
+fn car(arg: (Datum, Datum)) -> Datum {
     arg.0
 }
 
 /// `(car x)`
-pub static PRIM_CAR: F1<(RDatum, RDatum), RDatum> = F1 { f1: car };
+pub static PRIM_CAR: F1<(Datum, Datum), Datum> = F1 { f1: car };
 
-fn cdr(arg: (RDatum, RDatum)) -> RDatum {
+fn cdr(arg: (Datum, Datum)) -> Datum {
     arg.1
 }
 
 /// `(cdr x)`
-pub static PRIM_CDR: F1<(RDatum, RDatum), RDatum> = F1 { f1: cdr };
+pub static PRIM_CDR: F1<(Datum, Datum), Datum> = F1 { f1: cdr };
 
 /// `(zero? x)`
 pub static PRIM_ZERO: R1<Number, bool> = R1 { r1: Zero::is_zero };
 
-fn is_real(arg: &RDatum) -> bool {
+fn is_real(arg: &Datum) -> bool {
     match arg {
         &Datum::Num(Number::Real(_)) => true,
         _ => false
@@ -254,9 +254,9 @@ fn is_real(arg: &RDatum) -> bool {
 }
 
 /// `(real? x)`
-pub static PRIM_REAL: R1<RDatum, bool> = R1 { r1: is_real };
+pub static PRIM_REAL: R1<Datum, bool> = R1 { r1: is_real };
 
-fn is_rational(arg: &RDatum) -> bool {
+fn is_rational(arg: &Datum) -> bool {
     match arg {
         &Datum::Num(Number::Real(Real::Flonum(f))) => f.is_finite(),
         &Datum::Num(Number::Real(_)) => true,
@@ -265,9 +265,9 @@ fn is_rational(arg: &RDatum) -> bool {
 }
 
 /// `(rational? x)`
-pub static PRIM_RATIONAL: R1<RDatum, bool> = R1 { r1: is_rational };
+pub static PRIM_RATIONAL: R1<Datum, bool> = R1 { r1: is_rational };
 
-fn is_integer(arg: &RDatum) -> bool {
+fn is_integer(arg: &Datum) -> bool {
     match arg {
         &Datum::Num(Number::Real(ref r)) => r.is_integer(),
         _ => false
@@ -275,7 +275,7 @@ fn is_integer(arg: &RDatum) -> bool {
 }
 
 /// `(integer? x)`
-pub static PRIM_INTEGER: R1<RDatum, bool> = R1 { r1: is_integer };
+pub static PRIM_INTEGER: R1<Datum, bool> = R1 { r1: is_integer };
 
 macro_rules! impl_num_comp {
     ($type_name:ident, $static_name:ident, $func_name:ident, $op:ident) => (
@@ -305,11 +305,11 @@ impl_num_comp!(Real, PRIM_GE, real_ge, ge);
 
 macro_rules! impl_typecheck {
     ($static_name:ident, $func_name:ident, $type_name:ident) => (
-        fn $func_name(arg: &RDatum) -> bool {
+        fn $func_name(arg: &Datum) -> bool {
             DatumType::get_type(arg) == DatumType::$type_name
         }
 
-        pub static $static_name: R1<RDatum, bool> = R1 { r1: $func_name };
+        pub static $static_name: R1<Datum, bool> = R1 { r1: $func_name };
     )
 }
 

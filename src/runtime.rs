@@ -95,19 +95,16 @@ impl Object for NativeProc {
     }
 }
 
-/// RDatum contains RuntimeData in addition to normal Datum
-pub type RDatum = Datum;
-
 /// Types with implementing DatumCast trait can cast from/to Datum
 pub trait DatumCast {
     /// Casts Datum into Self, possibly raising error
-    fn unwrap(datum: RDatum) -> Result<Self, RuntimeError>;
+    fn unwrap(datum: Datum) -> Result<Self, RuntimeError>;
     /// Casts Self into Datum
-    fn wrap(self) -> RDatum;
+    fn wrap(self) -> Datum;
 }
 
 impl DatumCast for Number {
-    fn unwrap(datum: RDatum) -> Result<Number, RuntimeError> {
+    fn unwrap(datum: Datum) -> Result<Number, RuntimeError> {
         match datum {
             Datum::Num(n) => Ok(n),
             _ => Err(RuntimeError {
@@ -117,13 +114,13 @@ impl DatumCast for Number {
         }
     }
 
-    fn wrap(self) -> RDatum{
+    fn wrap(self) -> Datum{
         Datum::Num(self)
     }
 }
 
 impl DatumCast for Real {
-    fn unwrap(datum: RDatum) -> Result<Real, RuntimeError> {
+    fn unwrap(datum: Datum) -> Result<Real, RuntimeError> {
         match datum {
             Datum::Num(Number::Real(n)) => Ok(n),
             _ => Err(RuntimeError {
@@ -133,13 +130,13 @@ impl DatumCast for Real {
         }
     }
 
-    fn wrap(self) -> RDatum {
+    fn wrap(self) -> Datum {
         Datum::Num(Number::Real(self))
     }
 }
 
 impl DatumCast for bool {
-    fn unwrap(datum: RDatum) -> Result<bool, RuntimeError> {
+    fn unwrap(datum: Datum) -> Result<bool, RuntimeError> {
         match datum {
             Datum::Bool(b) => Ok(b),
             _ => Err(RuntimeError {
@@ -149,13 +146,13 @@ impl DatumCast for bool {
         }
     }
 
-    fn wrap(self) -> RDatum{
+    fn wrap(self) -> Datum{
         Datum::Bool(self)
     }
 }
 
-impl DatumCast for (RDatum, RDatum) {
-    fn unwrap(datum: RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
+impl DatumCast for (Datum, Datum) {
+    fn unwrap(datum: Datum) -> Result<(Datum, Datum), RuntimeError> {
         if let Datum::Ptr(ref ptr) = datum {
             if let Some(pair) = ptr.get_pair() {
                 return Ok(pair.clone());
@@ -168,7 +165,7 @@ impl DatumCast for (RDatum, RDatum) {
         })
     }
 
-    fn wrap(self) -> RDatum {
+    fn wrap(self) -> Datum {
         Datum::Ptr(Rc::new(Box::new(self)))
     }
 }
@@ -179,7 +176,7 @@ pub enum MemRef {
     RetVal,
     Arg(usize),
     UpValue(usize, usize),
-    Const(RDatum),
+    Const(Datum),
     Closure(Rc<Vec<Inst>>, usize),
 }
 
@@ -216,7 +213,7 @@ pub enum Inst {
 /// memory. HeapClosure represents the env in heap memory
 #[derive(Debug, PartialEq)]
 pub struct HeapClosure {
-    args: Vec<RDatum>,
+    args: Vec<Datum>,
     static_link: Option<StaticLink>
 }
 
@@ -261,8 +258,8 @@ pub struct StackFrame {
 
 /// The virtual machine running the bytecode
 pub struct Runtime {
-    ret_val: RDatum,
-    arg_stack: Vec<RDatum>,
+    ret_val: Datum,
+    arg_stack: Vec<Datum>,
     call_stack: Vec<StackFrame>,
     frame: StackFrame
 }
@@ -288,7 +285,7 @@ impl Runtime {
         self.frame.closure.code[self.frame.pc].clone()
     }
 
-    pub fn get_stack_val(&self, idx: usize) -> RDatum {
+    pub fn get_stack_val(&self, idx: usize) -> Datum {
         self.arg_stack[self.frame.stack_bottom + idx].clone()
     }
 
@@ -306,7 +303,7 @@ impl Runtime {
         }
     }
 
-    fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> RDatum {
+    fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> Datum {
         let mut link = self.frame.closure.static_link.clone();
         for _ in range(0, link_cnt) {
             link = self.up_scope(link);
@@ -328,7 +325,7 @@ impl Runtime {
         }
     }
 
-    fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: RDatum) {
+    fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: Datum) {
         let mut link = self.frame.closure.static_link.clone();
         for _ in range(0, link_cnt) {
             link = self.up_scope(link);
@@ -352,7 +349,7 @@ impl Runtime {
         }
     }
 
-    fn fetch_mem(&self, ptr: MemRef) -> RDatum {
+    fn fetch_mem(&self, ptr: MemRef) -> Datum {
         match ptr {
             MemRef::RetVal => self.ret_val.clone(),
             MemRef::Arg(idx) => self.get_stack_val(idx),
@@ -365,7 +362,7 @@ impl Runtime {
         }
     }
 
-    fn write_mem(&mut self, ptr: MemRef, val: RDatum) {
+    fn write_mem(&mut self, ptr: MemRef, val: Datum) {
         match ptr {
             MemRef::RetVal => {
                 self.ret_val = val;
@@ -411,11 +408,11 @@ impl Runtime {
         mem::swap(&mut self.frame, self.call_stack.last_mut().unwrap());
     }
 
-    pub fn push_stack(&mut self, val: RDatum) {
+    pub fn push_stack(&mut self, val: Datum) {
         self.arg_stack.push(val)
     }
 
-    pub fn pop_stack(&mut self) -> Option<RDatum> {
+    pub fn pop_stack(&mut self) -> Option<Datum> {
         self.arg_stack.pop()
     }
 
@@ -541,7 +538,7 @@ impl Runtime {
             },
             Inst::RollArgs(n) => {
                 let vararg_start = self.frame.stack_bottom + n;
-                let list: RDatum = self.arg_stack[vararg_start ..].iter().map(Clone::clone).collect();
+                let list: Datum = self.arg_stack[vararg_start ..].iter().map(Clone::clone).collect();
                 self.arg_stack.truncate(vararg_start);
                 self.push_stack(list);
                 self.frame.arg_size = n+1;
@@ -566,7 +563,7 @@ impl Runtime {
         }
     }
 
-    pub fn run(&mut self) -> RDatum {
+    pub fn run(&mut self) -> Datum {
         while self.step() {
             ()
         }

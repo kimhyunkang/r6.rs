@@ -6,7 +6,7 @@ use std::num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
-use runtime::{Inst, MemRef, RDatum, NativeProc};
+use runtime::{Inst, MemRef, NativeProc};
 use primitive::PrimFunc;
 
 /// Syntax variables
@@ -122,8 +122,8 @@ impl LexicalContext {
 }
 
 enum Def {
-    Proc(RDatum, Vec<RDatum>),
-    Expr(RDatum),
+    Proc(Datum, Vec<Datum>),
+    Expr(Datum),
     Void
 }
 
@@ -136,7 +136,7 @@ impl<'g> Compiler<'g> {
     }
 
     /// Compiles the datum into a bytecode evaluates it
-    pub fn compile(&self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
+    pub fn compile(&self, datum: &Datum) -> Result<Vec<Inst>, CompileError> {
         debug!("compile {:?}", datum);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
@@ -151,7 +151,7 @@ impl<'g> Compiler<'g> {
         return Ok(ctx.code);
     }
 
-    fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &(RDatum, RDatum))
+    fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &(Datum, Datum))
             -> Result<(), CompileError>
     {
         debug!("compile_app {:?}", datum);
@@ -211,10 +211,10 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn parse_define(&self, env: &LexicalContext, def: &RDatum)
+    fn parse_define(&self, env: &LexicalContext, def: &Datum)
             -> Result<Option<(Cow<'static, str>, Def)>, CompileError>
     {
-        let list: Vec<RDatum> = match def.iter().collect() {
+        let list: Vec<Datum> = match def.iter().collect() {
             Ok(l) => l,
             _ => return Ok(None)
         };
@@ -264,11 +264,11 @@ impl<'g> Compiler<'g> {
         Ok(None)
     }
 
-    fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &RDatum)
+    fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_body {:?}", body);
-        let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+        let res: Result<Vec<Datum>, ()> = body.iter().collect();
         match res {
             Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_slice()),
             Err(_) => Err(CompileError {
@@ -277,7 +277,7 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_exprs(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[RDatum])
+    fn compile_exprs(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[Datum])
             -> Result<(), CompileError>
     {
         debug!("compile_exprs {:?}", body);
@@ -345,11 +345,11 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_if(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_if(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_if {:?}", tail);
-        let exprs:Vec<RDatum> = match tail.iter().collect() {
+        let exprs:Vec<Datum> = match tail.iter().collect() {
             Ok(e) => e,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -391,8 +391,8 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn get_form(&self, form: &RDatum)
-            -> Result<(Vec<Cow<'static, str>>, Vec<RDatum>, RDatum), CompileError>
+    fn get_form(&self, form: &Datum)
+            -> Result<(Vec<Cow<'static, str>>, Vec<Datum>, Datum), CompileError>
     {
         debug!("get_form {:?}", form);
         if let &Datum::Ptr(ref ptr) = form {
@@ -401,7 +401,7 @@ impl<'g> Compiler<'g> {
                 let mut exprs = Vec::new();
                 for b in binding_form.iter() {
                     if let Ok(datum) = b {
-                        let binding:Vec<RDatum> = match datum.iter().collect() {
+                        let binding:Vec<Datum> = match datum.iter().collect() {
                             Ok(v) => v,
                             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                         };
@@ -425,7 +425,7 @@ impl<'g> Compiler<'g> {
         Err(CompileError { kind: CompileErrorKind::BadSyntax })
     }
 
-    fn compile_let(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_let(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_let {:?}", tail);
@@ -444,7 +444,7 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_let_star(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_let_star(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_let_star {:?}", tail);
@@ -467,7 +467,7 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_letrec(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_letrec(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_letrec {:?}", tail);
@@ -493,13 +493,13 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_lambda(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_lambda(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_lambda {:?}", tail);
         if let &Datum::Ptr(ref ptr) = tail {
             if let Some(&(ref cur_args, ref body)) = ptr.get_pair() {
-                let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+                let res: Result<Vec<Datum>, ()> = body.iter().collect();
                 if let Ok(exprs) = res {
                     let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_slice()));
 
@@ -516,7 +516,7 @@ impl<'g> Compiler<'g> {
         Err(CompileError { kind: CompileErrorKind::BadSyntax })
     }
 
-    fn compile_proc(&self, env: &LexicalContext, formals: &RDatum, body: &[RDatum])
+    fn compile_proc(&self, env: &LexicalContext, formals: &Datum, body: &[Datum])
             -> Result<CodeGenContext, CompileError>
     {
         debug!("compile_proc {:?}", body);
@@ -628,11 +628,11 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_set(&self, env: &LexicalContext, ctx: &mut CodeGenContext, formal: &RDatum)
+    fn compile_set(&self, env: &LexicalContext, ctx: &mut CodeGenContext, formal: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_set {:?}", formal);
-        let assignment:Vec<RDatum> = match formal.iter().collect() {
+        let assignment:Vec<Datum> = match formal.iter().collect() {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -650,7 +650,7 @@ impl<'g> Compiler<'g> {
         Err(CompileError { kind: CompileErrorKind::BadSyntax })
     }
 
-    fn compile_quote(&self, ctx: &mut CodeGenContext, items: &RDatum)
+    fn compile_quote(&self, ctx: &mut CodeGenContext, items: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_quote {:?}", items);
@@ -669,12 +669,12 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_and(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+    fn compile_and(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_and {:?}", preds);
         let mut placeholders = Vec::new();
-        let exprs: Vec<RDatum> = match preds.iter().collect() {
+        let exprs: Vec<Datum> = match preds.iter().collect() {
             Ok(v) => v,
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -702,7 +702,7 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
-    fn compile_expr(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_expr(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &Datum)
             -> Result<(), CompileError>
     {
         debug!("compile_expr {:?}", datum);
