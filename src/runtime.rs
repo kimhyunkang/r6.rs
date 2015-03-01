@@ -156,17 +156,20 @@ impl DatumCast for bool {
 
 impl DatumCast for (RDatum, RDatum) {
     fn unwrap(datum: RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
-        match datum {
-            Datum::Cons(c) => Ok(c.borrow().clone()),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Pair, but received {:?}", DatumType::get_type(&datum))
-            })
+        if let Datum::Ptr(ref ptr) = datum {
+            if let Some(pair) = ptr.get_pair() {
+                return Ok(pair.clone());
+            }
         }
+
+        Err(RuntimeError {
+            kind: RuntimeErrorKind::InvalidType,
+            desc: format!("expected Pair, but received {:?}", DatumType::get_type(&datum))
+        })
     }
 
     fn wrap(self) -> RDatum {
-        Datum::Cons(Rc::new(RefCell::new(self)))
+        Datum::Ptr(Rc::new(Box::new(self)))
     }
 }
 

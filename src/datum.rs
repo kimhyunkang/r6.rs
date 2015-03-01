@@ -30,8 +30,6 @@ pub enum Datum {
     Nil,
     /// `undefined`
     Undefined,
-    /// Pair
-    Cons(Rc<RefCell<(Datum, Datum)>>),
     /// Pointer values
     Ptr(Rc<Box<Object>>)
 }
@@ -64,7 +62,6 @@ impl DatumType {
             &Datum::Num(_) => DatumType::Num,
             &Datum::Nil => DatumType::Null,
             &Datum::Undefined => DatumType::Undefined,
-            &Datum::Cons(_) => DatumType::Pair,
             &Datum::Ptr(ref p) => p.get_type()
         }
     }
@@ -82,7 +79,6 @@ impl PartialEq for Datum {
             (&Datum::Num(ref l), &Datum::Num(ref r)) => l == r,
             (&Datum::Nil, &Datum::Nil) => true,
             (&Datum::Undefined, &Datum::Undefined) => true,
-            (&Datum::Cons(ref l), &Datum::Cons(ref r)) => l == r,
             (&Datum::Ptr(ref l), &Datum::Ptr(ref r)) => l.obj_eq(r.deref().deref()),
             _ => false
         }
@@ -93,6 +89,7 @@ pub trait Object: fmt::Display {
     fn get_primfunc(&self) -> Option<&NativeProc> { None }
     fn get_closure(&self) -> Option<&Closure> { None }
     fn get_sym(&self) -> Option<&str> { None }
+    fn get_pair(&self) -> Option<&(Datum, Datum)> { None }
     fn obj_eq(&self, &Object) -> bool;
     fn get_type(&self) -> DatumType;
 }
@@ -116,15 +113,54 @@ impl Object for Cow<'static, str> {
     }
 }
 
+impl Object for (Datum, Datum) {
+    fn get_pair(&self) -> Option<&(Datum, Datum)> {
+        Some(self)
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(s) = rhs.get_pair() {
+            self == s
+        } else {
+            false
+        }
+    }
+
+    fn get_type(&self) -> DatumType {
+        DatumType::Pair
+    }
+}
+
+impl fmt::Display for (Datum, Datum) {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if let Datum::Ptr(ref p) = self.0 {
+            if let Some("quote") = p.get_sym() {
+                if let Datum::Ptr(ref tail) = self.1 {
+                    if let Some(tail_pair) = tail.get_pair() {
+                        if let Datum::Nil = tail_pair.1 {
+                            return write!(f, "'{:?}", tail_pair.0);
+                        }
+                    }
+                }
+            }
+        }
+        try!(write!(f, "({:?}", self.0));
+        write_cons(&self.1, f)
+    }
+}
+
 fn write_cons(tail: &Datum, f: &mut fmt::Formatter) -> fmt::Result {
     match tail {
         &Datum::Nil => {
             write!(f, ")")
         },
-        &Datum::Cons(ref ptr) => {
-            let pair = ptr.borrow();
-            try!(write!(f, " {:?}", pair.0));
-            write_cons(&pair.1, f)
+        &Datum::Ptr(ref ptr) => {
+            if let Some(pair) = ptr.get_pair() {
+                try!(write!(f, " {:?}", pair.0));
+                write_cons(&pair.1, f)
+            } else {
+                write!(f, " . {})", *ptr)
+            }
         },
         _ => {
             write!(f, " . {:?})", tail)
@@ -180,21 +216,6 @@ impl fmt::Debug for Datum {
             Datum::Num(ref n) => write!(f, "{}", n),
             Datum::Nil => write!(f, "()"),
             Datum::Undefined => write!(f, "#<undefined>"),
-            Datum::Cons(ref ptr) => {
-                let pair = ptr.borrow();
-                if let Datum::Ptr(ref p) = pair.0 {
-                    if let Some("quote") = p.get_sym() {
-                        if let Datum::Cons(ref tail) = pair.1 {
-                            let tail_ptr = tail.borrow();
-                            if let Datum::Nil = tail_ptr.1 {
-                                return write!(f, "'{:?}", tail_ptr.0);
-                            }
-                        }
-                    }
-                }
-                try!(write!(f, "({:?}", pair.0));
-                write_cons(&pair.1, f)
-            },
             Datum::Ptr(ref ptr) => 
                 write!(f, "{}", *ptr)
         }
@@ -220,10 +241,12 @@ impl Iterator for DatumIter {
     fn next(&mut self) -> Option<Result<Datum, ()>> {
         let (val, next) = match self.ptr {
             Datum::Nil => return None,
-            Datum::Cons(ref ptr) => {
-                let pair = ptr.borrow();
-                (pair.0.clone(), pair.1.clone())
-            }
+            Datum::Ptr(ref ptr) =>
+                if let Some(pair) = ptr.get_pair() {
+                    pair.clone()
+                } else {
+                    return Some(Err(()));
+                },
             _ => return Some(Err(()))
         };
 
@@ -246,7 +269,7 @@ impl FromIterator<Datum> for Datum {
 
 /// `cons` the values into a pair
 pub fn cons(head: Datum, tail: Datum) -> Datum {
-    Datum::Cons(Rc::new(RefCell::new((head, tail))))
+    Datum::Ptr(Rc::new(Box::new((head, tail))))
 }
 
 #[cfg(test)]

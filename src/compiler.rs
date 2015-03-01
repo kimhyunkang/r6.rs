@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::borrow::Cow;
 use std::fmt;
 use std::collections::HashMap;
@@ -138,6 +137,7 @@ impl<'g> Compiler<'g> {
 
     /// Compiles the datum into a bytecode evaluates it
     pub fn compile(&self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
+        debug!("compile {:?}", datum);
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
@@ -154,6 +154,7 @@ impl<'g> Compiler<'g> {
     fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &(RDatum, RDatum))
             -> Result<(), CompileError>
     {
+        debug!("compile_app {:?}", datum);
         let (ref callee, ref c_args) = *datum;
 
         if let &Datum::Ptr(ref p) = callee {
@@ -174,7 +175,7 @@ impl<'g> Compiler<'g> {
                                 Syntax::LetRec | Syntax::LetRecStar =>
                                     self.compile_letrec(env, ctx, &c_args),
                                 Syntax::Define =>
-                                    return Err(CompileError {
+                                    Err(CompileError {
                                         kind: CompileErrorKind::DefineContext
                                     }),
                                 Syntax::Set =>
@@ -188,6 +189,8 @@ impl<'g> Compiler<'g> {
                         _ => return Err(e)
                     }
                 }
+            } else {
+                try!(self.compile_expr(env, ctx, &callee));
             }
         } else {
             try!(self.compile_expr(env, ctx, &callee));
@@ -229,22 +232,8 @@ impl<'g> Compiler<'g> {
                                 kind: CompileErrorKind::BadSyntax
                             })
                         }
-                        match list[1] {
-                            Datum::Ptr(ref vptr) =>
-                                if let Some(v) = vptr.get_sym() {
-                                    match &list[2..] {
-                                        [] =>
-                                            return Ok(Some((Cow::Owned(v.to_string()), Def::Void))),
-                                        [ref e] =>
-                                            return Ok(Some((Cow::Owned(v.to_string()), Def::Expr(e.clone())))),
-                                        _ =>
-                                            return Err(CompileError {
-                                                kind: CompileErrorKind::BadSyntax
-                                            })
-                                    }
-                                },
-                            Datum::Cons(ref form) => {
-                                let pair = form.borrow();
+                        if let Datum::Ptr(ref vptr) = list[1] {
+                            if let Some(pair) = vptr.get_pair() {
                                 if let Datum::Ptr(ref vptr) = pair.0 {
                                     if let Some(v) = vptr.get_sym() {
                                         return Ok(Some((
@@ -253,16 +242,20 @@ impl<'g> Compiler<'g> {
                                         )));
                                     }
                                 }
-
-                                return Err(CompileError {
-                                    kind: CompileErrorKind::BadSyntax
-                                })
-                            },
-                            _ =>
-                                return Err(CompileError {
-                                    kind: CompileErrorKind::BadSyntax
-                                })
+                            } else if let Some(v) = vptr.get_sym() {
+                                match &list[2..] {
+                                    [] =>
+                                        return Ok(Some((Cow::Owned(v.to_string()), Def::Void))),
+                                    [ref e] =>
+                                        return Ok(Some((Cow::Owned(v.to_string()), Def::Expr(e.clone())))),
+                                    _ => ()
+                                }
+                            }
                         }
+
+                        return Err(CompileError {
+                            kind: CompileErrorKind::BadSyntax
+                        })
                     }
                 }
             }
@@ -274,6 +267,7 @@ impl<'g> Compiler<'g> {
     fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_body {:?}", body);
         let res: Result<Vec<RDatum>, ()> = body.iter().collect();
         match res {
             Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_slice()),
@@ -286,6 +280,7 @@ impl<'g> Compiler<'g> {
     fn compile_exprs(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[RDatum])
             -> Result<(), CompileError>
     {
+        debug!("compile_exprs {:?}", body);
         if body.is_empty() {
             return Err(CompileError { kind: CompileErrorKind::EmptyBody });
         }
@@ -353,6 +348,7 @@ impl<'g> Compiler<'g> {
     fn compile_if(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_if {:?}", tail);
         let exprs:Vec<RDatum> = match tail.iter().collect() {
             Ok(e) => e,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
@@ -398,37 +394,41 @@ impl<'g> Compiler<'g> {
     fn get_form(&self, form: &RDatum)
             -> Result<(Vec<Cow<'static, str>>, Vec<RDatum>, RDatum), CompileError>
     {
-        if let &Datum::Cons(ref ptr) = form {
-            let (ref binding_form, ref body) = *ptr.borrow();
-            let mut syms = Vec::new();
-            let mut exprs = Vec::new();
-            for b in binding_form.iter() {
-                if let Ok(datum) = b {
-                    let binding:Vec<RDatum> = match datum.iter().collect() {
-                        Ok(v) => v,
-                        Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                    };
+        debug!("get_form {:?}", form);
+        if let &Datum::Ptr(ref ptr) = form {
+            if let Some(&(ref binding_form, ref body)) = ptr.get_pair() {
+                let mut syms = Vec::new();
+                let mut exprs = Vec::new();
+                for b in binding_form.iter() {
+                    if let Ok(datum) = b {
+                        let binding:Vec<RDatum> = match datum.iter().collect() {
+                            Ok(v) => v,
+                            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                        };
 
-                    if let [Datum::Ptr(ref p), ref expr] = binding.as_slice() {
-                        if let Some(ref sym) = p.get_sym() {
-                            syms.push(Cow::Owned(sym.to_string()));
-                            exprs.push(expr.clone());
-                            continue;
+                        if let [Datum::Ptr(ref p), ref expr] = binding.as_slice() {
+                            if let Some(ref sym) = p.get_sym() {
+                                syms.push(Cow::Owned(sym.to_string()));
+                                exprs.push(expr.clone());
+                                continue;
+                            }
                         }
                     }
+
+                    return Err(CompileError { kind: CompileErrorKind::BadSyntax });
                 }
 
-                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+                return Ok((syms, exprs, body.clone()));
             }
-            Ok((syms, exprs, body.clone()))
-        } else {
-            Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
+
+        Err(CompileError { kind: CompileErrorKind::BadSyntax })
     }
 
     fn compile_let(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_let {:?}", tail);
         let (syms, exprs, body) = try!(self.get_form(tail));
         for expr in exprs.iter() {
             try!(self.compile_expr(env, ctx, expr));
@@ -447,6 +447,7 @@ impl<'g> Compiler<'g> {
     fn compile_let_star(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_let_star {:?}", tail);
         let (syms, exprs, body) = try!(self.get_form(tail));
 
         ctx.code.push(Inst::PushFrame(0));
@@ -469,6 +470,7 @@ impl<'g> Compiler<'g> {
     fn compile_letrec(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_letrec {:?}", tail);
         let (syms, exprs, body) = try!(self.get_form(tail));
 
         ctx.code.push(Inst::PushFrame(0));
@@ -494,11 +496,11 @@ impl<'g> Compiler<'g> {
     fn compile_lambda(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
             -> Result<(), CompileError>
     {
-        if let &Datum::Cons(ref ptr) = tail {
-            let (ref cur_args, ref body) = *ptr.borrow();
-            let res: Result<Vec<RDatum>, ()> = body.iter().collect();
-            match res {
-                Ok(exprs) => {
+        debug!("compile_lambda {:?}", tail);
+        if let &Datum::Ptr(ref ptr) = tail {
+            if let Some(&(ref cur_args, ref body)) = ptr.get_pair() {
+                let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+                if let Ok(exprs) = res {
                     let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_slice()));
 
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
@@ -507,18 +509,17 @@ impl<'g> Compiler<'g> {
                     )));
 
                     return Ok(());
-                },
-                Err(()) =>
-                    Err(CompileError { kind: CompileErrorKind::DottedBody })
+                }
             }
-        } else {
-            return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
+
+        Err(CompileError { kind: CompileErrorKind::BadSyntax })
     }
 
     fn compile_proc(&self, env: &LexicalContext, formals: &RDatum, body: &[RDatum])
             -> Result<CodeGenContext, CompileError>
     {
+        debug!("compile_proc {:?}", body);
         let (new_args, var_arg) = {
             let mut nargs = Vec::new();
             let mut var_arg = false;
@@ -526,9 +527,10 @@ impl<'g> Compiler<'g> {
 
             loop {
                 let (val, next) = match iter {
-                    Datum::Cons(ref ptr) => ptr.borrow().clone(),
                     Datum::Ptr(ref p) =>
-                        if let Some(s) = p.get_sym() {
+                        if let Some(pair) = p.get_pair() {
+                            pair.clone()
+                        } else if let Some(s) = p.get_sym() {
                             nargs.push(Cow::Owned(s.to_string()));
                             var_arg = true;
                             break;
@@ -577,6 +579,7 @@ impl<'g> Compiler<'g> {
     fn compile_ref(&self, env: &LexicalContext, ctx: &mut CodeGenContext, sym: &str)
             -> Result<MemRef, CompileError>
     {
+        debug!("compile_ref {:?}", sym);
         let ptr = self.find_var(env, sym);
         match ptr {
             Ok(MemRef::UpValue(i, _)) => {
@@ -592,6 +595,7 @@ impl<'g> Compiler<'g> {
     fn find_var(&self, env: &LexicalContext, sym: &str)
             -> Result<MemRef, CompileError>
     {
+        debug!("find_var {:?}", sym);
         if let Some(i) = (0..env.args.len()).find(|&i| *env.args[i] == *sym) {
             return Ok(MemRef::Arg(i));
         }
@@ -627,6 +631,7 @@ impl<'g> Compiler<'g> {
     fn compile_set(&self, env: &LexicalContext, ctx: &mut CodeGenContext, formal: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_set {:?}", formal);
         let assignment:Vec<RDatum> = match formal.iter().collect() {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
@@ -648,6 +653,7 @@ impl<'g> Compiler<'g> {
     fn compile_quote(&self, ctx: &mut CodeGenContext, items: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_quote {:?}", items);
         let mut iter = items.iter();
         match iter.next() {
             Some(Ok(v)) => {
@@ -666,6 +672,7 @@ impl<'g> Compiler<'g> {
     fn compile_and(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_and {:?}", preds);
         let mut placeholders = Vec::new();
         let exprs: Vec<RDatum> = match preds.iter().collect() {
             Ok(v) => v,
@@ -698,12 +705,13 @@ impl<'g> Compiler<'g> {
     fn compile_expr(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
             -> Result<(), CompileError>
     {
+        debug!("compile_expr {:?}", datum);
         match datum {
-            &Datum::Cons(ref ptr) =>
-                self.compile_app(env, ctx, ptr.borrow().deref()),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Ptr(ref p) => {
-                if let Some(sym) = p.get_sym() {
+                if let Some(pair) = p.get_pair() {
+                    return self.compile_app(env, ctx, pair);
+                } else if let Some(sym) = p.get_sym() {
                     let ptr = try!(self.compile_ref(env, ctx, sym));
                     ctx.code.push(Inst::PushArg(ptr));
                 } else {
@@ -728,6 +736,8 @@ impl fmt::Debug for Syntax {
 
 #[cfg(test)]
 mod test {
+    use env_logger;
+    use std::sync::{Once, ONCE_INIT};
     use std::borrow::Cow;
     use std::rc::Rc;
     use datum::Datum;
@@ -737,8 +747,14 @@ mod test {
     use number::Number;
     use super::Compiler;
 
+    static START: Once = ONCE_INIT;
+
     #[test]
     fn test_simple_expr() {
+        START.call_once(|| {
+            env_logger::init().unwrap();
+        });
+
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
@@ -754,6 +770,10 @@ mod test {
 
     #[test]
     fn test_nested_expr() {
+        START.call_once(|| {
+            env_logger::init().unwrap();
+        });
+
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
@@ -772,6 +792,10 @@ mod test {
 
     #[test]
     fn test_lambda() {
+        START.call_once(|| {
+            env_logger::init().unwrap();
+        });
+
         let env = libbase();
         let compiler = Compiler::new(&env);
 
@@ -798,6 +822,10 @@ mod test {
 
     #[test]
     fn test_upvalue() {
+        START.call_once(|| {
+            env_logger::init().unwrap();
+        });
+
         let env = libbase();
         let compiler = Compiler::new(&env);
 

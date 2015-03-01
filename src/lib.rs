@@ -17,6 +17,7 @@
 // This line should be at the top of the extern link list,
 // because some weird compiler bug lets log imported from rustc, not crates.io log
 #[macro_use] extern crate log;
+#[cfg(test)] extern crate env_logger;
 
 extern crate phf;
 extern crate regex;
