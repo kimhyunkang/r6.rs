@@ -1,6 +1,5 @@
 use std::ops::Deref;
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::iter::{FromIterator, IntoIterator};
 use std::fmt;
 use std::borrow::Cow;
@@ -18,12 +17,6 @@ pub enum Datum {
     Bool(bool),
     /// Character
     Char(char),
-    /// String
-    String(String),
-    /// Vector
-    Vector(Rc<RefCell<Vec<Datum>>>),
-    /// Byte vector
-    Bytes(Rc<RefCell<Vec<u8>>>),
     /// Numeric value
     Num(Number),
     /// `()`
@@ -56,9 +49,6 @@ impl DatumType {
         match datum {
             &Datum::Bool(_) => DatumType::Bool,
             &Datum::Char(_) => DatumType::Char,
-            &Datum::String(_) => DatumType::String,
-            &Datum::Vector(_) => DatumType::Vector,
-            &Datum::Bytes(_) => DatumType::Bytes,
             &Datum::Num(_) => DatumType::Num,
             &Datum::Nil => DatumType::Null,
             &Datum::Undefined => DatumType::Undefined,
@@ -73,9 +63,6 @@ impl PartialEq for Datum {
         match (self, rhs) {
             (&Datum::Bool(l), &Datum::Bool(r)) => l == r,
             (&Datum::Char(l), &Datum::Char(r)) => l == r,
-            (&Datum::String(ref l), &Datum::String(ref r)) => l == r,
-            (&Datum::Vector(ref l), &Datum::Vector(ref r)) => l == r,
-            (&Datum::Bytes(ref l), &Datum::Bytes(ref r)) => l == r,
             (&Datum::Num(ref l), &Datum::Num(ref r)) => l == r,
             (&Datum::Nil, &Datum::Nil) => true,
             (&Datum::Undefined, &Datum::Undefined) => true,
@@ -89,6 +76,9 @@ pub trait Object: fmt::Display {
     fn get_primfunc(&self) -> Option<&NativeProc> { None }
     fn get_closure(&self) -> Option<&Closure> { None }
     fn get_sym(&self) -> Option<&str> { None }
+    fn get_string(&self) -> Option<&str> { None }
+    fn get_vector(&self) -> Option<&[Datum]> { None }
+    fn get_bytes(&self) -> Option<&[u8]> { None }
     fn get_pair(&self) -> Option<&(Datum, Datum)> { None }
     fn obj_eq(&self, &Object) -> bool;
     fn get_type(&self) -> DatumType;
@@ -110,6 +100,98 @@ impl Object for Cow<'static, str> {
 
     fn get_type(&self) -> DatumType {
         DatumType::Sym
+    }
+}
+
+impl Object for String {
+    fn get_string(&self) -> Option<&str> {
+        Some(self.deref())
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(s) = rhs.get_string() {
+            self.deref() == s
+        } else {
+            false
+        }
+    }
+
+    fn get_type(&self) -> DatumType {
+        DatumType::String
+    }
+}
+
+impl Object for Vec<Datum> {
+    fn get_vector(&self) -> Option<&[Datum]> {
+        Some(self.deref())
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(s) = rhs.get_vector() {
+            self.deref() == s
+        } else {
+            false
+        }
+    }
+
+    fn get_type(&self) -> DatumType {
+        DatumType::Vector
+    }
+}
+
+impl fmt::Display for Vec<Datum> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.is_empty() {
+            write!(f, "#()")
+        } else {
+            try!(write!(f, "#({:?}", self[0]));
+            for x in self[1..].iter() {
+                try!(write!(f, " {:?}", x));
+            }
+            write!(f, ")")
+        }
+    }
+}
+
+pub struct Bytes {
+    pub bytes: Vec<u8>
+}
+
+impl Bytes {
+    pub fn new(data: Vec<u8>) -> Bytes {
+        Bytes { bytes: data }
+    }
+}
+
+impl Object for Bytes {
+    fn get_bytes(&self) -> Option<&[u8]> {
+        Some(self.bytes.deref())
+    }
+
+    fn obj_eq(&self, rhs: &Object) -> bool {
+        if let Some(s) = rhs.get_bytes() {
+            self.bytes.deref() == s
+        } else {
+            false
+        }
+    }
+
+    fn get_type(&self) -> DatumType {
+        DatumType::Bytes
+    }
+}
+
+impl fmt::Display for Bytes {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.bytes.is_empty() {
+            write!(f, "#vu8()")
+        } else {
+            try!(write!(f, "#vu8({}", self.bytes[0]));
+            for x in self.bytes[1..].iter() {
+                try!(write!(f, " {}", x));
+            }
+            write!(f, ")")
+        }
     }
 }
 
@@ -188,36 +270,15 @@ impl fmt::Debug for Datum {
             Datum::Bool(true) => write!(f, "#t"),
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
-            Datum::String(ref s) => write!(f, "{:?}", s),
-            Datum::Vector(ref ptr) => {
-                let vec = ptr.borrow();
-                if vec.is_empty() {
-                    write!(f, "#()")
-                } else {
-                    try!(write!(f, "#({:?}", vec[0]));
-                    for x in vec[1..].iter() {
-                        try!(write!(f, " {:?}", x));
-                    }
-                    write!(f, ")")
-                }
-            },
-            Datum::Bytes(ref ptr) => {
-                let vec = ptr.borrow();
-                if vec.is_empty() {
-                    write!(f, "#vu8()")
-                } else {
-                    try!(write!(f, "#vu8({}", vec[0]));
-                    for x in vec[1..].iter() {
-                        try!(write!(f, " {}", x));
-                    }
-                    write!(f, ")")
-                }
-            },
             Datum::Num(ref n) => write!(f, "{}", n),
             Datum::Nil => write!(f, "()"),
             Datum::Undefined => write!(f, "#<undefined>"),
             Datum::Ptr(ref ptr) => 
-                write!(f, "{}", *ptr)
+                if let Some(s) = ptr.get_string() {
+                    write!(f, "{:?}", s)
+                } else {
+                    write!(f, "{}", *ptr)
+                }
         }
     }
 }
@@ -274,12 +335,11 @@ pub fn cons(head: Datum, tail: Datum) -> Datum {
 
 #[cfg(test)]
 mod test {
-    use super::{Datum, cons};
+    use super::{Datum, Bytes, cons};
     use number::Number;
     use std::borrow::Cow;
     use std::num::FromPrimitive;
     use std::rc::Rc;
-    use std::cell::RefCell;
 
     fn compare_fmt(s: &str, datum: Datum) {
         assert_eq!(s.to_string(), format!("{:?}", datum))
@@ -296,14 +356,14 @@ mod test {
 
     #[test]
     fn test_vec_fmt() {
-        compare_fmt("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
-        compare_fmt("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
+        compare_fmt("#(a b)", Datum::Ptr(Rc::new(Box::new(vec![sym!("a"), sym!("b")]))));
+        compare_fmt("#()", Datum::Ptr(Rc::new(Box::new(Vec::new()))));
     }
 
     #[test]
     fn test_bytes_fmt() {
-        compare_fmt("#vu8(1 2 3)", Datum::Bytes(Rc::new(RefCell::new(vec![1, 2, 3]))));
-        compare_fmt("#vu8()", Datum::Bytes(Rc::new(RefCell::new(Vec::new()))));
+        compare_fmt("#vu8(1 2 3)", Datum::Ptr(Rc::new(box Bytes::new(vec![1, 2, 3]))));
+        compare_fmt("#vu8()", Datum::Ptr(Rc::new(box Bytes::new(Vec::new()))));
     }
 
     #[test]

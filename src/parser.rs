@@ -5,7 +5,6 @@ use std::iter::range_step;
 use std::fmt::Write;
 use std::borrow::Cow;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 use phf;
 use unicode;
@@ -13,7 +12,7 @@ use regex::{Regex, Captures};
 
 use real::{Real, rat2flo};
 use number::Number;
-use datum::{Datum, cons};
+use datum::{Datum, Bytes, cons};
 use lexer::{Token, TokenWrapper, Lexer};
 use error::{ParserError, ParserErrorKind};
 use num::{Zero, One};
@@ -337,7 +336,7 @@ impl <R: Read + Sized> Parser<R> {
             Token::Identifier(ident) => Ok(Datum::Ptr(Rc::new(box ident))),
             Token::OpenParen => self.parse_list(),
             Token::OpenVectorParen => self.parse_vector().map(|v|
-                Datum::Vector(Rc::new(RefCell::new(v)))
+                Datum::Ptr(Rc::new(box v))
             ),
             Token::OpenBytesParen => {
                 let v:Vec<Datum> = try!(self.parse_vector());
@@ -352,7 +351,7 @@ impl <R: Read + Sized> Parser<R> {
                                 kind: ParserErrorKind::ByteVectorElement
                             })
                     }).collect();
-                bytes.map(|v| Datum::Bytes(Rc::new(RefCell::new(v))))
+                bytes.map(|v| Datum::Ptr(Rc::new(box Bytes::new(v))))
             },
             Token::True => Ok(Datum::Bool(true)),
             Token::False => Ok(Datum::Bool(false)),
@@ -360,7 +359,7 @@ impl <R: Read + Sized> Parser<R> {
                 Some(c) => Ok(Datum::Char(c)),
                 None => Err(invalid_token(&tok))
             },
-            Token::String(s) => Ok(Datum::String(s)),
+            Token::String(s) => Ok(Datum::Ptr(Rc::new(box s))),
             Token::Numeric(ref rep) => match parse_numeric(rep.as_slice()) {
                 Ok(n) => Ok(Datum::Num(n)),
                 Err(e) => Err(ParserError {
@@ -443,10 +442,9 @@ mod test {
     use std::borrow::Cow;
     use std::num::{Float, FromPrimitive};
     use std::rc::Rc;
-    use std::cell::RefCell;
     use error::ParserError;
     use super::Parser;
-    use datum::{Datum, cons};
+    use datum::{Datum, Bytes, cons};
     use number::Number;
     use real::Real;
 
@@ -499,10 +497,10 @@ mod test {
 
     #[test]
     fn test_string() {
-        test_parse_ok!(r#""abc""#, Datum::String("abc".to_string()));
-        test_parse_ok!(r#""\x41;bc""#, Datum::String("Abc".to_string()));
-        test_parse_ok!(r#""\x41; bc""#, Datum::String("A bc".to_string()));
-        test_parse_ok!(r#""\x41bc;""#, Datum::String("\u{41bc}".to_string()));
+        test_parse_ok!(r#""abc""#, Datum::Ptr(Rc::new(Box::new("abc".to_string()))));
+        test_parse_ok!(r#""\x41;bc""#, Datum::Ptr(Rc::new(Box::new("Abc".to_string()))));
+        test_parse_ok!(r#""\x41; bc""#, Datum::Ptr(Rc::new(Box::new("A bc".to_string()))));
+        test_parse_ok!(r#""\x41bc;""#, Datum::Ptr(Rc::new(Box::new("\u{41bc}".to_string()))));
     }
 
     #[test]
@@ -525,14 +523,14 @@ mod test {
 
     #[test]
     fn test_vector() {
-        test_parse_ok!("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
-        test_parse_ok!("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
+        test_parse_ok!("#()", Datum::Ptr(Rc::new(Box::new(Vec::new()))));
+        test_parse_ok!("#(a b)", Datum::Ptr(Rc::new(Box::new(vec![sym!("a"), sym!("b")]))));
     }
 
     #[test]
     fn test_bytes() {
-        test_parse_ok!("#vu8()", Datum::Bytes(Rc::new(RefCell::new(Vec::new()))));
-        test_parse_ok!("#vu8(1 2 3)", Datum::Bytes(Rc::new(RefCell::new(vec![1, 2, 3]))));
+        test_parse_ok!("#vu8()", Datum::Ptr(Rc::new(box Bytes::new(Vec::new()))));
+        test_parse_ok!("#vu8(1 2 3)", Datum::Ptr(Rc::new(box Bytes::new(vec![1, 2, 3]))));
     }
 
     #[test]
