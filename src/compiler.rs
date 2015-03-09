@@ -746,6 +746,7 @@ mod test {
     use primitive::PRIM_ADD;
     use number::Number;
     use super::Compiler;
+    use real::Real;
 
     static START: Once = ONCE_INIT;
 

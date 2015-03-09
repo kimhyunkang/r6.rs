@@ -103,35 +103,41 @@ pub trait DatumCast {
     fn wrap(self) -> Datum;
 }
 
-impl DatumCast for Number {
-    fn unwrap(datum: Datum) -> Result<Number, RuntimeError> {
-        match datum {
-            Datum::Num(n) => Ok(n),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Num, but received {:?}", DatumType::get_type(&datum))
-            })
+impl DatumCast for Box<Number> {
+    fn unwrap(datum: Datum) -> Result<Box<Number>, RuntimeError> {
+        if let Datum::Ptr(ref ptr) = datum {
+            if let Some(&n) = ptr.get_number() {
+                return Ok(box n.clone())
+            }
         }
+
+        Err(RuntimeError {
+            kind: RuntimeErrorKind::InvalidType,
+            desc: format!("expected Num, but received {:?}", DatumType::get_type(&datum))
+        })
     }
 
     fn wrap(self) -> Datum{
-        Datum::Num(self)
+        Datum::Ptr(Rc::new(self))
     }
 }
 
 impl DatumCast for Real {
     fn unwrap(datum: Datum) -> Result<Real, RuntimeError> {
-        match datum {
-            Datum::Num(Number::Real(n)) => Ok(n),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Real, but received {:?}", DatumType::get_type(&datum))
-            })
+        if let Datum::Ptr(ref ptr) = datum {
+            if let Some(n) = ptr.get_real() {
+                return Ok(box n.clone())
+            }
         }
+
+        Err(RuntimeError {
+            kind: RuntimeErrorKind::InvalidType,
+            desc: format!("expected Real, but received {:?}", DatumType::get_type(&datum))
+        })
     }
 
     fn wrap(self) -> Datum {
-        Datum::Num(Number::Real(self))
+        Datum::Ptr(Rc::new(self))
     }
 }
 

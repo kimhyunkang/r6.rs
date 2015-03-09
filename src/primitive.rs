@@ -247,9 +247,10 @@ pub static PRIM_CDR: F1<(Datum, Datum), Datum> = F1 { f1: cdr };
 pub static PRIM_ZERO: R1<Number, bool> = R1 { r1: Zero::is_zero };
 
 fn is_real(arg: &Datum) -> bool {
-    match arg {
-        &Datum::Num(Number::Real(_)) => true,
-        _ => false
+    if let &Datum::Ptr(ref ptr) = arg {
+        ptr.get_real().is_some()
+    } else {
+        false
     }
 }
 
@@ -257,10 +258,14 @@ fn is_real(arg: &Datum) -> bool {
 pub static PRIM_REAL: R1<Datum, bool> = R1 { r1: is_real };
 
 fn is_rational(arg: &Datum) -> bool {
-    match arg {
-        &Datum::Num(Number::Real(Real::Flonum(f))) => f.is_finite(),
-        &Datum::Num(Number::Real(_)) => true,
-        _ => false
+    if let &Datum::Ptr(ref ptr) = arg {
+        match ptr.get_real() {
+            Some(&Real::Flonum(f)) => f.is_finite(),
+            Some(_) => true,
+            None => false
+        }
+    } else {
+        false
     }
 }
 
@@ -268,10 +273,13 @@ fn is_rational(arg: &Datum) -> bool {
 pub static PRIM_RATIONAL: R1<Datum, bool> = R1 { r1: is_rational };
 
 fn is_integer(arg: &Datum) -> bool {
-    match arg {
-        &Datum::Num(Number::Real(ref r)) => r.is_integer(),
-        _ => false
+    if let &Datum::Ptr(ref ptr) = arg {
+        if let Some(r) = ptr.get_real() {
+            return r.is_integer();
+        }
     }
+
+    return false;
 }
 
 /// `(integer? x)`

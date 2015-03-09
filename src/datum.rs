@@ -4,7 +4,12 @@ use std::iter::{FromIterator, IntoIterator};
 use std::fmt;
 use std::borrow::Cow;
 
+use num::complex::{Complex, Complex64};
+use num::rational::BigRational;
+
+use num_trait;
 use number::Number;
+use real::Real;
 use runtime::{Closure, NativeProc};
 
 /// Datum is the primary data type of Scheme
@@ -17,8 +22,6 @@ pub enum Datum {
     Bool(bool),
     /// Character
     Char(char),
-    /// Numeric value
-    Num(Number),
     /// `()`
     Nil,
     /// `undefined`
@@ -49,7 +52,6 @@ impl DatumType {
         match datum {
             &Datum::Bool(_) => DatumType::Bool,
             &Datum::Char(_) => DatumType::Char,
-            &Datum::Num(_) => DatumType::Num,
             &Datum::Nil => DatumType::Null,
             &Datum::Undefined => DatumType::Undefined,
             &Datum::Ptr(ref p) => p.get_type()
@@ -63,7 +65,6 @@ impl PartialEq for Datum {
         match (self, rhs) {
             (&Datum::Bool(l), &Datum::Bool(r)) => l == r,
             (&Datum::Char(l), &Datum::Char(r)) => l == r,
-            (&Datum::Num(ref l), &Datum::Num(ref r)) => l == r,
             (&Datum::Nil, &Datum::Nil) => true,
             (&Datum::Undefined, &Datum::Undefined) => true,
             (&Datum::Ptr(ref l), &Datum::Ptr(ref r)) => l.obj_eq(r.deref().deref()),
@@ -80,6 +81,7 @@ pub trait Object: fmt::Display {
     fn get_vector(&self) -> Option<&[Datum]> { None }
     fn get_bytes(&self) -> Option<&[u8]> { None }
     fn get_pair(&self) -> Option<&(Datum, Datum)> { None }
+    fn get_number(&self) -> Option<&num_trait::Number> { None }
     fn obj_eq(&self, &Object) -> bool;
     fn get_type(&self) -> DatumType;
 }
@@ -270,7 +272,6 @@ impl fmt::Debug for Datum {
             Datum::Bool(true) => write!(f, "#t"),
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
-            Datum::Num(ref n) => write!(f, "{}", n),
             Datum::Nil => write!(f, "()"),
             Datum::Undefined => write!(f, "#<undefined>"),
             Datum::Ptr(ref ptr) => 
@@ -335,8 +336,8 @@ pub fn cons(head: Datum, tail: Datum) -> Datum {
 
 #[cfg(test)]
 mod test {
-    use super::{Datum, Bytes, cons};
-    use number::Number;
+    use super::{Datum, Object, Bytes, cons};
+    use real::Real;
     use std::borrow::Cow;
     use std::num::FromPrimitive;
     use std::rc::Rc;
@@ -374,10 +375,10 @@ mod test {
 
     #[test]
     fn test_iter() {
-        let n1 = FromPrimitive::from_int(1).unwrap();
-        let n2 = FromPrimitive::from_int(2).unwrap();
+        let n1:Box<Object> = box Real::Fixnum(1);
+        let n2:Box<Object> = box Real::Fixnum(2);
         let list: Datum = list!(num!(1), num!(2));
 
-        assert_eq!(Ok(vec![Datum::Num(n1), Datum::Num(n2)]), list.iter().collect());
+        assert_eq!(Ok(vec![Datum::Ptr(Rc::new(n1)), Datum::Ptr(Rc::new(n2))]), list.iter().collect());
     }
 }

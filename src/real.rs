@@ -75,6 +75,15 @@ impl Real {
             _ => true
         }
     }
+
+    pub fn lift_complex(&self) -> Result<BigRational, f64> {
+        match self {
+            &Real::Fixnum(n) => Ok(fix2rat(n)),
+            &Real::Integer(ref n) => Ok(Ratio::from_integer(n.clone())),
+            &Real::Rational(ref n) => Ok(n.clone()),
+            &Real::Flonum(n) => Err(n)
+        }
+    }
 }
 
 impl Zero for Real {

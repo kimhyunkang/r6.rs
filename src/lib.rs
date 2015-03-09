@@ -38,7 +38,7 @@ macro_rules! sym{
 
 macro_rules! num{
     ($e:expr) => (
-        Datum::Num(Number::new_int($e, 0))
+        Datum::Ptr(Rc::new(box Real::Fixnum($e)))
     )
 }
 
@@ -66,3 +66,4 @@ pub mod base;
 pub mod real;
 /// Numerical tower
 pub mod number;
+pub mod num_trait;

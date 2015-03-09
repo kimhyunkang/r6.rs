@@ -11,8 +11,8 @@ use unicode;
 use regex::{Regex, Captures};
 
 use real::{Real, rat2flo};
-use number::Number;
-use datum::{Datum, Bytes, cons};
+use num_trait::{Number, int_cmplx, to_imaginary, complex};
+use datum::{Datum, Object, Bytes, cons};
 use lexer::{Token, TokenWrapper, Lexer};
 use error::{ParserError, ParserErrorKind};
 use num::{Zero, One};
@@ -120,7 +120,7 @@ fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     return Ok((exactness, radix));
 }
 
-fn parse_numeric(rep: &str) -> Result<Number, String> {
+fn parse_numeric(rep: &str) -> Result<Box<Number>, String> {
     let prefix = PREFIX_PATTERN.captures(rep).unwrap();
     let num_start = match prefix.pos(0) {
         None => 0,
@@ -155,17 +155,17 @@ fn pow(base: &BigInt, exp: usize) -> BigInt {
     }
 }
 
-fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<Number, String> {
+fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<Box<Number>, String> {
     if rep == "-i" {
-        return Ok(Number::new_int(0, -1));
+        return Ok(int_cmplx(0, -1));
     } else if rep == "+i" {
-        return Ok(Number::new_int(0, 1));
+        return Ok(int_cmplx(0, 1));
     }
 
     let (re, re_end) = try!(parse_real(exactness, radix, rep));
 
     if re_end == rep.len() {
-        return Ok(Number::Real(re));
+        return Ok(box re);
     }
 
     match rep.char_at(re_end) {
@@ -177,23 +177,23 @@ fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<
             }
             match exactness {
                 Exactness::Exact => if arg.is_zero() {
-                        Ok(Number::Real(re))
+                        Ok(box re)
                     } else {
                         Err("Polar literal cannot be exact".to_string())
                     },
                 _ => 
-                    Ok(Number::ICmplx(Complex::from_polar(&re.to_f64(), &arg.to_f64())))
+                    Ok(box Complex::from_polar(&re.to_f64(), &arg.to_f64()))
             }
         },
-        'i' => Ok(Number::new_imag(re)),
+        'i' => Ok(to_imaginary(re)),
         '+' | '-' => {
             let im_part = &rep[re_end ..];
             let (im, im_end) = try!(parse_real(exactness, radix, im_part));
             if im_end+1 == im_part.len() && im_part.char_at(im_end) == 'i' {
                 if im.is_exact() && im.is_zero() {
-                    Ok(Number::Real(re))
+                    Ok(box re)
                 } else {
-                    Ok(Number::new(re, im))
+                    Ok(complex(re, im))
                 }
             } else {
                 Err("Suffix `i` not found at the end of complex literal".to_string())
@@ -340,17 +340,26 @@ impl <R: Read + Sized> Parser<R> {
             ),
             Token::OpenBytesParen => {
                 let v:Vec<Datum> = try!(self.parse_vector());
-                let bytes:Result<Vec<u8>, ParserError> = v.iter().map(|d|
-                    match d {
-                        &Datum::Num(Number::Real(Real::Fixnum(n))) if 0 <= n && n <= 0xff =>
-                            Ok(n as u8),
-                        _ =>
-                            Err(ParserError {
-                                line: tok.line,
-                                column: tok.column,
-                                kind: ParserErrorKind::ByteVectorElement
-                            })
-                    }).collect();
+                let bytes:Result<Vec<u8>, ParserError> = v.iter().map(|d| {
+                    let err = Err(ParserError {
+                        line: tok.line,
+                        column: tok.column,
+                        kind: ParserErrorKind::ByteVectorElement
+                    });
+                    if let &Datum::Ptr(ref ptr) = d {
+                        if let Some(&Real::Fixnum(n)) = ptr.get_number().and_then(Number::get_real) {
+                            if 0 <= n && n <= 0xff {
+                                Ok(n as u8)
+                            } else {
+                                err
+                            }
+                        } else {
+                            err
+                        }
+                    } else {
+                        err
+                    }
+                }).collect();
                 bytes.map(|v| Datum::Ptr(Rc::new(box Bytes::new(v))))
             },
             Token::True => Ok(Datum::Bool(true)),
@@ -361,7 +370,7 @@ impl <R: Read + Sized> Parser<R> {
             },
             Token::String(s) => Ok(Datum::Ptr(Rc::new(box s))),
             Token::Numeric(ref rep) => match parse_numeric(rep.as_slice()) {
-                Ok(n) => Ok(Datum::Num(n)),
+                Ok(n) => Ok(Datum::Ptr(Rc::new(n as Box<Object>))),
                 Err(e) => Err(ParserError {
                     line: tok.line,
                     column: tok.column,
@@ -538,12 +547,15 @@ mod test {
         let mut parser = Parser::new("+nan.0".as_bytes());
         let res: Result<Datum, ParserError> = parser.parse_datum();
 
-        match res {
-            Ok(Datum::Num(Number::Real(Real::Flonum(n)))) => if !n.is_nan() {
-                panic!("Expected `Ok(NaN)`, but found {:?}", res)
-            },
-            _ => panic!("Expected `Ok(NaN)`, but found {:?}", res)
+        if let Ok(Datum::Ptr(ref ptr)) = parser.parse_datum() {
+            if let Some(&Real::Flonum(n)) = ptr.get_real() {
+                if n.is_nan() {
+                    return ();
+                }
+            }
         }
+
+        panic!("Expected `Ok(NaN)`, but found {:?}", res);
     }
 
     #[test]
