@@ -493,7 +493,7 @@ mod test {
 
     #[test]
     fn test_numeric() {
-        let n2 = FromPrimitive::from_int(2).unwrap();
+        let n2 = FromPrimitive::from_isize(2).unwrap();
         test_parse_ok!("2", Datum::Num(n2));
     }
 

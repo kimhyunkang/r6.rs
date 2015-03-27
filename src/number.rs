@@ -32,11 +32,11 @@ impl Number {
             Number::Real(Real::Fixnum(re))
         } else {
             let re_part = Ratio::new(
-                FromPrimitive::from_int(re).unwrap(),
+                FromPrimitive::from_isize(re).unwrap(),
                 One::one()
             );
             let im_part = Ratio::new(
-                FromPrimitive::from_int(im).unwrap(),
+                FromPrimitive::from_isize(im).unwrap(),
                 One::one()
             );
             Number::ECmplx(Complex::new(re_part, im_part))
@@ -45,13 +45,13 @@ impl Number {
 
     pub fn new_exact(re: (isize, isize), im: (isize, isize)) -> Number {
         let re_part = Ratio::new(
-                FromPrimitive::from_int(re.0).unwrap(),
-                FromPrimitive::from_int(re.1).unwrap()
+                FromPrimitive::from_isize(re.0).unwrap(),
+                FromPrimitive::from_isize(re.1).unwrap()
         );
 
         let im_part = Ratio::new(
-                FromPrimitive::from_int(im.0).unwrap(),
-                FromPrimitive::from_int(im.1).unwrap()
+                FromPrimitive::from_isize(im.0).unwrap(),
+                FromPrimitive::from_isize(im.1).unwrap()
         );
 
         if im_part.is_zero() {
@@ -89,8 +89,8 @@ impl Number {
     }
 
     pub fn new_ratio(re: isize, im: isize) -> Number {
-        let re_big = FromPrimitive::from_int(re).unwrap();
-        let im_big = FromPrimitive::from_int(im).unwrap();
+        let re_big = FromPrimitive::from_isize(re).unwrap();
+        let im_big = FromPrimitive::from_isize(im).unwrap();
         Number::Real(Real::Rational(Ratio::new(re_big, im_big)).reduce())
     }
 

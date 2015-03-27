@@ -208,8 +208,8 @@ mod test {
 
     #[test]
     fn test_iter() {
-        let n1 = FromPrimitive::from_int(1).unwrap();
-        let n2 = FromPrimitive::from_int(2).unwrap();
+        let n1 = FromPrimitive::from_isize(1).unwrap();
+        let n2 = FromPrimitive::from_isize(2).unwrap();
         let list: Datum<()> = list!(num!(1), num!(2));
 
         assert_eq!(Ok(vec![Datum::Num(n1), Datum::Num(n2)]), list.iter().collect());
