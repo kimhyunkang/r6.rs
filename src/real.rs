@@ -268,7 +268,7 @@ macro_rules! impl_arith {
 
             fn $op(self, other: Real) -> Real {
                 coerce_arith(&self, &other,
-                             |x, y| x.$checked_op(&y),
+                             |x, y| x.$checked_op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(&y)
@@ -281,7 +281,7 @@ macro_rules! impl_arith {
 
             fn $op(self, other: &Real) -> Real {
                 coerce_arith(self, other,
-                             |x, y| x.$checked_op(&y),
+                             |x, y| x.$checked_op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(&y)
