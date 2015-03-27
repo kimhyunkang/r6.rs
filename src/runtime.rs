@@ -275,7 +275,11 @@ impl Runtime {
     pub fn new(code: Vec<Inst>) -> Runtime {
         Runtime {
             ret_val: Datum::Nil,
-            arg_stack: Vec::new(),
+            // Return instruction removes current closure with the args
+            // However, there isn't a calling closure at the top program because we directly inject
+            // the code here.
+            // That's why we inject a dummy value at the bottom of the arg stack
+            arg_stack: vec![Datum::Undefined],
             call_stack: Vec::new(),
             frame: StackFrame {
                 closure: Closure { code: Rc::new(code), static_link: None},
@@ -311,7 +315,7 @@ impl Runtime {
 
     fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> Datum {
         let mut link = self.frame.closure.static_link.clone();
-        for _ in range(0, link_cnt) {
+        for _ in 0 .. link_cnt {
             link = self.up_scope(link);
         }
         match link {
@@ -333,7 +337,7 @@ impl Runtime {
 
     fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: Datum) {
         let mut link = self.frame.closure.static_link.clone();
-        for _ in range(0, link_cnt) {
+        for _ in 0 .. link_cnt {
             link = self.up_scope(link);
         }
         match link {

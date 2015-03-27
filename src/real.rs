@@ -33,11 +33,11 @@ impl Real {
             Real::Fixnum(_) =>
                 self,
             Real::Integer(n) => {
-                let max_fixnum: BigInt = FromPrimitive::from_int(isize::MAX).unwrap();
-                let min_fixnum: BigInt = FromPrimitive::from_int(isize::MIN).unwrap();
+                let max_fixnum: BigInt = FromPrimitive::from_isize(isize::MAX).unwrap();
+                let min_fixnum: BigInt = FromPrimitive::from_isize(isize::MIN).unwrap();
 
                 if min_fixnum <= n && n <= max_fixnum {
-                    Real::Fixnum(n.to_int().unwrap())
+                    Real::Fixnum(n.to_isize().unwrap())
                 } else {
                     Real::Integer(n)
                 }
@@ -55,7 +55,7 @@ impl Real {
 
     pub fn to_ratio(self) -> Option<BigRational> {
         match self {
-            Real::Fixnum(n) => FromPrimitive::from_int(n).map(Ratio::from_integer),
+            Real::Fixnum(n) => FromPrimitive::from_isize(n).map(Ratio::from_integer),
             Real::Integer(n) => Some(Ratio::from_integer(n)),
             Real::Rational(n) => Some(n),
             Real::Flonum(n) => Ratio::from_float(n)
@@ -161,7 +161,7 @@ pub fn fix2rat(n: isize) -> BigRational {
 
 #[inline]
 pub fn fix2flo(n: isize) -> f64 {
-    FromPrimitive::from_int(n).unwrap()
+    FromPrimitive::from_isize(n).unwrap()
 }
 
 pub fn int2flo(n: &BigInt) -> f64 {
@@ -176,11 +176,11 @@ pub fn int2flo(n: &BigInt) -> f64 {
         let base: BigInt = FromPrimitive::from_u64(1 << 32).unwrap();
         while m >= base {
             let (q, r) = m.div_mod_floor(&base);
-            digits.push(r.to_uint().unwrap());
+            digits.push(r.to_usize().unwrap());
             m = q;
         }
         if !m.is_zero() {
-            digits.push(m.to_uint().unwrap());
+            digits.push(m.to_usize().unwrap());
         }
         let mut s = String::new();
         for &d in digits.iter().rev() {
@@ -188,7 +188,7 @@ pub fn int2flo(n: &BigInt) -> f64 {
         }
         s
     };
-    let mantissa_repr = &repr[0 .. min(f64::MANTISSA_DIGITS, repr.len())];
+    let mantissa_repr = &repr[0 .. min(f64::MANTISSA_DIGITS as usize, repr.len())];
     let u_mantissa:i64 = FromStrRadix::from_str_radix(mantissa_repr,
                                                         2).unwrap();
     let i_mantissa = if neg {
@@ -277,7 +277,7 @@ macro_rules! impl_arith {
 
             fn $op(self, other: Real) -> Real {
                 coerce_arith(&self, &other,
-                             |x, y| x.$checked_op(&y),
+                             |x, y| x.$checked_op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(&y)
@@ -290,7 +290,7 @@ macro_rules! impl_arith {
 
             fn $op(self, other: &Real) -> Real {
                 coerce_arith(self, other,
-                             |x, y| x.$checked_op(&y),
+                             |x, y| x.$checked_op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(y),
                              |x, y| x.$op(&y)
@@ -390,8 +390,8 @@ mod test {
 
     #[test]
     fn test_reduce() {
-        let x = Real::Integer(FromPrimitive::from_int(1).unwrap());
-        let y = Real::Integer(FromPrimitive::from_int(2).unwrap());
+        let x = Real::Integer(FromPrimitive::from_isize(1).unwrap());
+        let y = Real::Integer(FromPrimitive::from_isize(2).unwrap());
         assert_eq!(Real::Fixnum(3), x+y);
     }
 
@@ -404,7 +404,7 @@ mod test {
 
     #[test]
     fn test_int2flo() {
-        let n = FromPrimitive::from_int(3).unwrap();
+        let n = FromPrimitive::from_isize(3).unwrap();
         assert_eq!(3.0, int2flo(&n));
     }
 }

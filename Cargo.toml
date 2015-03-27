@@ -7,9 +7,9 @@ authors = [ "kimhyunkang@gmail.com" ]
 num = "~0.1.10"
 phf = "~0.6.1"
 phf_macros = "~0.6.1"
-regex = "~0.1.10"
+regex = "0.1.21"
 regex_macros = "~0.1.5"
-log = "~0.2.2"
+log = "~0.3"
 
 [dev-dependencies]
-env_logger = "~0.2"
+env_logger = "~0.3"

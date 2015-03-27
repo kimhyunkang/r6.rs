@@ -1,7 +1,6 @@
 use std::io::Read;
 use std::mem;
 use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
-use std::iter::range_step;
 use std::fmt::Write;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -63,16 +62,17 @@ fn parse_char(ch: &str) -> Option<char> {
         None => ()
     };
 
-    if ch.chars().count() == 1 {
-        Some(ch.char_at(0))
-    } else if ch.starts_with("x") {
-        match from_str_radix(&ch[1..], 16) {
-            Ok(c) => unicode::char::from_u32(c),
-            Err(_) => None
+    let mut chrs = ch.chars();
+    if let Some(c) = chrs.next() {
+        if let None = chrs.next() {
+            return Some(c);
+        } else if c == 'x' {
+            if let Ok(c) = from_str_radix(&ch[1..], 16) {
+                return unicode::char::from_u32(c);
+            }
         }
-    } else {
-        None
     }
+    None
 }
 
 #[derive(Copy, PartialEq)]
@@ -87,7 +87,7 @@ static PREFIX_PATTERN:Regex = regex!(r"^(?i)(#([iebodx])){0,2}");
 fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     let mut exactness = Exactness::Unspecified;
     let mut radix = 0;
-    for i in range_step(1, prefix.len(), 2) {
+    for i in (1 .. prefix.len()).step_by(2) {
         match prefix.char_at(i) {
             'i' | 'I' if exactness == Exactness::Unspecified => {
                 exactness = Exactness::Inexact;
@@ -229,7 +229,7 @@ fn parse_real(exactness: Exactness, radix: u32, rep: &str) -> Result<(Real, usiz
         // [+-]inf.0
         if exactness == Exactness::Exact {
             return Err("Invalid numeric token: inf.0 can't be exact".to_string());
-        } else if rep.char_at(0) == '-' {
+        } else if rep.chars().next() == Some('-') {
             Real::Flonum(Float::neg_infinity())
         } else {
             Real::Flonum(Float::infinity())
@@ -275,7 +275,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
             return Ok((rat, true));
         }
 
-        let base: BigInt = FromPrimitive::from_uint(10).unwrap();
+        let base: BigInt = FromPrimitive::from_usize(10).unwrap();
         let (mantissa, exactness) = if let Some(part) = captures.at(6) {
             // Integral
             let abs: BigInt = from_str_radix(part, 10).unwrap();
@@ -284,7 +284,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
         } else if let Some(flt_rep) = captures.at(5) {
             // Floating
             let parts: Vec<&str> = flt_rep.splitn(1, '.').collect();
-            let (rep, exp) = match parts.as_slice() {
+            let (rep, exp) = match parts.as_ref() {
                 [int_part, flt_part] => {
                     let mut int_rep = String::new();
                     int_rep.write_str(int_part).unwrap();
@@ -293,7 +293,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
                 },
                 _ => panic!("Invalid floating point literal `{}`", flt_rep)
             };
-            let mantissa: BigInt = from_str_radix(rep.as_slice(), 10).unwrap();
+            let mantissa: BigInt = from_str_radix(rep.as_ref(), 10).unwrap();
             let denom: BigInt = pow(&base, exp);
             (Ratio::new(mantissa, denom), false)
         } else {
@@ -364,12 +364,12 @@ impl <R: Read + Sized> Parser<R> {
             },
             Token::True => Ok(Datum::Bool(true)),
             Token::False => Ok(Datum::Bool(false)),
-            Token::Character(ref ch) => match parse_char(ch.as_slice()) {
+            Token::Character(ref ch) => match parse_char(ch.as_ref()) {
                 Some(c) => Ok(Datum::Char(c)),
                 None => Err(invalid_token(&tok))
             },
             Token::String(s) => Ok(Datum::Ptr(Rc::new(box s))),
-            Token::Numeric(ref rep) => match parse_numeric(rep.as_slice()) {
+            Token::Numeric(ref rep) => match parse_numeric(rep.as_ref()) {
                 Ok(n) => Ok(Datum::Ptr(Rc::new(n as Box<Object>))),
                 Err(e) => Err(ParserError {
                     line: tok.line,
@@ -500,7 +500,7 @@ mod test {
 
     #[test]
     fn test_numeric() {
-        let n2 = FromPrimitive::from_int(2).unwrap();
+        let n2 = FromPrimitive::from_isize(2).unwrap();
         test_parse_ok!("2", Datum::Num(n2));
     }
 

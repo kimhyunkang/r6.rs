@@ -52,7 +52,7 @@ impl Iterator for SyntaxIter {
     type Item = Syntax;
 
     fn next(&mut self) -> Option<Syntax> {
-        let res = FromPrimitive::from_uint(self.index);
+        let res = FromPrimitive::from_usize(self.index);
         self.index += 1;
         res
     }
@@ -270,7 +270,7 @@ impl<'g> Compiler<'g> {
         debug!("compile_body {:?}", body);
         let res: Result<Vec<Datum>, ()> = body.iter().collect();
         match res {
-            Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_slice()),
+            Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_ref()),
             Err(_) => Err(CompileError {
                 kind: CompileErrorKind::DottedBody
             })
@@ -406,7 +406,7 @@ impl<'g> Compiler<'g> {
                             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                         };
 
-                        if let [Datum::Ptr(ref p), ref expr] = binding.as_slice() {
+                        if let [Datum::Ptr(ref p), ref expr] = binding.as_ref() {
                             if let Some(ref sym) = p.get_sym() {
                                 syms.push(Cow::Owned(sym.to_string()));
                                 exprs.push(expr.clone());
@@ -501,7 +501,7 @@ impl<'g> Compiler<'g> {
             if let Some(&(ref cur_args, ref body)) = ptr.get_pair() {
                 let res: Result<Vec<Datum>, ()> = body.iter().collect();
                 if let Ok(exprs) = res {
-                    let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_slice()));
+                    let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_ref()));
 
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                             Rc::new(block_ctx.code),
@@ -637,7 +637,7 @@ impl<'g> Compiler<'g> {
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
 
-        if let [Datum::Ptr(ref p), ref expr] = assignment.as_slice() {
+        if let [Datum::Ptr(ref p), ref expr] = assignment.as_ref() {
             if let Some(sym) = p.get_sym() {
                 try!(self.compile_expr(env, ctx, expr));
                 let ptr = try!(self.compile_ref(env, ctx, sym));

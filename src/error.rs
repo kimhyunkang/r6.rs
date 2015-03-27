@@ -43,7 +43,7 @@ impl Error for ParserError {
 
     fn cause(&self) -> Option<&Error> {
         match self.kind {
-            ParserErrorKind::UnderlyingError(ref e) => Some(e as &Error),
+            ParserErrorKind::UnderlyingError(ref e) => Some(e),
             _ => None
         }
     }
