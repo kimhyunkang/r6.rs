@@ -258,7 +258,7 @@ impl<'g> Compiler<'g> {
     {
         let res: Result<Vec<RDatum>, ()> = body.iter().collect();
         match res {
-            Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_slice()),
+            Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_ref()),
             Err(_) => Err(CompileError {
                 kind: CompileErrorKind::DottedBody
             })
@@ -391,7 +391,7 @@ impl<'g> Compiler<'g> {
                             Ok(v) => v,
                             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                         };
-                        match binding.as_slice() {
+                        match binding.as_ref() {
                             [Datum::Sym(ref sym), ref expr] => {
                                 syms.push(sym.clone());
                                 exprs.push(expr.clone());
@@ -481,7 +481,7 @@ impl<'g> Compiler<'g> {
             let res: Result<Vec<RDatum>, ()> = body.iter().collect();
             match res {
                 Ok(exprs) => {
-                    let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_slice()));
+                    let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_ref()));
 
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                             Rc::new(block_ctx.code),
@@ -607,7 +607,7 @@ impl<'g> Compiler<'g> {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
-        match assignment.as_slice() {
+        match assignment.as_ref() {
             [Datum::Sym(ref sym), ref expr] => {
                 try!(self.compile_expr(env, ctx, expr));
                 let ptr = try!(self.compile_ref(env, ctx, sym));

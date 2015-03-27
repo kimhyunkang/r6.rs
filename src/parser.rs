@@ -285,7 +285,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
         } else if let Some(flt_rep) = captures.at(5) {
             // Floating
             let parts: Vec<&str> = flt_rep.splitn(1, '.').collect();
-            let (rep, exp) = match parts.as_slice() {
+            let (rep, exp) = match parts.as_ref() {
                 [int_part, flt_part] => {
                     let mut int_rep = String::new();
                     int_rep.write_str(int_part).unwrap();
@@ -294,7 +294,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
                 },
                 _ => panic!("Invalid floating point literal `{}`", flt_rep)
             };
-            let mantissa: BigInt = from_str_radix(rep.as_slice(), 10).unwrap();
+            let mantissa: BigInt = from_str_radix(rep.as_ref(), 10).unwrap();
             let denom: BigInt = pow(&base, exp);
             (Ratio::new(mantissa, denom), false)
         } else {
@@ -356,12 +356,12 @@ impl <R: Read + Sized> Parser<R> {
             },
             Token::True => Ok(Datum::Bool(true)),
             Token::False => Ok(Datum::Bool(false)),
-            Token::Character(ref ch) => match parse_char(ch.as_slice()) {
+            Token::Character(ref ch) => match parse_char(ch.as_ref()) {
                 Some(c) => Ok(Datum::Char(c)),
                 None => Err(invalid_token(&tok))
             },
             Token::String(s) => Ok(Datum::String(s)),
-            Token::Numeric(ref rep) => match parse_numeric(rep.as_slice()) {
+            Token::Numeric(ref rep) => match parse_numeric(rep.as_ref()) {
                 Ok(n) => Ok(Datum::Num(n)),
                 Err(e) => Err(ParserError {
                     line: tok.line,

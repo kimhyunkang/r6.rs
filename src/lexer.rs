@@ -188,10 +188,11 @@ impl <R: Read + Sized> Lexer<R> {
                     let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
                     let delim = try_consume!(self);
                     let prefix = format!("{}{}{}", c0, rest_prefix, delim);
-                    if prefix.as_slice() == "vu8(" || prefix.as_slice() == "u8(" {
-                        Ok(wrap(line, col, Token::OpenBytesParen))
-                    } else {
-                        Err(self.make_error(ParserErrorKind::InvalidToken(prefix)))
+                    match prefix.as_ref() {
+                        "vu8(" | "u8(" =>
+                            Ok(wrap(line, col, Token::OpenBytesParen)),
+                        _ =>
+                            Err(self.make_error(ParserErrorKind::InvalidToken(prefix)))
                     }
                 },
                 '\\' => self.lex_char().map(|s| wrap(line, col, Token::Character(s))),
@@ -219,7 +220,7 @@ impl <R: Read + Sized> Lexer<R> {
     fn lex_ident(&mut self, initial: String) -> Result<String, ParserError> {
         let mut s = initial;
         let sub = try!(self.read_while(is_subsequent));
-        s.push_str(sub.as_slice());
+        s.push_str(sub.as_ref());
         return Ok(s);
     }
 
@@ -229,7 +230,7 @@ impl <R: Read + Sized> Lexer<R> {
         let mut s = String::new();
         s.push(c);
         let sub = try!(self.read_while(|c| c.is_alphanumeric()));
-        s.push_str(sub.as_slice());
+        s.push_str(sub.as_ref());
         return Ok(s);
     }
 
@@ -259,7 +260,7 @@ impl <R: Read + Sized> Lexer<R> {
                         if hex_str.len() == 0 {
                             return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
                         }
-                        let code = match num::from_str_radix(hex_str.as_slice(), 16) {
+                        let code = match num::from_str_radix(hex_str.as_ref(), 16) {
                             Ok(n) => n,
                             Err(_) => return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
                         };
@@ -292,7 +293,7 @@ impl <R: Read + Sized> Lexer<R> {
     fn lex_numeric(&mut self, init: String) -> Result<String, ParserError> {
         let mut s = init;
         let sub = try!(self.read_while(|c| !is_delim(c)));
-        s.push_str(sub.as_slice());
+        s.push_str(sub.as_ref());
         return Ok(s);
     }
 
