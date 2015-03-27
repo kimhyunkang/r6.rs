@@ -6,6 +6,7 @@
 #![feature(box_syntax)]
 
 #![feature(core)]
+#![feature(str_char)]
 #![feature(std_misc)]
 #![feature(io)]
 #![feature(collections)]
