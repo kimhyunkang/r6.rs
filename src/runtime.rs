@@ -291,7 +291,11 @@ impl Runtime {
     pub fn new(code: Vec<Inst>) -> Runtime {
         Runtime {
             ret_val: Datum::Nil,
-            arg_stack: Vec::new(),
+            // Return instruction removes current closure with the args
+            // However, there isn't a calling closure at the top program because we directly inject
+            // the code here.
+            // That's why we inject a dummy value at the bottom of the arg stack
+            arg_stack: vec![Datum::Ext(RuntimeData::Undefined)],
             call_stack: Vec::new(),
             frame: StackFrame {
                 closure: Closure { code: Rc::new(code), static_link: None},
