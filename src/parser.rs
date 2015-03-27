@@ -64,16 +64,17 @@ fn parse_char(ch: &str) -> Option<char> {
         None => ()
     };
 
-    if ch.chars().count() == 1 {
-        Some(ch.char_at(0))
-    } else if ch.starts_with("x") {
-        match from_str_radix(&ch[1..], 16) {
-            Ok(c) => unicode::char::from_u32(c),
-            Err(_) => None
+    let mut chrs = ch.chars();
+    if let Some(c) = chrs.next() {
+        if let None = chrs.next() {
+            return Some(c);
+        } else if c == 'x' {
+            if let Ok(c) = from_str_radix(&ch[1..], 16) {
+                return unicode::char::from_u32(c);
+            }
         }
-    } else {
-        None
     }
+    None
 }
 
 #[derive(Copy, PartialEq)]
@@ -230,7 +231,7 @@ fn parse_real(exactness: Exactness, radix: u32, rep: &str) -> Result<(Real, usiz
         // [+-]inf.0
         if exactness == Exactness::Exact {
             return Err("Invalid numeric token: inf.0 can't be exact".to_string());
-        } else if rep.char_at(0) == '-' {
+        } else if rep.chars().next() == Some('-') {
             Real::Flonum(Float::neg_infinity())
         } else {
             Real::Flonum(Float::infinity())
