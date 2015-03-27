@@ -327,7 +327,7 @@ impl Runtime {
 
     fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> RDatum {
         let mut link = self.frame.closure.static_link.clone();
-        for _ in range(0, link_cnt) {
+        for _ in 0 .. link_cnt {
             link = self.up_scope(link);
         }
         match link {
@@ -349,7 +349,7 @@ impl Runtime {
 
     fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: RDatum) {
         let mut link = self.frame.closure.static_link.clone();
-        for _ in range(0, link_cnt) {
+        for _ in 0 .. link_cnt {
             link = self.up_scope(link);
         }
         match link {
