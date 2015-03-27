@@ -276,7 +276,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
             return Ok((rat, true));
         }
 
-        let base: BigInt = FromPrimitive::from_uint(10).unwrap();
+        let base: BigInt = FromPrimitive::from_usize(10).unwrap();
         let (mantissa, exactness) = if let Some(part) = captures.at(6) {
             // Integral
             let abs: BigInt = from_str_radix(part, 10).unwrap();

@@ -52,7 +52,7 @@ impl Iterator for SyntaxIter {
     type Item = Syntax;
 
     fn next(&mut self) -> Option<Syntax> {
-        let res = FromPrimitive::from_uint(self.index);
+        let res = FromPrimitive::from_usize(self.index);
         self.index += 1;
         res
     }
