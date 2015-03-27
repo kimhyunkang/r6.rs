@@ -1,7 +1,6 @@
 use std::io::Read;
 use std::mem;
 use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
-use std::iter::range_step;
 use std::fmt::Write;
 use std::borrow::Cow;
 use std::rc::Rc;
@@ -89,7 +88,7 @@ static PREFIX_PATTERN:Regex = regex!(r"^(?i)(#([iebodx])){0,2}");
 fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     let mut exactness = Exactness::Unspecified;
     let mut radix = 0;
-    for i in range_step(1, prefix.len(), 2) {
+    for i in (1 .. prefix.len()).step_by(2) {
         match prefix.char_at(i) {
             'i' | 'I' if exactness == Exactness::Unspecified => {
                 exactness = Exactness::Inexact;

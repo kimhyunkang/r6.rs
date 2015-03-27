@@ -7,6 +7,7 @@
 
 #![feature(core)]
 #![feature(str_char)]
+#![feature(step_by)]
 #![feature(std_misc)]
 #![feature(io)]
 #![feature(collections)]
