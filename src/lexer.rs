@@ -1,4 +1,4 @@
-use std::io::{Read, ReadExt, Chars, CharsError};
+use std::io::{Read, Chars, CharsError};
 use std::borrow::Cow;
 use std::fmt;
 use std::num;
