@@ -4,7 +4,7 @@ use std::iter::{FromIterator, IntoIterator};
 use std::fmt;
 use std::borrow::Cow;
 
-use num_trait;
+use num_trait::Number;
 use runtime::{Closure, NativeProc};
 
 /// Datum is the primary data type of Scheme
@@ -80,7 +80,7 @@ pub trait Object: fmt::Display {
     fn get_vector(&self) -> Option<&[Datum]> { None }
     fn get_bytes(&self) -> Option<&[u8]> { None }
     fn get_pair(&self) -> Option<&(Datum, Datum)> { None }
-    fn get_number(&self) -> Option<&num_trait::Number> { None }
+    fn get_number(&self) -> Option<&Number> { None }
     fn obj_eq(&self, &Object) -> bool;
     fn get_type(&self) -> DatumType;
 }
