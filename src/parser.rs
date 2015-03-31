@@ -11,7 +11,7 @@ use regex::{Regex, Captures};
 
 use real::{Real, rat2flo};
 use num_trait::{Number, int_cmplx, to_imaginary, complex};
-use datum::{Datum, Object, Bytes, cons};
+use datum::{Datum, Object, UpcastObject, Bytes, cons};
 use lexer::{Token, TokenWrapper, Lexer};
 use error::{ParserError, ParserErrorKind};
 use num::{Zero, One};
@@ -370,7 +370,7 @@ impl <R: Read + Sized> Parser<R> {
             },
             Token::String(s) => Ok(Datum::Ptr(Rc::new(box s))),
             Token::Numeric(ref rep) => match parse_numeric(rep.as_ref()) {
-                Ok(n) => Ok(Datum::Ptr(Rc::new(n as Box<Object>))),
+                Ok(n) => Ok(Datum::Ptr(Rc::new(n.upcast()))),
                 Err(e) => Err(ParserError {
                     line: tok.line,
                     column: tok.column,
@@ -449,12 +449,13 @@ impl <R: Read + Sized> Parser<R> {
 #[cfg(test)]
 mod test {
     use std::borrow::Cow;
-    use std::num::{Float, FromPrimitive};
+    use std::num::Float;
     use std::rc::Rc;
+    use num::complex::Complex;
     use error::ParserError;
     use super::Parser;
-    use datum::{Datum, Bytes, cons};
-    use number::Number;
+    use datum::{Datum, Bytes, cons, UpcastObject};
+    use num_trait::{Number, int_rat, int_cmplx, exact_cmplx};
     use real::Real;
 
     macro_rules! test_parse_ok {
@@ -500,8 +501,8 @@ mod test {
 
     #[test]
     fn test_numeric() {
-        let n2 = FromPrimitive::from_isize(2).unwrap();
-        test_parse_ok!("2", Datum::Num(n2));
+        let n2 = Datum::Ptr(Rc::new(box Real::Fixnum(2)));
+        test_parse_ok!("2", n2);
     }
 
     #[test]
@@ -514,20 +515,20 @@ mod test {
 
     #[test]
     fn test_numerical_tower() {
-        test_parse_ok!("3.141592F0", Datum::Num(Number::new_flonum(3.141592)));
-        test_parse_ok!("1.0", Datum::Num(Number::new_flonum(1.0)));
-        test_parse_ok!("#e1.0", Datum::Num(Number::Real(Real::Fixnum(1))));
-        test_parse_ok!("1/2", Datum::Num(Number::new_ratio(1, 2)));
-        test_parse_ok!("#i1/2", Datum::Num(Number::Real(Real::Flonum(0.5))));
-        test_parse_ok!("-i", Datum::Num(Number::new_int(0, -1)));
-        test_parse_ok!("+i", Datum::Num(Number::new_int(0, 1)));
-        test_parse_ok!("#e1+2i", Datum::Num(Number::new_int(1, 2)));
-        test_parse_ok!("#i1+2i", Datum::Num(Number::new_inexact(1.0, 2.0)));
-        test_parse_ok!("#e-1-2i", Datum::Num(Number::new_int(-1, -2)));
-        test_parse_ok!("#e-1/2-2/3i", Datum::Num(Number::new_exact((-1, 2), (-2, 3))));
-        test_parse_ok!("#i+1/2-1/4i", Datum::Num(Number::new_inexact(0.5, -0.25)));
-        test_parse_ok!("+inf.0", Datum::Num(Number::Real(Real::Flonum(Float::infinity()))));
-        test_parse_ok!("-inf.0", Datum::Num(Number::Real(Real::Flonum(Float::neg_infinity()))));
+        test_parse_ok!("3.141592F0", Datum::Ptr(Rc::new(box Real::Flonum(3.141592))));
+        test_parse_ok!("1.0", Datum::Ptr(Rc::new(box Real::Flonum(1.0))));
+        test_parse_ok!("#e1.0", Datum::Ptr(Rc::new(box Real::Fixnum(1))));
+        test_parse_ok!("1/2", Datum::Ptr(Rc::new(int_rat(1, 2).upcast())));
+        test_parse_ok!("#i1/2", Datum::Ptr(Rc::new(box Real::Flonum(0.5))));
+        test_parse_ok!("-i", Datum::Ptr(Rc::new(int_cmplx(0, -1).upcast())));
+        test_parse_ok!("+i", Datum::Ptr(Rc::new(int_cmplx(0, 1).upcast())));
+        test_parse_ok!("#e1+2i", Datum::Ptr(Rc::new(int_cmplx(1, 2).upcast())));
+        test_parse_ok!("#i1+2i", Datum::Ptr(Rc::new(box Complex::new(1.0, 2.0))));
+        test_parse_ok!("#e-1-2i", Datum::Ptr(Rc::new(int_cmplx(-1, -2).upcast())));
+        test_parse_ok!("#e-1/2-2/3i", Datum::Ptr(Rc::new(exact_cmplx((-1, 2), (-2, 3)).upcast())));
+        test_parse_ok!("#i+1/2-1/4i", Datum::Ptr(Rc::new(box Complex::new(0.5, -0.25))));
+        test_parse_ok!("+inf.0", Datum::Ptr(Rc::new(box Real::Flonum(Float::infinity()))));
+        test_parse_ok!("-inf.0", Datum::Ptr(Rc::new(box Real::Flonum(Float::neg_infinity()))));
     }
 
     #[test]
@@ -547,8 +548,8 @@ mod test {
         let mut parser = Parser::new("+nan.0".as_bytes());
         let res: Result<Datum, ParserError> = parser.parse_datum();
 
-        if let Ok(Datum::Ptr(ref ptr)) = parser.parse_datum() {
-            if let Some(&Real::Flonum(n)) = ptr.get_real() {
+        if let Ok(Datum::Ptr(ref ptr)) = res {
+            if let Some(&Real::Flonum(n)) = ptr.get_number().and_then(Number::get_real) {
                 if n.is_nan() {
                     return ();
                 }

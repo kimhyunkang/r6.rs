@@ -1,5 +1,5 @@
 use std::fmt;
-use std::ops::Deref;
+use std::ops::{Deref, Add, Sub, Mul, Div, Neg};
 use std::num::FromPrimitive;
 
 use num::{Zero, One};
@@ -7,22 +7,36 @@ use num::complex::{Complex, Complex64};
 use num::rational::{Ratio, BigRational};
 
 use real::{Real, rat2flo};
-use datum::{DatumType, Object};
+use datum::{DatumType, Object, UpcastObject};
 
 pub fn int_cmplx(re: isize, im: isize) -> Box<Number> {
     if im == 0 {
         box Real::Fixnum(re)
     } else {
         let re_part = Ratio::new(
-            FromPrimitive::from_int(re).unwrap(),
+            FromPrimitive::from_isize(re).unwrap(),
             One::one()
         );
         let im_part = Ratio::new(
-            FromPrimitive::from_int(im).unwrap(),
+            FromPrimitive::from_isize(im).unwrap(),
             One::one()
         );
         box Complex::new(re_part, im_part)
     }
+}
+
+pub fn exact_cmplx(re: (isize, isize), im: (isize, isize)) -> Box<Number> {
+    let re_rat = Ratio::new(
+        FromPrimitive::from_isize(re.0).unwrap(),
+        FromPrimitive::from_isize(re.1).unwrap()
+    );
+
+    let im_rat = Ratio::new(
+        FromPrimitive::from_isize(im.0).unwrap(),
+        FromPrimitive::from_isize(im.1).unwrap()
+    );
+
+    box Complex::new(re_rat, im_rat)
 }
 
 pub fn to_imaginary(im: Real) -> Box<Number> {
@@ -44,17 +58,38 @@ pub fn complex(re: Real, im: Real) -> Box<Number> {
     }
 }
 
+pub fn int_rat(numer: isize, denom: isize) -> Box<Number> {
+    box Real::Rational(Ratio::new(
+        FromPrimitive::from_isize(numer).unwrap(),
+        FromPrimitive::from_isize(denom).unwrap()
+    ))
+}
+
 pub trait Number: Object + fmt::Debug {
     fn num_eq(&self, rhs: &Number) -> bool;
+    fn num_add(&self, rhs: &Number) -> Box<Number>;
+    fn num_sub(&self, rhs: &Number) -> Box<Number>;
+    fn num_mul(&self, rhs: &Number) -> Box<Number>;
+    fn num_div(&self, rhs: &Number) -> Box<Number>;
+
+    fn num_neg(&self) -> Box<Number>;
+
+    fn num_is_zero(&self) -> bool;
+
+    fn is_exact(&self) -> bool;
 
     fn accept(&self, v: &mut NumberVisitor);
 
     fn get_real(&self) -> Option<&Real> { None }
     fn get_exact(&self) -> Option<&Complex<BigRational>> { None }
     fn get_inexact(&self) -> Option<&Complex64> { None }
+
+    fn clone_num(&self) -> Box<Number>;
+
+    fn num_upcast(self: Box<Self>) -> Box<Object>;
 }
 
-impl<T: Number + ?Sized> Object for T {
+impl<T: Number> Object for T {
     fn obj_eq(&self, rhs: &Object) -> bool {
         if let Some(n) = rhs.get_number() {
             self.num_eq(n)
@@ -64,7 +99,17 @@ impl<T: Number + ?Sized> Object for T {
     }
 
     fn get_type(&self) -> DatumType {
-        DatumType::Number
+        DatumType::Num
+    }
+
+    fn get_number(&self) -> Option<&Number> {
+        Some(self)
+    }
+}
+
+impl UpcastObject for Number {
+    fn upcast(self: Box<Number>) -> Box<Object> {
+        self.num_upcast()
     }
 }
 
@@ -202,6 +247,31 @@ impl Coercion<bool> for NumberEq {
     fn on_inexact(&self, lhs: &Complex64, rhs: &Complex64) -> bool { lhs == rhs }
 }
 
+macro_rules! impl_coercion {
+    ($type_name:ident, $static_name:ident, $op:ident) => (
+        pub struct $type_name;
+        pub static $static_name: $type_name = $type_name;
+        impl Coercion<Box<Number>> for $type_name {
+            fn on_real(&self, lhs: &Real, rhs: &Real) -> Box<Number> {
+                Box::new(lhs.$op(rhs))
+            }
+
+            fn on_exact(&self, lhs: &Complex<BigRational>, rhs: &Complex<BigRational>) -> Box<Number> {
+                Box::new(lhs.$op(rhs))
+            }
+
+            fn on_inexact(&self, lhs: &Complex64, rhs: &Complex64) -> Box<Number> {
+                Box::new(lhs.$op(rhs))
+            }
+        }
+    )
+}
+
+impl_coercion!(NumberAdd, NUMBER_ADD, add);
+impl_coercion!(NumberSub, NUMBER_SUB, sub);
+impl_coercion!(NumberMul, NUMBER_MUL, mul);
+impl_coercion!(NumberDiv, NUMBER_DIV, div);
+
 impl Number for Real {
     fn get_real(&self) -> Option<&Real> {
         Some(self)
@@ -216,10 +286,54 @@ impl Number for Real {
         rhs.accept(&mut dispatcher);
         dispatcher.res.unwrap()
     }
+
+    fn num_add(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = RealDispatcher::new(self, &NUMBER_ADD);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_sub(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = RealDispatcher::new(self, &NUMBER_SUB);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_mul(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = RealDispatcher::new(self, &NUMBER_MUL);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_div(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = RealDispatcher::new(self, &NUMBER_DIV);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_neg(&self) -> Box<Number> {
+        Box::new(self.neg())
+    }
+
+    fn num_is_zero(&self) -> bool {
+        self.is_zero()
+    }
+
+    fn is_exact(&self) -> bool {
+        Real::is_exact(self)
+    }
+
+    fn clone_num(&self) -> Box<Number> {
+        box self.clone()
+    }
+
+    fn num_upcast(self: Box<Real>) -> Box<Object> {
+        self
+    }
 }
 
 impl Number for Complex<BigRational> {
-    fn get_exact(&self) -> Option<&BigRational> {
+    fn get_exact(&self) -> Option<&Complex<BigRational>> {
         Some(self)
     }
 
@@ -231,6 +345,50 @@ impl Number for Complex<BigRational> {
         let mut dispatcher = ExactDispatcher::new(self, &NUMBER_EQ);
         rhs.accept(&mut dispatcher);
         dispatcher.res.unwrap()
+    }
+
+    fn num_add(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = ExactDispatcher::new(self, &NUMBER_ADD);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_sub(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = ExactDispatcher::new(self, &NUMBER_SUB);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_mul(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = ExactDispatcher::new(self, &NUMBER_MUL);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_div(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = ExactDispatcher::new(self, &NUMBER_DIV);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_neg(&self) -> Box<Number> {
+        Box::new(self.neg())
+    }
+
+    fn num_is_zero(&self) -> bool {
+        self.is_zero()
+    }
+
+    fn is_exact(&self) -> bool {
+        true
+    }
+
+    fn clone_num(&self) -> Box<Number> {
+        box self.clone()
+    }
+
+    fn num_upcast(self: Box<Complex<BigRational>>) -> Box<Object> {
+        self
     }
 }
 
@@ -248,6 +406,50 @@ impl Number for Complex64 {
         rhs.accept(&mut dispatcher);
         dispatcher.res.unwrap()
     }
+
+    fn num_add(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = InexactDispatcher::new(self, &NUMBER_ADD);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_sub(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = InexactDispatcher::new(self, &NUMBER_SUB);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_mul(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = InexactDispatcher::new(self, &NUMBER_MUL);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_div(&self, rhs: &Number) -> Box<Number> {
+        let mut dispatcher = InexactDispatcher::new(self, &NUMBER_DIV);
+        rhs.accept(&mut dispatcher);
+        dispatcher.res.unwrap()
+    }
+
+    fn num_neg(&self) -> Box<Number> {
+        Box::new(self.neg())
+    }
+
+    fn num_is_zero(&self) -> bool {
+        self.is_zero()
+    }
+
+    fn is_exact(&self) -> bool {
+        false
+    }
+
+    fn clone_num(&self) -> Box<Number> {
+        box self.clone()
+    }
+
+    fn num_upcast(self: Box<Complex64>) -> Box<Object> {
+        self
+    }
 }
 
 impl PartialEq for Box<Number> {
@@ -255,6 +457,23 @@ impl PartialEq for Box<Number> {
         self.num_eq(other.deref())
     }
 }
+
+macro_rules! impl_num_ops {
+    ($trait_name:ident, $trait_func:ident, $impl_func:ident) => (
+        impl<'a, 'b> $trait_name<&'a Number> for &'b Number {
+            type Output = Box<Number>;
+
+            fn $trait_func(self, other: &Number) -> Box<Number> {
+                self.$impl_func(other)
+            }
+        }
+    )
+}
+
+impl_num_ops!(Add, add, num_add);
+impl_num_ops!(Sub, sub, num_sub);
+impl_num_ops!(Mul, mul, num_mul);
+impl_num_ops!(Div, div, num_div);
 
 #[cfg(test)]
 mod test {
@@ -266,17 +485,19 @@ mod test {
 
     #[test]
     fn test_real_exact_eq() {
-        let lhs = Real::Fixnum(1);
-        let rhs: Complex<BigRational> = Complex::new(One::one(), Zero::zero());
+        let lhs: Box<Number> = box Real::Fixnum(1);
+        let rhs_plain: Complex<BigRational> = Complex::new(One::one(), Zero::zero());
+        let rhs: Box<Number> = box rhs_plain;
 
-        assert_eq!(box lhs as Box<Number>, box rhs as Box<Number>);
+        assert_eq!(&lhs, &rhs);
     }
 
     #[test]
     fn test_real_inexact_eq() {
-        let lhs = Real::Fixnum(1);
-        let rhs: Complex64 = Complex::new(1.0, 0.0);
+        let lhs: Box<Number> = box Real::Fixnum(1);
+        let rhs_plain: Complex64 = Complex::new(1.0, 0.0);
+        let rhs: Box<Number> = box rhs_plain;
 
-        assert_eq!(box lhs as Box<Number>, box rhs as Box<Number>);
+        assert_eq!(&lhs, &rhs);
     }
 }

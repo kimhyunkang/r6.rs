@@ -4,10 +4,10 @@ use std::mem;
 use std::fmt;
 use std::ops::DerefMut;
 
-use number::Number;
+use num_trait::Number;
 use real::Real;
 use error::{RuntimeErrorKind, RuntimeError};
-use datum::{Datum, DatumType, Object};
+use datum::{Datum, DatumType, Object, UpcastObject};
 use primitive::PrimFunc;
 
 use log::LogLevel;
@@ -54,6 +54,7 @@ impl Closure {
     }
 }
 
+#[derive(Clone)]
 pub struct NativeProc {
     name: &'static str,
     code: &'static (PrimFunc + 'static)
@@ -106,8 +107,8 @@ pub trait DatumCast {
 impl DatumCast for Box<Number> {
     fn unwrap(datum: Datum) -> Result<Box<Number>, RuntimeError> {
         if let Datum::Ptr(ref ptr) = datum {
-            if let Some(&n) = ptr.get_number() {
-                return Ok(box n.clone())
+            if let Some(n) = ptr.get_number() {
+                return Ok(n.clone_num())
             }
         }
 
@@ -117,16 +118,16 @@ impl DatumCast for Box<Number> {
         })
     }
 
-    fn wrap(self) -> Datum{
-        Datum::Ptr(Rc::new(self))
+    fn wrap(self) -> Datum {
+        Datum::Ptr(Rc::new(self.upcast()))
     }
 }
 
 impl DatumCast for Real {
     fn unwrap(datum: Datum) -> Result<Real, RuntimeError> {
         if let Datum::Ptr(ref ptr) = datum {
-            if let Some(n) = ptr.get_real() {
-                return Ok(box n.clone())
+            if let Some(n) = ptr.get_number().and_then(Number::get_real) {
+                return Ok(n.clone())
             }
         }
 
@@ -137,7 +138,7 @@ impl DatumCast for Real {
     }
 
     fn wrap(self) -> Datum {
-        Datum::Ptr(Rc::new(self))
+        Datum::Ptr(Rc::new(box self))
     }
 }
 
@@ -152,7 +153,7 @@ impl DatumCast for bool {
         }
     }
 
-    fn wrap(self) -> Datum{
+    fn wrap(self) -> Datum {
         Datum::Bool(self)
     }
 }
@@ -588,37 +589,37 @@ mod test {
     use super::{Inst, MemRef, Runtime, NativeProc};
     use datum::Datum;
     use primitive::PRIM_ADD;
-    use number::Number;
+    use real::Real;
 
     #[test]
     fn test_runtime() {
         let code = vec![
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(1))))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(2),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(3, 0)));
+        assert_eq!(runtime.run(), Datum::Ptr(Rc::new(box Real::Fixnum(3))));
     }
 
     #[test]
     fn test_nested_call() {
         let code = vec![
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(3))))),
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(1))))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(2),
             Inst::Call(2),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(6, 0)));
+        assert_eq!(runtime.run(), Datum::Ptr(Rc::new(box Real::Fixnum(6))));
     }
 
     #[test]
@@ -626,19 +627,19 @@ mod test {
         let f = vec![
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Arg(0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(2),
             Inst::Return
         ];
         let code = vec![
             Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(1))))),
             Inst::Call(1),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(3, 0)));
+        assert_eq!(runtime.run(), Datum::Ptr(Rc::new(box Real::Fixnum(3))));
     }
 
     #[test]
@@ -661,14 +662,14 @@ mod test {
         //   ) 2) 3)
         let code = vec![
             Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(1),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(3))))),
             Inst::Call(1),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(5, 0)));
+        assert_eq!(runtime.run(), Datum::Ptr(Rc::new(box Real::Fixnum(5))));
     }
 }

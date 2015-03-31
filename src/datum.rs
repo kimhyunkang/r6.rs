@@ -4,12 +4,7 @@ use std::iter::{FromIterator, IntoIterator};
 use std::fmt;
 use std::borrow::Cow;
 
-use num::complex::{Complex, Complex64};
-use num::rational::BigRational;
-
 use num_trait;
-use number::Number;
-use real::Real;
 use runtime::{Closure, NativeProc};
 
 /// Datum is the primary data type of Scheme
@@ -71,6 +66,10 @@ impl PartialEq for Datum {
             _ => false
         }
     }
+}
+
+pub trait UpcastObject {
+    fn upcast(self: Box<Self>) -> Box<Object>;
 }
 
 pub trait Object: fmt::Display {
@@ -155,6 +154,7 @@ impl fmt::Display for Vec<Datum> {
     }
 }
 
+#[derive(Clone)]
 pub struct Bytes {
     pub bytes: Vec<u8>
 }
@@ -339,7 +339,6 @@ mod test {
     use super::{Datum, Object, Bytes, cons};
     use real::Real;
     use std::borrow::Cow;
-    use std::num::FromPrimitive;
     use std::rc::Rc;
 
     fn compare_fmt(s: &str, datum: Datum) {

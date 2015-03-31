@@ -1,10 +1,9 @@
 use std::iter::FromIterator;
 use std::num::Float;
 use std::cmp::PartialOrd;
+use std::ops::Deref;
 
-use num::{Zero, One};
-
-use number::Number;
+use num_trait::Number;
 use real::Real;
 use datum::{Datum, DatumType};
 use error::{RuntimeError, RuntimeErrorKind};
@@ -20,6 +19,10 @@ pub struct Fold<P> {
 
 pub struct Fold1<P> {
     fold1: fn(P, Vec<P>) -> P
+}
+
+pub struct Fold2<P, R> {
+    fold2: fn(P, P, Vec<P>) -> R
 }
 
 pub struct FoldR2<P, R> {
@@ -66,6 +69,26 @@ impl<T> PrimFunc for Fold1<T> where T: DatumCast {
             } else {
                 let v0 = vs.remove(0);
                 Ok(f(v0, vs).wrap())
+            }
+        )
+    }
+}
+
+impl<T, R> PrimFunc for Fold2<T, R> where T: DatumCast, R: DatumCast {
+    fn call(&self, args: Vec<Datum>) -> Result<Datum, RuntimeError> {
+        let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
+        let f = self.fold2;
+        p_args.and_then(|mut vs|
+            if vs.len() < 2 {
+                Err(RuntimeError {
+                    kind: RuntimeErrorKind::NumArgs,
+                    desc: format!("Expected at least 1 arguments, received {}", vs.len())
+                })
+            } else {
+                let rems = vs.split_off(2);
+                let v1 = vs.remove(1);
+                let v0 = vs.remove(0);
+                Ok(f(v0, v1, rems).wrap())
             }
         )
     }
@@ -157,69 +180,75 @@ impl<T0: DatumCast, R: DatumCast> PrimFunc for F1<T0, R> {
     }
 }
 
-fn add(args: Vec<Number>) -> Number {
-    let mut sum:Number = Zero::zero();
+fn add(args: Vec<Box<Number>>) -> Box<Number> {
+    let mut sum:Box<Number> = box Real::Fixnum(0);
     for a in args.into_iter() {
-        sum = sum + a;
+        sum = sum.deref() + a.deref();
     }
     return sum;
 }
 
 /// `(+ n0 n1 ...)`
-pub static PRIM_ADD:Fold<Number> = Fold { fold: add };
+pub static PRIM_ADD:Fold<Box<Number>> = Fold { fold: add };
 
-fn mul(args: Vec<Number>) -> Number {
-    let mut product:Number = One::one();
+fn mul(args: Vec<Box<Number>>) -> Box<Number> {
+    let mut product:Box<Number> = box Real::Fixnum(1);
     for a in args.iter() {
-        product = &product * a;
+        product = product.deref() * a.deref();
     }
     return product;
 }
 
 /// `(* n0 n1 ...)`
-pub static PRIM_MUL:Fold<Number> = Fold { fold: mul };
+pub static PRIM_MUL:Fold<Box<Number>> = Fold { fold: mul };
 
-fn sub(arg0: Number, args: Vec<Number>) -> Number {
+fn sub(arg0: Box<Number>, args: Vec<Box<Number>>) -> Box<Number> {
     if args.len() == 0 {
-        return -arg0;
+        let zero = Real::Fixnum(0);
+        let ref_zero: &Number = &zero;
+        return ref_zero - arg0.deref();
     }
-    let mut sum:Number = arg0;
+    let mut sum:Box<Number> = arg0;
     for a in args.into_iter() {
-        sum = sum - a;
+        sum = sum.deref() - a.deref();
     }
     return sum;
 }
 
 /// `(- n0 n1 ...)`
-pub static PRIM_SUB:Fold1<Number> = Fold1 { fold1: sub };
+pub static PRIM_SUB:Fold1<Box<Number>> = Fold1 { fold1: sub };
 
-fn div(arg0: Number, args: Vec<Number>) -> Result<Number, RuntimeError> {
+fn div(arg0: Box<Number>, args: Vec<Box<Number>>) -> Result<Box<Number>, RuntimeError> {
     if args.len() == 0 {
-        if arg0.is_exact() && arg0.is_zero() {
+        let arg_ref = arg0.deref();
+        if arg_ref.is_exact() && arg_ref.num_is_zero() {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::DivideByZero,
                 desc: "Tried to divied by 0".to_string()
             });
         }
-        return Ok(-arg0);
+        let one = Real::Fixnum(1);
+        let one_ref: &Number = &one;
+        return Ok(one_ref / arg_ref);
     }
 
-    let mut product:Number = arg0;
+    let mut product:Box<Number> = arg0;
     for a in args.into_iter() {
-        if a.is_exact() && a.is_zero() {
+        let arg_ref = a.deref();
+        if arg_ref.is_exact() && arg_ref.num_is_zero() {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::DivideByZero,
                 desc: "Tried to divied by 0".to_string()
             });
         }
-        product = product / a;
+        product = product.deref() / arg_ref;
     }
 
     return Ok(product);
 }
 
 /// `(/ n0 n1 ...)`
-pub static PRIM_DIV:Fold1Err<Number> = Fold1Err { fold1: div };
+pub static PRIM_DIV:Fold1Err<Box<Number>> = Fold1Err { fold1: div };
 
 fn list(args: Vec<Datum>) -> Datum {
     debug!("list: args = {:?}", args);
@@ -243,12 +272,16 @@ fn cdr(arg: (Datum, Datum)) -> Datum {
 /// `(cdr x)`
 pub static PRIM_CDR: F1<(Datum, Datum), Datum> = F1 { f1: cdr };
 
+fn is_zero(arg: Box<Number>) -> bool {
+    arg.deref().num_is_zero()
+}
+
 /// `(zero? x)`
-pub static PRIM_ZERO: R1<Number, bool> = R1 { r1: Zero::is_zero };
+pub static PRIM_ZERO: F1<Box<Number>, bool> = F1 { f1: is_zero };
 
 fn is_real(arg: &Datum) -> bool {
     if let &Datum::Ptr(ref ptr) = arg {
-        ptr.get_real().is_some()
+        ptr.get_number().and_then(Number::get_real).is_some()
     } else {
         false
     }
@@ -259,7 +292,7 @@ pub static PRIM_REAL: R1<Datum, bool> = R1 { r1: is_real };
 
 fn is_rational(arg: &Datum) -> bool {
     if let &Datum::Ptr(ref ptr) = arg {
-        match ptr.get_real() {
+        match ptr.get_number().and_then(Number::get_real) {
             Some(&Real::Flonum(f)) => f.is_finite(),
             Some(_) => true,
             None => false
@@ -274,7 +307,7 @@ pub static PRIM_RATIONAL: R1<Datum, bool> = R1 { r1: is_rational };
 
 fn is_integer(arg: &Datum) -> bool {
     if let &Datum::Ptr(ref ptr) = arg {
-        if let Some(r) = ptr.get_real() {
+        if let Some(r) = ptr.get_number().and_then(Number::get_real) {
             return r.is_integer();
         }
     }
@@ -285,8 +318,24 @@ fn is_integer(arg: &Datum) -> bool {
 /// `(integer? x)`
 pub static PRIM_INTEGER: R1<Datum, bool> = R1 { r1: is_integer };
 
+fn num_eq(arg0: Box<Number>, arg1: Box<Number>, args: Vec<Box<Number>>) -> bool {
+    if &arg0 != &arg1 {
+        return false;
+    }
+    let mut last_arg = arg1;
+    for arg in args.into_iter() {
+        if &last_arg != &arg {
+            return false;
+        }
+        last_arg = arg;
+    }
+    return true;
+}
+
+pub static PRIM_NUM_EQ: Fold2<Box<Number>, bool> = Fold2 { fold2: num_eq };
+
 macro_rules! impl_num_comp {
-    ($type_name:ident, $static_name:ident, $func_name:ident, $op:ident) => (
+    ($type_name:ty, $static_name:ident, $func_name:ident, $op:ident) => (
         fn $func_name(arg0: &$type_name, arg1: &$type_name, args: &[$type_name]) -> bool {
             if !arg0.$op(arg1) {
                 return false;
@@ -305,7 +354,6 @@ macro_rules! impl_num_comp {
     )
 }
 
-impl_num_comp!(Number, PRIM_NUM_EQ, num_eq, eq);
 impl_num_comp!(Real, PRIM_LT, real_lt, lt);
 impl_num_comp!(Real, PRIM_GT, real_gt, gt);
 impl_num_comp!(Real, PRIM_LE, real_le, le);

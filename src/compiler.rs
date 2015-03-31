@@ -744,7 +744,6 @@ mod test {
     use runtime::{Inst, MemRef, NativeProc};
     use base::libbase;
     use primitive::PRIM_ADD;
-    use number::Number;
     use super::Compiler;
     use real::Real;
 
@@ -760,8 +759,8 @@ mod test {
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1 ,0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2 ,0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(1))))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(2),
             Inst::Return
         ]);
@@ -779,10 +778,10 @@ mod test {
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(3))))),
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(1))))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(2),
             Inst::Call(2),
             Inst::Return
@@ -804,13 +803,13 @@ mod test {
             Inst::SetArgSize(1),
             Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box NativeProc::new("+", &PRIM_ADD))))),
             Inst::PushArg(MemRef::Arg(0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(2),
             Inst::Return
         ];
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(1))))),
             Inst::Call(1),
             Inst::Return
         ]);
@@ -845,9 +844,9 @@ mod test {
         ];
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(2))))),
             Inst::Call(1),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(Datum::Ptr(Rc::new(box Real::Fixnum(3))))),
             Inst::Call(1),
             Inst::Return
         ]);
