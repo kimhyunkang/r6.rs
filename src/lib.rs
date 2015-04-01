@@ -9,6 +9,7 @@
 #![feature(str_char)]
 #![feature(step_by)]
 #![feature(convert)]
+#![feature(slice_patterns)]
 #![feature(std_misc)]
 #![feature(io)]
 #![feature(collections)]
