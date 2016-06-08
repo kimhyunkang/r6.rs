@@ -209,8 +209,8 @@ impl DatumCast for Cow<'static, str> {
     }
 }
 
-impl DatumCast for Rc<String> {
-    fn unwrap(datum: RDatum) -> Result<Rc<String>, RuntimeError> {
+impl DatumCast for String {
+    fn unwrap(datum: RDatum) -> Result<String, RuntimeError> {
         match datum {
             Datum::String(s) => Ok(s.clone()),
             _ => Err(RuntimeError {

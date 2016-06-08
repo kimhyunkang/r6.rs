@@ -19,7 +19,7 @@ pub enum Datum<T> {
     /// Character
     Char(char),
     /// String
-    String(Rc<String>),
+    String(String),
     /// Vector
     Vector(Rc<RefCell<Vec<Datum<T>>>>),
     /// Byte vector

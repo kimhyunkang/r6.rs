@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::rc::Rc;
 use std::cmp::PartialOrd;
 use std::iter::FromIterator;
 
@@ -318,10 +317,10 @@ impl_typecheck!(PRIM_VECTOR, is_vector, Vector);
 impl_typecheck!(PRIM_PROCEDURE, is_procedure, Callable);
 impl_typecheck!(PRIM_NULL, is_null, Null);
 
-pub static PRIM_SYMBOL_STRING: F1<Cow<'static, str>, Rc<String>> = F1 { f1: symbol_string };
+pub static PRIM_SYMBOL_STRING: F1<Cow<'static, str>, String> = F1 { f1: symbol_string };
 
-fn symbol_string(sym: Cow<'static, str>) -> Rc<String> {
-    Rc::new(sym.to_string())
+fn symbol_string(sym: Cow<'static, str>) -> String {
+    sym.to_string()
 }
 
 /// Lists all primitive functions with its name
