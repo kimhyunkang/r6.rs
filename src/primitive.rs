@@ -33,6 +33,10 @@ pub struct F1<T0, R> {
     f1: fn(T0) -> R
 }
 
+pub struct F2<T0, T1, R> {
+    f2: fn(T0, T1) -> R
+}
+
 pub struct R1<T0, R> {
     r1: fn(&T0) -> R
 }
@@ -42,13 +46,6 @@ impl<T> PrimFunc for Fold<T> where T: DatumCast {
         let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
         let f = self.fold;
         p_args.map(|v| f(v).wrap())
-    }
-}
-
-impl PrimFunc for Fold<RDatum> {
-    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
-        let f = self.fold;
-        Ok(f(args))
     }
 }
 
@@ -103,20 +100,6 @@ impl<P: DatumCast, R: DatumCast> PrimFunc for FoldR2<P, R> {
     }
 }
 
-impl<R: DatumCast> PrimFunc for R1<RDatum, R> {
-    fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
-        if args.len() != 1 {
-            return Err(RuntimeError {
-                kind: RuntimeErrorKind::NumArgs,
-                desc: format!("Expected 1 argument, received {:?}", args.len())
-            });
-        }
-        let f = self.r1;
-
-        Ok(f(&args.remove(0)).wrap())
-    }
-}
-
 impl<T0: DatumCast, R: DatumCast> PrimFunc for R1<T0, R> {
     fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
         if args.len() != 1 {
@@ -131,15 +114,19 @@ impl<T0: DatumCast, R: DatumCast> PrimFunc for R1<T0, R> {
     }
 }
 
-impl<T0: DatumCast> PrimFunc for F1<T0, RDatum> {
+impl<T0: DatumCast, T1: DatumCast> PrimFunc for F2<T0, T1, RDatum> {
     fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
-        if args.len() != 1 {
+        if args.len() != 2 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
-                desc: format!("Expected 1 argument, received {:?}", args.len())
+                desc: format!("Expected 2 argument, received {:?}", args.len())
             });
         }
-        DatumCast::unwrap(args.pop().unwrap()).map(self.f1)
+
+        let a1 = try!(DatumCast::unwrap(args.pop().unwrap()));
+        let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
+
+        Ok((self.f2)(a0, a1))
     }
 }
 
@@ -230,6 +217,13 @@ pub static PRIM_LIST:Fold<RDatum> = Fold { fold: list };
 
 fn car(arg: (RDatum, RDatum)) -> RDatum {
     arg.0
+}
+
+/// `(cons x y)`
+pub static PRIM_CONS: F2<RDatum, RDatum, RDatum> = F2 { f2: cons };
+
+fn cons(car: RDatum, cdr: RDatum) -> RDatum {
+    ::datum::cons(car, cdr)
 }
 
 /// `(car x)`
@@ -339,6 +333,7 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("vector?", &PRIM_VECTOR),
         ("procedure?", &PRIM_PROCEDURE),
         ("null?", &PRIM_NULL),
+        ("cons", &PRIM_CONS),
         ("car", &PRIM_CAR),
         ("cdr", &PRIM_CDR),
         ("zero?", &PRIM_ZERO),

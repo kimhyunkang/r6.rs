@@ -192,6 +192,16 @@ impl DatumCast for (RDatum, RDatum) {
     }
 }
 
+impl DatumCast for RDatum {
+    fn unwrap(datum: RDatum) -> Result<RDatum, RuntimeError> {
+        Ok(datum)
+    }
+
+    fn wrap(self) -> RDatum {
+        self
+    }
+}
+
 /// Pointer referring to memory locations in the VM
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemRef {

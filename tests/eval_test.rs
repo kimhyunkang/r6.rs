@@ -272,3 +272,10 @@ fn and_or_test() {
     assert_evaluates_to!("(or '(b c) (/ 3 0))", "(b c)");
     assert_evaluates_to!("(or)", "#f");
 }
+
+#[test]
+fn cons_test() {
+    assert_evaluates_to!("(cons 'a '())", "(a)");
+    assert_evaluates_to!("(cons '(a) '(b c d))", "((a) b c d)");
+    assert_evaluates_to!("(cons 'a 3)", "(a . 3)");
+}
