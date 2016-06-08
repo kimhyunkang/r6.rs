@@ -514,7 +514,7 @@ impl Runtime {
                 let top = self.arg_stack.len();
                 let datum = self.arg_stack[top - n - 1].clone();
                 match datum {
-                    Datum::Ext(RuntimeData::PrimFunc(_, f)) => {
+                    Datum::Ext(RuntimeData::PrimFunc(fname, f)) => {
                         let args = if n == 0 {
                             Vec::new()
                         } else {
@@ -522,7 +522,7 @@ impl Runtime {
                         };
                         let res = match f.call(args) {
                             Ok(x) => x,
-                            Err(e) => panic!(e)
+                            Err(e) => panic!("Error in primitive function <{}>: {:?}", fname, e)
                         };
                         match self.arg_stack.pop() {
                             None => panic!("arg_stack size mismatch"),

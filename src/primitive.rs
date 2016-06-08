@@ -317,9 +317,18 @@ impl_typecheck!(PRIM_VECTOR, is_vector, Vector);
 impl_typecheck!(PRIM_PROCEDURE, is_procedure, Callable);
 impl_typecheck!(PRIM_NULL, is_null, Null);
 
-pub static PRIM_SYMBOL_STRING: F1<Cow<'static, str>, String> = F1 { f1: symbol_string };
+pub static PRIM_NOT: R1<RDatum, bool> = R1 { r1: not };
 
-fn symbol_string(sym: Cow<'static, str>) -> String {
+fn not(b: &RDatum) -> bool {
+    match b {
+        &Datum::Bool(false) => true,
+        _ => false
+    }
+}
+
+pub static PRIM_SYMBOL_STRING: R1<Cow<'static, str>, String> = R1 { r1: symbol_string };
+
+fn symbol_string(sym: &Cow<'static, str>) -> String {
     sym.to_string()
 }
 
@@ -349,6 +358,7 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("real?", &PRIM_REAL),
         ("rational?", &PRIM_RATIONAL),
         ("integer?", &PRIM_INTEGER),
+        ("not", &PRIM_NOT),
         ("=", &PRIM_NUM_EQ),
         ("<", &PRIM_LT),
         (">", &PRIM_GT),

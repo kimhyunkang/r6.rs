@@ -274,6 +274,18 @@ fn and_or_test() {
 }
 
 #[test]
+fn not_test() {
+    assert_evaluates_to!("(not #t)", "#f");
+    assert_evaluates_to!("(not 3)", "#f");
+
+    assert_evaluates_to!("(not (list 3))", "#f");
+    assert_evaluates_to!("(not #f)", "#t");
+    assert_evaluates_to!("(not '())", "#f");
+    assert_evaluates_to!("(not (list))", "#f");
+    assert_evaluates_to!("(not 'nil)", "#f");
+}
+
+#[test]
 fn cons_test() {
     assert_evaluates_to!("(cons 'a '())", "(a)");
     assert_evaluates_to!("(cons '(a) '(b c d))", "((a) b c d)");
