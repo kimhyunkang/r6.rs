@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::mem;
 use std::fmt;
@@ -189,6 +190,38 @@ impl DatumCast for (RDatum, RDatum) {
 
     fn wrap(self) -> RDatum {
         Datum::Cons(Rc::new(RefCell::new(self)))
+    }
+}
+
+impl DatumCast for Cow<'static, str> {
+    fn unwrap(datum: RDatum) -> Result<Cow<'static, str>, RuntimeError> {
+        match datum {
+            Datum::Sym(c) => Ok(c.clone()),
+            _ => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: format!("expected Symbol, but received {:?}", DatumType::get_type(&datum))
+            })
+        }
+    }
+
+    fn wrap(self) -> RDatum {
+        Datum::Sym(self)
+    }
+}
+
+impl DatumCast for Rc<String> {
+    fn unwrap(datum: RDatum) -> Result<Rc<String>, RuntimeError> {
+        match datum {
+            Datum::String(s) => Ok(s.clone()),
+            _ => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: format!("expected String, but received {:?}", DatumType::get_type(&datum))
+            })
+        }
+    }
+
+    fn wrap(self) -> RDatum {
+        Datum::String(self)
     }
 }
 

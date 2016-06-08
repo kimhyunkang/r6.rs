@@ -279,3 +279,8 @@ fn cons_test() {
     assert_evaluates_to!("(cons '(a) '(b c d))", "((a) b c d)");
     assert_evaluates_to!("(cons 'a 3)", "(a . 3)");
 }
+
+#[test]
+fn symbol_string_test() {
+    assert_evaluates_to!("(symbol->string 'a)", "\"a\"");
+}
