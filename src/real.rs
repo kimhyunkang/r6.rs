@@ -1,5 +1,4 @@
 use std::ops::{Add, Sub, Mul, Div, Neg};
-use std::num::{Float, FromPrimitive, ToPrimitive, FromStrRadix};
 use std::cmp::min;
 use std::fmt;
 use std::fmt::Write;
@@ -8,7 +7,7 @@ use std::cmp::Ordering;
 
 use num::bigint::{BigInt, ToBigInt};
 use num::rational::{Ratio, BigRational};
-use num::{Signed, Zero, One, Integer, CheckedAdd, CheckedSub, CheckedMul};
+use num::{Signed, Zero, One, Integer, FromPrimitive, ToPrimitive, Num};
 
 #[derive(Debug, Clone)]
 pub enum Real {
@@ -175,13 +174,12 @@ pub fn int2flo(n: &BigInt) -> f64 {
         }
         let mut s = String::new();
         for &d in digits.iter().rev() {
-            write!(&mut s, "{}", fmt::radix(d, 2)).unwrap();
+            write!(&mut s, "{:b}", d).unwrap();
         }
         s
     };
     let mantissa_repr = &repr[0 .. min(f64::MANTISSA_DIGITS as usize, repr.len())];
-    let u_mantissa:i64 = FromStrRadix::from_str_radix(mantissa_repr,
-                                                        2).unwrap();
+    let u_mantissa:i64 = Num::from_str_radix(mantissa_repr, 2).unwrap();
     let i_mantissa = if neg {
         -u_mantissa
     } else {
@@ -189,7 +187,7 @@ pub fn int2flo(n: &BigInt) -> f64 {
     };
     let exp = (repr.len() - mantissa_repr.len()) as isize;
     let m:f64 = i_mantissa.to_f64().unwrap();
-    return Float::ldexp(m, exp);
+    return f64::ldexp(m, exp);
 }
 
 pub fn rat2flo(r: &BigRational) -> f64 {
@@ -346,7 +344,8 @@ impl PartialOrd for Real {
 #[cfg(test)]
 mod test {
     use super::{Real, int2flo, fix2int};
-    use std::num::FromPrimitive;
+    
+    use num::FromPrimitive;
     use num::rational::Ratio;
 
     #[test]

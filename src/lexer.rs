@@ -1,10 +1,11 @@
 use std::io::{Read, Chars, CharsError};
 use std::borrow::Cow;
 use std::fmt;
-use std::num;
 use std::char;
 
-use error::{ParserError, ParserErrorKind};
+use num::Num;
+
+use error::{ParserError, ParserErrorKind, StreamError};
 
 /// Token types
 #[derive(PartialEq)]
@@ -114,7 +115,7 @@ macro_rules! try_consume {
     ($this:ident) => (
         match $this.consume() {
             Some(Ok(c)) => c,
-            Some(Err(e)) => return Err($this.make_error(ParserErrorKind::UnderlyingError(e))),
+            Some(Err(e)) => return Err($this.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
             None => return Err($this.make_error(ParserErrorKind::UnexpectedEOF))
         }
     )
@@ -141,7 +142,7 @@ impl <R: Read + Sized> Lexer<R> {
             Some(Ok(c)) => c,
             None => return Ok(wrap(line, col, Token::EOF)),
             Some(Err(e)) =>
-                return Err(self.make_error(ParserErrorKind::UnderlyingError(e)))
+                return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e))))
         };
 
         let end_of_token = try!(self.is_end_of_token());
@@ -163,7 +164,7 @@ impl <R: Read + Sized> Lexer<R> {
                 match self.lookahead() {
                     Some(Ok('>')) => self.lex_ident("-".to_string()).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s)))),
                     Some(Ok(_)) => self.lex_numeric("-".to_string()).map(|s| wrap(line, col, Token::Numeric(s))),
-                    Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+                    Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
                     None => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
                 }
             }
@@ -212,7 +213,7 @@ impl <R: Read + Sized> Lexer<R> {
     fn is_end_of_token(&mut self) -> Result<bool, ParserError> {
         match self.lookahead() {
             Some(Ok(c)) => Ok(is_whitespace(c) || is_delim(c)),
-            Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+            Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
             None => Ok(true)
         }
     }
@@ -260,7 +261,7 @@ impl <R: Read + Sized> Lexer<R> {
                         if hex_str.len() == 0 {
                             return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
                         }
-                        let code = match num::from_str_radix(hex_str.as_ref(), 16) {
+                        let code = match Num::from_str_radix(hex_str.as_ref(), 16) {
                             Ok(n) => n,
                             Err(_) => return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
                         };
@@ -353,7 +354,7 @@ impl <R: Read + Sized> Lexer<R> {
                     return Ok(s);
                 },
                 Some(Err(e)) =>
-                    return Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+                    return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
                 None => return Ok(s)
             }
         }
@@ -389,8 +390,8 @@ impl <R: Read + Sized> Lexer<R> {
                     }
                 },
                 Some(Ok(_)) | None => return Ok(consumed),
-                Some(Err(e)) => 
-                    return Err(self.make_error(ParserErrorKind::UnderlyingError(e))),
+                Some(Err(e)) =>
+                    return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
             }
         }
     }

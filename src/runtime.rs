@@ -25,7 +25,7 @@ pub enum RuntimeData {
     Undefined
 }
 
-/// Compiled closure object 
+/// Compiled closure object
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     // Pointer to the bytecode
@@ -44,7 +44,7 @@ impl Closure {
 }
 
 /// Type representation of RDatum
-#[derive(Debug, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DatumType {
     Sym,
     Bool,
@@ -121,7 +121,7 @@ impl PartialEq for RuntimeData {
 pub type RDatum = Datum<RuntimeData>;
 
 /// Types with implementing DatumCast trait can cast from/to Datum
-pub trait DatumCast {
+pub trait DatumCast: Sized {
     /// Casts Datum into Self, possibly raising error
     fn unwrap(datum: RDatum) -> Result<Self, RuntimeError>;
     /// Casts Self into Datum
@@ -423,7 +423,7 @@ impl Runtime {
 
     fn push_call_stack(&mut self, arg_size: usize, closure: Closure) {
         let idx = self.call_stack.len();
-        let stack_bottom = self.arg_stack.len() - arg_size; 
+        let stack_bottom = self.arg_stack.len() - arg_size;
         let new_frame = StackFrame {
             closure: closure,
             pc: 0,
@@ -486,7 +486,7 @@ impl Runtime {
                         self.push_stack(res);
                         self.frame.pc += 1;
                         true
-                    }, 
+                    },
                     Datum::Ext(RuntimeData::Closure(closure)) => {
                         self.push_call_stack(n, closure);
                         true

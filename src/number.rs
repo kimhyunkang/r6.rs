@@ -1,11 +1,10 @@
 use std::ops::{Add, Sub, Mul, Div, Neg};
 use std::fmt;
-use std::num::FromPrimitive;
 
 use num::complex::{Complex, Complex64};
 use num::bigint::BigInt;
 use num::rational::{Ratio, BigRational};
-use num::{Zero, One};
+use num::{Zero, One, FromPrimitive};
 
 use real::{Real, int2rat, fix2rat, rat2flo};
 
@@ -224,7 +223,7 @@ fn coerce_arith<R, E, I>(lhs: &Number, rhs: &Number,
           E: Fn(&Complex<BigRational>, &Complex<BigRational>) -> Complex<BigRational>,
           I: Fn(&Complex64, &Complex64) -> Complex64
 {
-    coerce(lhs, rhs, 
+    coerce(lhs, rhs,
            |x, y| Number::Real(r_op(x, y)),
            |x, y| {
                let res = e_op(x, y);

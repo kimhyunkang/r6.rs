@@ -1,13 +1,12 @@
 use std::io::Read;
 use std::mem;
-use std::num::{SignedInt, FromPrimitive, Float, from_str_radix};
 use std::fmt::Write;
 use std::borrow::Cow;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::char;
 
 use phf;
-use unicode;
 use regex::{Regex, Captures};
 
 use real::{Real, rat2flo};
@@ -15,7 +14,7 @@ use number::Number;
 use datum::{Datum, cons};
 use lexer::{Token, TokenWrapper, Lexer};
 use error::{ParserError, ParserErrorKind};
-use num::{Zero, One};
+use num::{Zero, One, FromPrimitive, Float, Num};
 use num::bigint::BigInt;
 use num::rational::{Ratio, BigRational};
 use num::complex::Complex;
@@ -68,15 +67,15 @@ fn parse_char(ch: &str) -> Option<char> {
         if let None = chrs.next() {
             return Some(c);
         } else if c == 'x' {
-            if let Ok(c) = from_str_radix(&ch[1..], 16) {
-                return unicode::char::from_u32(c);
+            if let Ok(c) = Num::from_str_radix(&ch[1..], 16) {
+                return char::from_u32(c);
             }
         }
     }
     None
 }
 
-#[derive(Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum Exactness {
     Exact,
     Inexact,
@@ -88,29 +87,39 @@ static PREFIX_PATTERN:Regex = regex!(r"^(?i)(#([iebodx])){0,2}");
 fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     let mut exactness = Exactness::Unspecified;
     let mut radix = 0;
-    for i in (1 .. prefix.len()).step_by(2) {
-        match prefix.char_at(i) {
-            'i' | 'I' if exactness == Exactness::Unspecified => {
-                exactness = Exactness::Inexact;
-            },
-            'e' | 'E' if exactness == Exactness::Unspecified => {
-                exactness = Exactness::Exact;
-            },
-            'b' | 'B' if radix == 0 => {
-                radix = 2;
-            },
-            'o' | 'O' if radix == 0 => {
-                radix = 8;
-            },
-            'd' | 'D' if radix == 0 => {
-                radix = 10;
-            },
-            'x' | 'X' if radix == 0 => {
-                radix = 16;
-            },
-            _ => {
-                return Err(format!("Invalid number prefix {}", prefix));
+    let mut iter = prefix.chars();
+
+    // skip the first letter
+    iter.next();
+
+    loop {
+        if let Some(c) = iter.next() {
+            match c {
+                'i' | 'I' if exactness == Exactness::Unspecified => {
+                    exactness = Exactness::Inexact;
+                },
+                'e' | 'E' if exactness == Exactness::Unspecified => {
+                    exactness = Exactness::Exact;
+                },
+                'b' | 'B' if radix == 0 => {
+                    radix = 2;
+                },
+                'o' | 'O' if radix == 0 => {
+                    radix = 8;
+                },
+                'd' | 'D' if radix == 0 => {
+                    radix = 10;
+                },
+                'x' | 'X' if radix == 0 => {
+                    radix = 16;
+                },
+                _ => {
+                    return Err(format!("Invalid number prefix {}", prefix));
+                }
             }
+            iter.next();
+        } else {
+            break;
         }
     }
 
@@ -169,8 +178,8 @@ fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<
         return Ok(Number::Real(re));
     }
 
-    match rep.char_at(re_end) {
-        '@' => {
+    match rep[re_end..].chars().next() {
+        Some('@') => {
             let arg_part = &rep[re_end+1 ..];
             let (arg, arg_end) = try!(parse_real(exactness, radix, arg_part));
             if arg_end != arg_part.len() {
@@ -182,15 +191,15 @@ fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<
                     } else {
                         Err("Polar literal cannot be exact".to_string())
                     },
-                _ => 
+                _ =>
                     Ok(Number::ICmplx(Complex::from_polar(&re.to_f64(), &arg.to_f64())))
             }
         },
-        'i' => Ok(Number::new_imag(re)),
-        '+' | '-' => {
+        Some('i') => Ok(Number::new_imag(re)),
+        Some('+') | Some('-') => {
             let im_part = &rep[re_end ..];
             let (im, im_end) = try!(parse_real(exactness, radix, im_part));
-            if im_end+1 == im_part.len() && im_part.char_at(im_end) == 'i' {
+            if im_end+1 == im_part.len() && im_part[im_end..].chars().next() == Some('i') {
                 if im.is_exact() && im.is_zero() {
                     Ok(Number::Real(re))
                 } else {
@@ -258,9 +267,9 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
 {
     if radix != 10 {
         // Just use Ratio::from_str_radix
-        let r: BigRational = match from_str_radix(rep, radix) {
+        let r: BigRational = match Num::from_str_radix(rep, radix) {
             Ok(r) => r,
-            Err(_) => Ratio::from_integer(from_str_radix(rep, radix).unwrap())
+            Err(_) => Ratio::from_integer(Num::from_str_radix(rep, radix).unwrap())
         };
         Ok((r, true))
     } else {
@@ -271,7 +280,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
 
         // Rational
         if let Some(part) = captures.at(3) {
-            let abs: BigRational = from_str_radix(part, 10).unwrap();
+            let abs: BigRational = Num::from_str_radix(part, 10).unwrap();
             let rat = if negative { -abs } else { abs };
             return Ok((rat, true));
         }
@@ -279,12 +288,12 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
         let base: BigInt = FromPrimitive::from_usize(10).unwrap();
         let (mantissa, exactness) = if let Some(part) = captures.at(6) {
             // Integral
-            let abs: BigInt = from_str_radix(part, 10).unwrap();
+            let abs: BigInt = Num::from_str_radix(part, 10).unwrap();
             let int = if negative { -abs } else { abs };
             (Ratio::from_integer(int), true)
         } else if let Some(flt_rep) = captures.at(5) {
             // Floating
-            let parts: Vec<&str> = flt_rep.splitn(1, '.').collect();
+            let parts: Vec<&str> = flt_rep.splitn(2, '.').collect();
             let (rep, exp) = match parts.as_ref() {
                 [int_part, flt_part] => {
                     let mut int_rep = String::new();
@@ -294,7 +303,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
                 },
                 _ => panic!("Invalid floating point literal `{}`", flt_rep)
             };
-            let mantissa: BigInt = from_str_radix(rep.as_ref(), 10).unwrap();
+            let mantissa: BigInt = Num::from_str_radix(rep.as_ref(), 10).unwrap();
             let denom: BigInt = pow(&base, exp);
             (Ratio::new(mantissa, denom), false)
         } else {
@@ -306,7 +315,7 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
                 return Err("Exponent too large".to_string());
             }
 
-            let exp:isize = from_str_radix(&exp_rep[1..], 10).unwrap();
+            let exp:isize = Num::from_str_radix(&exp_rep[1..], 10).unwrap();
             let exponent = Ratio::from_integer(pow(&base, exp.abs() as usize));
             if exp < 0 {
                 mantissa / exponent
@@ -441,9 +450,11 @@ impl <R: Read + Sized> Parser<R> {
 #[cfg(test)]
 mod test {
     use std::borrow::Cow;
-    use std::num::{Float, FromPrimitive};
     use std::rc::Rc;
     use std::cell::RefCell;
+
+    use num::{Float, FromPrimitive};
+
     use error::ParserError;
     use super::Parser;
     use datum::{Datum, cons};

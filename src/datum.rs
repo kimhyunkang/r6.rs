@@ -171,9 +171,10 @@ mod test {
     use super::{Datum, cons};
     use number::Number;
     use std::borrow::Cow;
-    use std::num::FromPrimitive;
     use std::rc::Rc;
     use std::cell::RefCell;
+
+    use num::FromPrimitive;
 
     fn compare_fmt(s: &str, datum: Datum<()>) {
         assert_eq!(s.to_string(), format!("{:?}", datum))

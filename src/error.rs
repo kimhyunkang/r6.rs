@@ -1,5 +1,5 @@
 use std::io::CharsError;
-use std::error::{Error, FromError};
+use std::error::Error;
 use std::fmt;
 
 use compiler::Syntax;
@@ -25,7 +25,16 @@ pub enum ParserErrorKind {
     /// Non-byte datum found in byte vector representation
     ByteVectorElement,
     /// Parser met CharsError while reading the underlying stream
-    UnderlyingError(CharsError)
+    UnderlyingError(StreamError)
+}
+
+#[derive(Debug)]
+pub struct StreamError(pub CharsError);
+
+impl PartialEq for StreamError {
+    fn eq(&self, _other: &StreamError) -> bool {
+        false
+    }
 }
 
 /// Parser error
@@ -43,7 +52,7 @@ impl Error for ParserError {
 
     fn cause(&self) -> Option<&Error> {
         match self.kind {
-            ParserErrorKind::UnderlyingError(ref e) => Some(e),
+            ParserErrorKind::UnderlyingError(StreamError(ref e)) => Some(e),
             _ => None
         }
     }
@@ -55,18 +64,18 @@ impl fmt::Display for ParserError {
     }
 }
 
-impl FromError<CharsError> for ParserError {
-    fn from_error(err: CharsError) -> ParserError {
+impl From<CharsError> for ParserError {
+    fn from(err: CharsError) -> ParserError {
         ParserError {
             line: 0,
             column: 0,
-            kind: ParserErrorKind::UnderlyingError(err)
+            kind: ParserErrorKind::UnderlyingError(StreamError(err))
         }
     }
 }
 
 /// Possible compiler errors
-#[derive(Debug, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CompileErrorKind {
     /// The syntax is not implemented yet
     NotImplemented,
@@ -91,7 +100,7 @@ pub enum CompileErrorKind {
 }
 
 /// Compiler error
-#[derive(Debug, PartialEq, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct CompileError {
     pub kind: CompileErrorKind
 }
@@ -101,7 +110,7 @@ pub struct CompileError {
 pub enum RuntimeErrorKind {
     /// Number of arguments did not match
     NumArgs,
-    /// Argument type did not match 
+    /// Argument type did not match
     InvalidType,
     /// Divide by zero
     DivideByZero

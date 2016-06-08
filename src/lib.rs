@@ -5,15 +5,9 @@
 #![feature(plugin)]
 #![feature(box_syntax)]
 
-#![feature(core)]
-#![feature(str_char)]
-#![feature(step_by)]
-#![feature(convert)]
 #![feature(slice_patterns)]
-#![feature(std_misc)]
 #![feature(io)]
-#![feature(collections)]
-#![feature(unicode)]
+#![feature(float_extras)]
 
 #![plugin(phf_macros)]
 #![plugin(regex_macros)]
@@ -21,10 +15,10 @@
 // This line should be at the top of the extern link list,
 // because some weird compiler bug lets log imported from rustc, not crates.io log
 #[macro_use] extern crate log;
+#[macro_use] extern crate enum_primitive;
 
 extern crate phf;
 extern crate regex;
-extern crate unicode;
 extern crate num;
 
 macro_rules! list{

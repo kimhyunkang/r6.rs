@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::fmt;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::num::FromPrimitive;
+
+use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
@@ -10,40 +11,23 @@ use runtime::{Inst, MemRef, RDatum, RuntimeData};
 use primitive::PrimFunc;
 
 /// Syntax variables
-#[derive(Copy, Clone, PartialEq, FromPrimitive)]
-pub enum Syntax {
-    /// `lambda`
-    Lambda,
-
-    /// `if`
-    If,
-
-    /// `let`
-    Let,
-
-    /// `let*`
-    LetStar,
-
-    /// `letrec`
-    LetRec,
-
-    /// `letrec*`
-    LetRecStar,
-
-    /// `define`
-    Define,
-
-    /// `set!`
-    Set,
-
-    /// `quote`
-    Quote,
-
-    /// `and`
-    And,
+enum_from_primitive! {
+    #[derive(Copy, Clone, PartialEq)]
+    pub enum Syntax {
+        Lambda = 0, // `lambda`
+        If = 1, // `if`
+        Let = 2, // `let`
+        LetStar = 3, // `let*`
+        LetRec = 4, // `letrec`
+        LetRecStar = 5, // `letrec*`
+        Define = 6, // `define`
+        Set = 7, // `set!`
+        Quote = 8, // `quote`
+        And = 9, // `and`
+    }
 }
 
-#[derive(Copy)]
+#[derive(Clone, Copy)]
 pub struct SyntaxIter {
     index: usize
 }
@@ -52,7 +36,7 @@ impl Iterator for SyntaxIter {
     type Item = Syntax;
 
     fn next(&mut self) -> Option<Syntax> {
-        let res = FromPrimitive::from_usize(self.index);
+        let res = Syntax::from_usize(self.index);
         self.index += 1;
         res
     }
@@ -110,8 +94,11 @@ struct LexicalContext {
 
 impl LexicalContext {
     fn update_arg(&self, args: Vec<Cow<'static, str>>) -> LexicalContext {
+        let mut scope = self.static_scope.clone();
+        scope.push(self.args.clone());
+
         LexicalContext {
-            static_scope: self.static_scope.clone() + &[self.args.clone()],
+            static_scope: scope,
             args: args
         }
     }
@@ -595,7 +582,7 @@ impl<'g> Compiler<'g> {
                     Ok(MemRef::Closure(code.clone(), 0))
                 }
             },
-            None => 
+            None =>
                 Err(CompileError { kind: CompileErrorKind::UnboundVariable })
         }
     }

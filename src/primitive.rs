@@ -1,5 +1,4 @@
 use std::iter::FromIterator;
-use std::num::Float;
 use std::cmp::PartialOrd;
 
 use num::{Zero, One};
