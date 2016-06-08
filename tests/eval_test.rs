@@ -265,4 +265,10 @@ fn and_or_test() {
     assert_evaluates_to!("(and (= 2 2) (< 2 1))", "#f");
     assert_evaluates_to!("(and 1 2 'c '(f g))", "(f g)");
     assert_evaluates_to!("(and)", "#t");
+
+    assert_evaluates_to!("(or (= 2 2) (> 2 1))", "#t");
+    assert_evaluates_to!("(or (= 2 2) (< 2 1))", "#t");
+    assert_evaluates_to!("(or #f #t #t)", "#t");
+    assert_evaluates_to!("(or '(b c) (/ 3 0))", "(b c)");
+    assert_evaluates_to!("(or)", "#f");
 }

@@ -24,6 +24,7 @@ enum_from_primitive! {
         Set = 7, // `set!`
         Quote = 8, // `quote`
         And = 9, // `and`
+        Or = 10, // `or`
     }
 }
 
@@ -58,7 +59,8 @@ impl Syntax {
             &Syntax::Define => "define",
             &Syntax::Set => "set!",
             &Syntax::Quote => "quote",
-            &Syntax::And => "and"
+            &Syntax::And => "and",
+            &Syntax::Or => "or"
         }
     }
 }
@@ -170,7 +172,9 @@ impl<'g> Compiler<'g> {
                             Syntax::Quote =>
                                 self.compile_quote(ctx, &c_args),
                             Syntax::And =>
-                                self.compile_and(env, ctx, &c_args)
+                                self.compile_and(env, ctx, &c_args),
+                            Syntax::Or =>
+                                self.compile_or(env, ctx, &c_args)
                         };
                     },
                     _ => return Err(e)
@@ -652,6 +656,38 @@ impl<'g> Compiler<'g> {
         let jump_pc = ctx.code.len();
         for pc in placeholders.into_iter() {
             ctx.code[pc] = Inst::JumpIfFalse(jump_pc);
+        }
+
+        Ok(())
+    }
+
+    fn compile_or(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut placeholders = Vec::new();
+        let exprs: Vec<RDatum> = match preds.iter().collect() {
+            Ok(v) => v,
+            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        };
+        if exprs.is_empty() {
+            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Bool(false))));
+            return Ok(());
+        }
+
+        try!(self.compile_expr(env, ctx, &exprs[0]));
+
+        for expr in exprs[1..].iter() {
+            placeholders.push(ctx.code.len());
+            // placeholder for JumpIfNotFalse
+            ctx.code.push(Inst::Nop);
+            // Drop the value if the test fails
+            ctx.code.push(Inst::DropArg);
+            try!(self.compile_expr(env, ctx, &expr));
+        }
+
+        let jump_pc = ctx.code.len();
+        for pc in placeholders.into_iter() {
+            ctx.code[pc] = Inst::JumpIfNotFalse(jump_pc);
         }
 
         Ok(())

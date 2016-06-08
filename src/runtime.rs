@@ -229,6 +229,8 @@ pub enum Inst {
     Jump(usize),
     /// jump to the given pc if current stack top is `#f`
     JumpIfFalse(usize),
+    /// jump to the given pc if current stack top is not `#f`
+    JumpIfNotFalse(usize),
 }
 
 /// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
@@ -537,6 +539,18 @@ impl Runtime {
                 },
                 Some(_) => {
                     self.frame.pc += 1;
+                    true
+                },
+                None =>
+                    panic!("Stack empty!")
+            },
+            Inst::JumpIfNotFalse(pc) => match self.arg_stack.last() {
+                Some(&Datum::Bool(false)) => {
+                    self.frame.pc += 1;
+                    true
+                },
+                Some(_) => {
+                    self.frame.pc = pc;
                     true
                 },
                 None =>
