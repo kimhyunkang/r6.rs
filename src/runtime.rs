@@ -13,11 +13,35 @@ use primitive::PrimFunc;
 
 use log::LogLevel;
 
-/// RuntimeData contains runtime values not representable in standard syntax
 #[derive(Clone)]
+pub struct PrimFuncPtr {
+    name: &'static str,
+    function: &'static (PrimFunc + 'static)
+}
+
+impl PrimFuncPtr {
+    pub fn new(name: &'static str, function: &'static (PrimFunc + 'static)) -> PrimFuncPtr {
+        PrimFuncPtr { name: name, function: function }
+    }
+}
+
+impl PartialEq for PrimFuncPtr {
+    fn eq(&self, other: &PrimFuncPtr) -> bool {
+        (self.function as *const PrimFunc) == (other.function as *const PrimFunc)
+    }
+}
+
+impl fmt::Debug for PrimFuncPtr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "<primitive function {}", self.name)
+    }
+}
+
+/// RuntimeData contains runtime values not representable in standard syntax
+#[derive(Clone, PartialEq)]
 pub enum RuntimeData {
     /// Primitive Function
-    PrimFunc(&'static str, &'static (PrimFunc + 'static)),
+    PrimFunc(PrimFuncPtr),
 
     /// Compiled Closure
     Closure(Closure),
@@ -73,7 +97,7 @@ impl DatumType {
             &Datum::Num(_) => DatumType::Num,
             &Datum::Nil => DatumType::Null,
             &Datum::Cons(_) => DatumType::Pair,
-            &Datum::Ext(RuntimeData::PrimFunc(_, _)) => DatumType::Callable,
+            &Datum::Ext(RuntimeData::PrimFunc(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Undefined) => DatumType::Undefined
         }
@@ -83,37 +107,12 @@ impl DatumType {
 impl fmt::Debug for RuntimeData {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            &RuntimeData::PrimFunc(name, _) =>
-                write!(f, "<primitive: {:?}>", name),
+            &RuntimeData::PrimFunc(ref func_ptr) =>
+                write!(f, "<primitive: {:?}>", func_ptr.name),
             &RuntimeData::Closure(ref closure) =>
                 write!(f, "<procedure {:?}: {:?}>", closure.static_link, closure.code),
             &RuntimeData::Undefined =>
                 write!(f, "<undefined>")
-        }
-    }
-}
-
-impl PartialEq for RuntimeData {
-    fn eq(&self, other: &RuntimeData) -> bool {
-        match self {
-            &RuntimeData::PrimFunc(ref n0, _) =>
-                if let &RuntimeData::PrimFunc(ref n1, _) = other {
-                    *n0 == *n1
-                } else {
-                    false
-                },
-            &RuntimeData::Closure(ref c0) =>
-                if let &RuntimeData::Closure(ref c1) = other {
-                    *c0 == *c1
-                } else {
-                    false
-                },
-            &RuntimeData::Undefined =>
-                if let &RuntimeData::Undefined = other {
-                    true
-                } else {
-                    false
-                },
         }
     }
 }
@@ -241,8 +240,60 @@ pub enum MemRef {
     RetVal,
     Arg(usize),
     UpValue(usize, usize),
-    Const(RDatum),
-    Closure(Rc<Vec<Inst>>, usize),
+    Const(SimpleDatum),
+    Undefined,
+    PrimFunc(PrimFuncPtr),
+    Closure(Rc<Vec<Inst>>, usize)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SimpleDatum {
+    Sym(Cow<'static, str>),
+    Bool(bool),
+    Char(char),
+    String(String),
+    Bytes(Rc<RefCell<Vec<u8>>>),
+    Num(Number),
+    Nil
+}
+
+impl DatumCast for SimpleDatum {
+    fn unwrap(datum: RDatum) -> Result<SimpleDatum, RuntimeError> {
+        match SimpleDatum::from_datum(datum) {
+            Some(v) => Ok(v),
+            None => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: "Trying to cast non-simple datum to const type".to_string()
+            })
+        }
+    }
+
+    fn wrap(self) -> RDatum {
+        match self {
+            SimpleDatum::Sym(s) => Datum::Sym(s),
+            SimpleDatum::Bool(b) => Datum::Bool(b),
+            SimpleDatum::Char(c) => Datum::Char(c),
+            SimpleDatum::String(s) => Datum::String(s),
+            SimpleDatum::Bytes(v) => Datum::Bytes(v),
+            SimpleDatum::Num(n) => Datum::Num(n),
+            SimpleDatum::Nil => Datum::Nil
+        }
+    }
+}
+
+impl SimpleDatum {
+    pub fn from_datum<T>(datum: Datum<T>) -> Option<SimpleDatum> {
+        match datum {
+            Datum::Sym(s) => Some(SimpleDatum::Sym(s)),
+            Datum::Bool(b) => Some(SimpleDatum::Bool(b)),
+            Datum::Char(c) => Some(SimpleDatum::Char(c)),
+            Datum::String(s) => Some(SimpleDatum::String(s)),
+            Datum::Bytes(v) => Some(SimpleDatum::Bytes(v)),
+            Datum::Num(n) => Some(SimpleDatum::Num(n)),
+            Datum::Nil => Some(SimpleDatum::Nil),
+            _ => None
+        }
+    }
 }
 
 /// The instruction of the bytecode
@@ -425,7 +476,9 @@ impl Runtime {
             MemRef::RetVal => self.ret_val.clone(),
             MemRef::Arg(idx) => self.get_stack_val(idx),
             MemRef::UpValue(i, j) => self.get_upvalue(i, j),
-            MemRef::Const(val) => val.clone(),
+            MemRef::Const(val) => DatumCast::wrap(val),
+            MemRef::Undefined => Datum::Ext(RuntimeData::Undefined),
+            MemRef::PrimFunc(ptr) => Datum::Ext(RuntimeData::PrimFunc(ptr)),
             MemRef::Closure(code, _) => Datum::Ext(RuntimeData::Closure(
                 Closure {
                     code: code.clone(),
@@ -445,6 +498,8 @@ impl Runtime {
             },
             MemRef::UpValue(i, j) => self.set_upvalue(i, j, val),
             MemRef::Const(_) => panic!("Cannot write to read-only memory"),
+            MemRef::Undefined => panic!("Cannot write to undefined memory address"),
+            MemRef::PrimFunc(_) => panic!("Cannot write to code area"),
             MemRef::Closure(_, _) => panic!("Cannot write to instruction memory")
         }
     }
@@ -514,15 +569,15 @@ impl Runtime {
                 let top = self.arg_stack.len();
                 let datum = self.arg_stack[top - n - 1].clone();
                 match datum {
-                    Datum::Ext(RuntimeData::PrimFunc(fname, f)) => {
+                    Datum::Ext(RuntimeData::PrimFunc(fptr)) => {
                         let args = if n == 0 {
                             Vec::new()
                         } else {
                             self.arg_stack.split_off(top-n)
                         };
-                        let res = match f.call(args) {
+                        let res = match fptr.function.call(args) {
                             Ok(x) => x,
-                            Err(e) => panic!("Error in primitive function <{}>: {:?}", fname, e)
+                            Err(e) => panic!("Error in primitive function <{}>: {:?}", fptr.name, e)
                         };
                         match self.arg_stack.pop() {
                             None => panic!("arg_stack size mismatch"),
@@ -658,7 +713,7 @@ impl Runtime {
 #[cfg(test)]
 mod test {
     use std::rc::Rc;
-    use super::{Inst, MemRef, Runtime, RuntimeData};
+    use super::{Inst, MemRef, PrimFuncPtr, Runtime, SimpleDatum};
     use datum::Datum;
     use primitive::PRIM_ADD;
     use number::Number;
@@ -666,9 +721,9 @@ mod test {
     #[test]
     fn test_runtime() {
         let code = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Return
         ];
@@ -680,11 +735,11 @@ mod test {
     #[test]
     fn test_nested_call() {
         let code = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Call(2),
             Inst::Return
@@ -697,15 +752,15 @@ mod test {
     #[test]
     fn test_lambda() {
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Arg(0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Return
         ];
         let code = vec![
             Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
             Inst::Call(1),
             Inst::Return
         ];
@@ -717,7 +772,7 @@ mod test {
     #[test]
     fn test_closure() {
         let f = vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::Call(2),
@@ -734,9 +789,9 @@ mod test {
         //   ) 2) 3)
         let code = vec![
             Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(1),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
             Inst::Call(1),
             Inst::Return
         ];

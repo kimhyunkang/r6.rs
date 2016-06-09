@@ -7,8 +7,8 @@ use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
-use runtime::{Inst, MemRef, RDatum, RuntimeData};
-use primitive::PrimFunc;
+use primitive::PRIM_CONS;
+use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum};
 
 /// Syntax variables
 enum_from_primitive! {
@@ -71,7 +71,7 @@ pub enum EnvVar {
     Syntax(Syntax),
 
     /// Primitive functions
-    PrimFunc(&'static str, &'static (PrimFunc + 'static)),
+    PrimFunc(PrimFuncPtr),
 
     /// Compiled library functions
     Procedure(Rc<Vec<Inst>>)
@@ -279,7 +279,7 @@ impl<'g> Compiler<'g> {
         let mut mod_env = env.clone();
         for var in def_vars.iter() {
             mod_env.push_arg(var.clone());
-            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+            ctx.code.push(Inst::PushArg(MemRef::Undefined));
         }
 
         for (i, def) in defs.iter().enumerate() {
@@ -355,7 +355,7 @@ impl<'g> Compiler<'g> {
 
                 try!(self.compile_expr(env, ctx, else_expr));
             } else {
-                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+                ctx.code.push(Inst::PushArg(MemRef::Undefined));
             }
 
             // Currently code[ctx.code.len()] is out of range, but Return will be pushed at the
@@ -447,7 +447,7 @@ impl<'g> Compiler<'g> {
         ctx.code.push(Inst::PushFrame(0));
 
         for _ in 0..exprs.len() {
-            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+            ctx.code.push(Inst::PushArg(MemRef::Undefined));
         }
 
         let new_env = env.update_arg(syms);
@@ -576,12 +576,8 @@ impl<'g> Compiler<'g> {
             Some(data) => match data {
                 &EnvVar::Syntax(ref s) =>
                     Err(CompileError { kind: CompileErrorKind::SyntaxReference(s.clone()) }),
-                &EnvVar::PrimFunc(ref name, func) => {
-                    Ok(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc(
-                                        name.clone(),
-                                        func
-                    ))))
-                },
+                &EnvVar::PrimFunc(ref fptr) =>
+                    Ok(MemRef::PrimFunc(fptr.clone())),
                 &EnvVar::Procedure(ref code) => {
                     Ok(MemRef::Closure(code.clone(), 0))
                 }
@@ -603,7 +599,7 @@ impl<'g> Compiler<'g> {
                 try!(self.compile_expr(env, ctx, expr));
                 let ptr = try!(self.compile_ref(env, ctx, sym));
                 ctx.code.push(Inst::PopArg(ptr));
-                ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::Undefined))));
+                ctx.code.push(Inst::PushArg(MemRef::Undefined));
                 Ok(())
             },
             _ =>
@@ -618,15 +614,34 @@ impl<'g> Compiler<'g> {
         match iter.next() {
             Some(Ok(v)) => {
                 match iter.next() {
-                    None => {
-                        ctx.code.push(Inst::PushArg(MemRef::Const(v.clone())));
-                        Ok(())
-                    },
-                    Some(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                    None => self.rec_quote(ctx, v),
+                    Some(_) => Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 }
             },
-            _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+            _ => Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
+    }
+
+    fn rec_quote(&self, ctx: &mut CodeGenContext, v: RDatum) -> Result<(), CompileError> {
+        match v {
+            Datum::Cons(ref ptr) => {
+                let pair = ptr.borrow();
+                println!("pair.0: {:?}", pair.0);
+                println!("pair.1: {:?}", pair.1);
+                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                try!(self.rec_quote(ctx, pair.0.clone()));
+                try!(self.rec_quote(ctx, pair.1.clone()));
+                ctx.code.push(Inst::Call(2));
+            },
+            _ => match SimpleDatum::from_datum(v) {
+                Some(c) => {
+                    ctx.code.push(Inst::PushArg(MemRef::Const(c)));
+                },
+                None => return Err(CompileError { kind: CompileErrorKind::NotImplemented })
+            }
+        }
+
+        Ok(())
     }
 
     fn compile_and(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
@@ -638,7 +653,7 @@ impl<'g> Compiler<'g> {
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
         if exprs.is_empty() {
-            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Bool(true))));
+            ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(true))));
             return Ok(());
         }
 
@@ -670,7 +685,7 @@ impl<'g> Compiler<'g> {
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
         if exprs.is_empty() {
-            ctx.code.push(Inst::PushArg(MemRef::Const(Datum::Bool(false))));
+            ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(false))));
             return Ok(());
         }
 
@@ -705,9 +720,14 @@ impl<'g> Compiler<'g> {
                 ctx.code.push(Inst::PushArg(ptr));
                 return Ok(());
             },
-            _ => {
-                ctx.code.push(Inst::PushArg(MemRef::Const(datum.clone())));
-                Ok(())
+            _ => match SimpleDatum::from_datum(datum.clone()) {
+                Some(c) => {
+                    ctx.code.push(Inst::PushArg(MemRef::Const(c)));
+                    Ok(())
+                },
+                None => {
+                    Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                }
             }
         }
     }
@@ -724,9 +744,9 @@ mod test {
     use std::borrow::Cow;
     use std::rc::Rc;
     use datum::Datum;
-    use runtime::{Inst, MemRef, RuntimeData};
+    use runtime::{Inst, MemRef, PrimFuncPtr, SimpleDatum};
     use base::libbase;
-    use primitive::PRIM_ADD;
+    use primitive::{PRIM_ADD, PRIM_CONS};
     use number::Number;
     use super::Compiler;
 
@@ -735,9 +755,9 @@ mod test {
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1 ,0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2 ,0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1 ,0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2 ,0)))),
             Inst::Call(2),
             Inst::Return
         ]);
@@ -750,11 +770,11 @@ mod test {
         let env = libbase();
         let compiler = Compiler::new(&env);
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Call(2),
             Inst::Return
@@ -770,15 +790,15 @@ mod test {
 
         let f = vec![
             Inst::SetArgSize(1),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Arg(0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
             Inst::Return
         ];
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
             Inst::Call(1),
             Inst::Return
         ]);
@@ -796,7 +816,7 @@ mod test {
 
         let f = vec![
             Inst::SetArgSize(1),
-            Inst::PushArg(MemRef::Const(Datum::Ext(RuntimeData::PrimFunc("+", &PRIM_ADD)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::Call(2),
@@ -809,9 +829,9 @@ mod test {
         ];
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(1),
-            Inst::PushArg(MemRef::Const(Datum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
             Inst::Call(1),
             Inst::Return
         ]);
@@ -828,6 +848,31 @@ mod test {
                 num!(2)],
             num!(3)
         ]);
+        assert_eq!(expected, code)
+    }
+
+    #[test]
+    fn test_quote() {
+        let env = libbase();
+        let compiler = Compiler::new(&env);
+
+        let expected = Ok(vec![
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
+            Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Nil)),
+            Inst::Call(2),
+            Inst::Call(2),
+            Inst::Call(2),
+            Inst::Call(2),
+            Inst::Return
+        ]);
+
+        let code = compiler.compile(&list![sym!("quote"), list![num!(1), list![num!(2), num!(3)]]]);
         assert_eq!(expected, code)
     }
 }
