@@ -7,7 +7,7 @@ use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
-use primitive::{PRIM_CONS, PRIM_VECTOR};
+use primitive::{PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
 use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum};
 
 /// Syntax variables
@@ -23,8 +23,10 @@ enum_from_primitive! {
         Define = 6, // `define`
         Set = 7, // `set!`
         Quote = 8, // `quote`
-        And = 9, // `and`
-        Or = 10, // `or`
+        Quasiquote = 9, // `quasiquote`
+        Unquote = 10, // `unquote`
+        And = 11, // `and`
+        Or = 12, // `or`
     }
 }
 
@@ -59,6 +61,8 @@ impl Syntax {
             &Syntax::Define => "define",
             &Syntax::Set => "set!",
             &Syntax::Quote => "quote",
+            &Syntax::Quasiquote => "quasiquote",
+            &Syntax::Unquote => "unquote",
             &Syntax::And => "and",
             &Syntax::Or => "or"
         }
@@ -171,6 +175,12 @@ impl<'g> Compiler<'g> {
                                 self.compile_set(env, ctx, &c_args),
                             Syntax::Quote =>
                                 self.compile_quote(ctx, &c_args),
+                            Syntax::Quasiquote =>
+                                self.compile_quasiquote(env, ctx, &c_args),
+                            Syntax::Unquote =>
+                                return Err(CompileError {
+                                    kind: CompileErrorKind::UnquoteContext
+                                }),
                             Syntax::And =>
                                 self.compile_and(env, ctx, &c_args),
                             Syntax::Or =>
@@ -199,6 +209,18 @@ impl<'g> Compiler<'g> {
         Ok(())
     }
 
+    fn get_syntax_name(&self, env: &LexicalContext, item: &RDatum) -> Option<Syntax> {
+        if let &Datum::Sym(ref sym) = item {
+            if let Err(e) = self.find_var(env, sym) {
+                if let CompileErrorKind::SyntaxReference(syntax) = e.kind {
+                    return Some(syntax);
+                }
+            }
+        }
+
+        return None;
+    }
+
     fn parse_define(&self, env: &LexicalContext, def: &RDatum)
             -> Result<Option<(Cow<'static, str>, Def)>, CompileError>
     {
@@ -211,37 +233,30 @@ impl<'g> Compiler<'g> {
             return Ok(None);
         }
 
-        if let Datum::Sym(ref sym) = list[0] {
-            if let Err(e) = self.find_var(env, sym) {
-                if let CompileErrorKind::SyntaxReference(Syntax::Define) = e.kind {
-                    match &list[1..] {
-                        [Datum::Sym(ref v)] =>
-                            return Ok(Some((v.clone(), Def::Void))),
-                        [Datum::Sym(ref v), ref e] =>
-                            return Ok(Some((v.clone(), Def::Expr(e.clone())))),
-                        [Datum::Cons(ref form), ..] => {
-                            let pair = form.borrow();
-                            if let Datum::Sym(ref v) = pair.0 {
-                                return Ok(Some((
-                                        v.clone(),
-                                        Def::Proc(pair.1.clone(), list[2..].to_vec())
-                                )));
-                            } else {
-                                return Err(CompileError {
-                                    kind: CompileErrorKind::BadSyntax
-                                })
-                            }
-                        },
-                        _ =>
-                            return Err(CompileError {
-                                kind: CompileErrorKind::BadSyntax
-                            })
+        if let Some(Syntax::Define) = self.get_syntax_name(env, &list[0]) {
+            match &list[1..] {
+                [Datum::Sym(ref v)] =>
+                    Ok(Some((v.clone(), Def::Void))),
+                [Datum::Sym(ref v), ref e] =>
+                    Ok(Some((v.clone(), Def::Expr(e.clone())))),
+                [Datum::Cons(ref form), ..] => {
+                    let pair = form.borrow();
+                    if let Datum::Sym(ref v) = pair.0 {
+                        Ok(Some((
+                            v.clone(),
+                            Def::Proc(pair.1.clone(), list[2..].to_vec())
+                        )))
+                    } else {
+                        Err(CompileError {
+                            kind: CompileErrorKind::BadSyntax
+                        })
                     }
-                }
+                },
+                _ => Err(CompileError { kind: CompileErrorKind::BadSyntax })
             }
+        } else {
+            Ok(None)
         }
-
-        Ok(None)
     }
 
     fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &RDatum)
@@ -644,6 +659,89 @@ impl<'g> Compiler<'g> {
                     ctx.code.push(Inst::PushArg(MemRef::Const(c)));
                 },
                 None => return Err(CompileError { kind: CompileErrorKind::NotImplemented })
+            }
+        }
+
+        Ok(())
+    }
+
+    fn compile_quasiquote(&self, env: &LexicalContext, ctx: &mut CodeGenContext, items: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut iter = items.iter();
+        match iter.next() {
+            Some(Ok(v)) => {
+                match iter.next() {
+                    None => self.rec_quasiquote(0, env, ctx, &v),
+                    Some(_) => Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                }
+            },
+            _ => Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        }
+    }
+
+    fn get_syntax1(&self, v: &RDatum) -> Option<(Syntax, RDatum)> {
+        let res: Result<Vec<RDatum>, ()> = v.iter().collect();
+        let list = match res {
+            Ok(list) => list,
+            Err(_) => return None
+        };
+
+        if let [Datum::Sym(ref ptr), ref arg] = list.as_ref() {
+            match ptr.as_ref() {
+                "quasiquote" => Some((Syntax::Quasiquote, arg.clone())),
+                "unquote" => Some((Syntax::Unquote, arg.clone())),
+                _ => None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn rec_quasiquote(&self, qq_level: usize, env: &LexicalContext, ctx: &mut CodeGenContext, v: &RDatum)
+            -> Result<(), CompileError>
+    {
+        match self.get_syntax1(v) {
+            Some((Syntax::Quasiquote, arg)) => {
+                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST))));
+                ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("quasiquote")))));
+                try!(self.rec_quasiquote(qq_level+1, env, ctx, &arg));
+                ctx.code.push(Inst::Call(2));
+            },
+            Some((Syntax::Unquote, arg)) => {
+                if qq_level == 0 {
+                    try!(self.compile_expr(env, ctx, &arg));
+                } else {
+                    ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST))));
+                    ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("unquote")))));
+                    try!(self.rec_quasiquote(qq_level-1, env, ctx, &arg));
+                    ctx.code.push(Inst::Call(2));
+                }
+            },
+            _ => {
+                match v {
+                    &Datum::Cons(ref ptr) => {
+                        let pair = ptr.borrow();
+                        ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                        try!(self.rec_quasiquote(qq_level, env, ctx, &pair.0));
+                        try!(self.rec_quasiquote(qq_level, env, ctx, &pair.1));
+                        ctx.code.push(Inst::Call(2));
+                    },
+                    &Datum::Vector(ref ptr) => {
+                        let v = ptr.borrow();
+                        ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
+                        for e in v.iter() {
+                            try!(self.rec_quasiquote(qq_level, env, ctx, e));
+                        }
+                        ctx.code.push(Inst::Call(v.len()));
+                    },
+                    _ => match SimpleDatum::from_datum(v.clone()) {
+                        Some(c) => {
+                            ctx.code.push(Inst::PushArg(MemRef::Const(c)));
+                        },
+                        None => return Err(CompileError { kind: CompileErrorKind::NotImplemented })
+                    }
+                }
             }
         }
 

@@ -22,6 +22,10 @@ pub enum Token {
     Dot,
     /// `'`
     Quote,
+    /// `\``
+    QuasiQuote,
+    /// `,`
+    Comma,
     Identifier(Cow<'static, str>),
     /// `#t`
     True,
@@ -44,6 +48,8 @@ impl fmt::Debug for Token {
             Token::CloseParen => write!(f, "CloseParen"),
             Token::Dot => write!(f, "Dot"),
             Token::Quote => write!(f, "Quote"),
+            Token::QuasiQuote => write!(f, "QuasiQuote"),
+            Token::Comma => write!(f, "Comma"),
             Token::Identifier(ref name) => write!(f, "Identifier({})", name),
             Token::True => write!(f, "#t"),
             Token::False => write!(f, "#f"),
@@ -176,6 +182,10 @@ impl <R: Read + Sized> Lexer<R> {
             Ok(wrap(line, col, Token::Dot))
         } else if c == '\'' {
             Ok(wrap(line, col, Token::Quote))
+        } else if c == '`' {
+            Ok(wrap(line, col, Token::QuasiQuote))
+        } else if c == ',' {
+            Ok(wrap(line, col, Token::Comma))
         } else if c == '#' {
             let c0 = try_consume!(self);
             match c0 {

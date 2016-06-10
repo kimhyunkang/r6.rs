@@ -5,6 +5,7 @@ use std::fmt;
 use std::borrow::Cow;
 
 use number::Number;
+use parser::SPECIAL_TOKEN_MAP;
 
 /// Datum is the primary data type of Scheme
 /// Datum is a generic type here to make parser somewhat independent from runtime
@@ -102,13 +103,14 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Cons(ref ptr) => {
                 let pair = ptr.borrow();
                 if let Datum::Sym(ref s) = pair.0 {
-                    if *s == Cow::Borrowed("quote") {
-                        if let Datum::Cons(ref tail) = pair.1 {
+                    match SPECIAL_TOKEN_MAP.get(s.as_ref()) {
+                        Some(ch) => if let Datum::Cons(ref tail) = pair.1 {
                             let tail_ptr = tail.borrow();
                             if let Datum::Nil = tail_ptr.1 {
-                                return write!(f, "'{:?}", tail_ptr.0);
+                                return write!(f, "{}{:?}", ch, tail_ptr.0);
                             }
-                        }
+                        },
+                        _ => ()
                     }
                 }
                 try!(write!(f, "({:?}", pair.0));
@@ -205,6 +207,8 @@ mod test {
     fn test_quote_abbrev() {
         compare_fmt("'a", list!(sym!("quote"), sym!("a")));
         compare_fmt("'(a b)", list!(sym!("quote"), list!(sym!("a"), sym!("b"))));
+        compare_fmt("`a", list!(sym!("quasiquote"), sym!("a")));
+        compare_fmt(",a", list!(sym!("unquote"), sym!("a")));
     }
 
     #[test]

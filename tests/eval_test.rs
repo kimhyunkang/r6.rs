@@ -168,6 +168,13 @@ fn quote_abbrev_test() {
 }
 
 #[test]
+fn quasiquote_test() {
+    assert_evaluates_to!("`(0 1 2)", "(0 1 2)");
+    assert_evaluates_to!("`(0 ,(+ 1 2) 4)", "(0 3 4)");
+    assert_evaluates_to!("`(1 `,(+ 1 ,(+ 2 3)) 4)", "(1 `,(+ 1 5) 4)");
+}
+
+#[test]
 fn typecheck_test() {
     assert_evaluates_to!("(boolean? #t)", "#t");
     assert_evaluates_to!("(boolean? #f)", "#t");

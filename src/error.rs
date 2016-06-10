@@ -95,6 +95,8 @@ pub enum CompileErrorKind {
     SyntaxReference(Syntax),
     /// `define` is not allowed in this context
     DefineContext,
+    /// `unquote` or its variants are not allowed in this context
+    UnquoteContext,
     /// Trying to refer an unbound variable
     UnboundVariable
 }
