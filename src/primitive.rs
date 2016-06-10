@@ -238,7 +238,7 @@ fn cdr(arg: (RDatum, RDatum)) -> RDatum {
 pub static PRIM_CDR: F1<(RDatum, RDatum), RDatum> = F1 { f1: cdr };
 
 /// `(zero? x)`
-pub static PRIM_ZERO: R1<Number, bool> = R1 { r1: Zero::is_zero };
+pub static PRIM_IS_ZERO: R1<Number, bool> = R1 { r1: Zero::is_zero };
 
 fn is_real(arg: &RDatum) -> bool {
     match arg {
@@ -248,7 +248,7 @@ fn is_real(arg: &RDatum) -> bool {
 }
 
 /// `(real? x)`
-pub static PRIM_REAL: R1<RDatum, bool> = R1 { r1: is_real };
+pub static PRIM_IS_REAL: R1<RDatum, bool> = R1 { r1: is_real };
 
 fn is_rational(arg: &RDatum) -> bool {
     match arg {
@@ -259,7 +259,7 @@ fn is_rational(arg: &RDatum) -> bool {
 }
 
 /// `(rational? x)`
-pub static PRIM_RATIONAL: R1<RDatum, bool> = R1 { r1: is_rational };
+pub static PRIM_IS_RATIONAL: R1<RDatum, bool> = R1 { r1: is_rational };
 
 fn is_integer(arg: &RDatum) -> bool {
     match arg {
@@ -269,7 +269,7 @@ fn is_integer(arg: &RDatum) -> bool {
 }
 
 /// `(integer? x)`
-pub static PRIM_INTEGER: R1<RDatum, bool> = R1 { r1: is_integer };
+pub static PRIM_IS_INTEGER: R1<RDatum, bool> = R1 { r1: is_integer };
 
 macro_rules! impl_num_comp {
     ($type_name:ident, $static_name:ident, $func_name:ident, $op:ident) => (
@@ -307,15 +307,15 @@ macro_rules! impl_typecheck {
     )
 }
 
-impl_typecheck!(PRIM_BOOLEAN, is_boolean, Bool);
-impl_typecheck!(PRIM_PAIR, is_pair, Pair);
-impl_typecheck!(PRIM_SYMBOL, is_symbol, Sym);
-impl_typecheck!(PRIM_NUMBER, is_number, Num);
-impl_typecheck!(PRIM_CHAR, is_char, Char);
-impl_typecheck!(PRIM_STRING, is_string, String);
-impl_typecheck!(PRIM_VECTOR, is_vector, Vector);
-impl_typecheck!(PRIM_PROCEDURE, is_procedure, Callable);
-impl_typecheck!(PRIM_NULL, is_null, Null);
+impl_typecheck!(PRIM_IS_BOOLEAN, is_boolean, Bool);
+impl_typecheck!(PRIM_IS_PAIR, is_pair, Pair);
+impl_typecheck!(PRIM_IS_SYMBOL, is_symbol, Sym);
+impl_typecheck!(PRIM_IS_NUMBER, is_number, Num);
+impl_typecheck!(PRIM_IS_CHAR, is_char, Char);
+impl_typecheck!(PRIM_IS_STRING, is_string, String);
+impl_typecheck!(PRIM_IS_VECTOR, is_vector, Vector);
+impl_typecheck!(PRIM_IS_PROCEDURE, is_procedure, Callable);
+impl_typecheck!(PRIM_IS_NULL, is_null, Null);
 
 pub static PRIM_NOT: R1<RDatum, bool> = R1 { r1: not };
 
@@ -326,7 +326,7 @@ fn not(b: &RDatum) -> bool {
     }
 }
 
-pub static PRIM_SYMBOL_STRING: R1<Cow<'static, str>, String> = R1 { r1: symbol_string };
+pub static PRIM_SYMBOL_TO_STRING: R1<Cow<'static, str>, String> = R1 { r1: symbol_string };
 
 fn symbol_string(sym: &Cow<'static, str>) -> String {
     sym.to_string()
@@ -340,30 +340,30 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("*", &PRIM_MUL),
         ("/", &PRIM_DIV),
         ("list", &PRIM_LIST),
-        ("boolean?", &PRIM_BOOLEAN),
-        ("pair?", &PRIM_PAIR),
-        ("symbol?", &PRIM_SYMBOL),
-        ("number?", &PRIM_NUMBER),
-        ("char?", &PRIM_CHAR),
-        ("string?", &PRIM_STRING),
-        ("vector?", &PRIM_VECTOR),
-        ("procedure?", &PRIM_PROCEDURE),
-        ("null?", &PRIM_NULL),
+        ("boolean?", &PRIM_IS_BOOLEAN),
+        ("pair?", &PRIM_IS_PAIR),
+        ("symbol?", &PRIM_IS_SYMBOL),
+        ("number?", &PRIM_IS_NUMBER),
+        ("char?", &PRIM_IS_CHAR),
+        ("string?", &PRIM_IS_STRING),
+        ("vector?", &PRIM_IS_VECTOR),
+        ("procedure?", &PRIM_IS_PROCEDURE),
+        ("null?", &PRIM_IS_NULL),
         ("cons", &PRIM_CONS),
         ("car", &PRIM_CAR),
         ("cdr", &PRIM_CDR),
-        ("zero?", &PRIM_ZERO),
+        ("zero?", &PRIM_IS_ZERO),
         // complex? is synonym to number?
-        ("complex?", &PRIM_NUMBER),
-        ("real?", &PRIM_REAL),
-        ("rational?", &PRIM_RATIONAL),
-        ("integer?", &PRIM_INTEGER),
+        ("complex?", &PRIM_IS_NUMBER),
+        ("real?", &PRIM_IS_REAL),
+        ("rational?", &PRIM_IS_RATIONAL),
+        ("integer?", &PRIM_IS_INTEGER),
         ("not", &PRIM_NOT),
         ("=", &PRIM_NUM_EQ),
         ("<", &PRIM_LT),
         (">", &PRIM_GT),
         ("<=", &PRIM_LE),
         (">=", &PRIM_GE),
-        ("symbol->string", &PRIM_SYMBOL_STRING)
+        ("symbol->string", &PRIM_SYMBOL_TO_STRING)
     ]
 }
