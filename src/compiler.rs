@@ -626,8 +626,6 @@ impl<'g> Compiler<'g> {
         match v {
             Datum::Cons(ref ptr) => {
                 let pair = ptr.borrow();
-                println!("pair.0: {:?}", pair.0);
-                println!("pair.1: {:?}", pair.1);
                 ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
                 try!(self.rec_quote(ctx, pair.0.clone()));
                 try!(self.rec_quote(ctx, pair.1.clone()));
