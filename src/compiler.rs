@@ -7,7 +7,7 @@ use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
-use primitive::{PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
+use primitive::{PRIM_APPEND, PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
 use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum};
 
 /// Syntax variables
@@ -25,8 +25,9 @@ enum_from_primitive! {
         Quote = 8, // `quote`
         Quasiquote = 9, // `quasiquote`
         Unquote = 10, // `unquote`
-        And = 11, // `and`
-        Or = 12, // `or`
+        UnquoteSplicing = 11, // `unquote`
+        And = 12, // `and`
+        Or = 13 // `or`
     }
 }
 
@@ -63,6 +64,7 @@ impl Syntax {
             &Syntax::Quote => "quote",
             &Syntax::Quasiquote => "quasiquote",
             &Syntax::Unquote => "unquote",
+            &Syntax::UnquoteSplicing => "unquote-splicing",
             &Syntax::And => "and",
             &Syntax::Or => "or"
         }
@@ -177,7 +179,7 @@ impl<'g> Compiler<'g> {
                                 self.compile_quote(ctx, &c_args),
                             Syntax::Quasiquote =>
                                 self.compile_quasiquote(env, ctx, &c_args),
-                            Syntax::Unquote =>
+                            Syntax::Unquote | Syntax::UnquoteSplicing =>
                                 return Err(CompileError {
                                     kind: CompileErrorKind::UnquoteContext
                                 }),
@@ -691,6 +693,7 @@ impl<'g> Compiler<'g> {
             match ptr.as_ref() {
                 "quasiquote" => Some((Syntax::Quasiquote, arg.clone())),
                 "unquote" => Some((Syntax::Unquote, arg.clone())),
+                "unquote-splicing" => Some((Syntax::UnquoteSplicing, arg.clone())),
                 _ => None
             }
         } else {
@@ -722,8 +725,20 @@ impl<'g> Compiler<'g> {
                 match v {
                     &Datum::Cons(ref ptr) => {
                         let pair = ptr.borrow();
-                        ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
-                        try!(self.rec_quasiquote(qq_level, env, ctx, &pair.0));
+
+                        if let Some((Syntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
+                            if qq_level == 0 {
+                                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))));
+                                try!(self.compile_expr(env, ctx, &arg));
+                            } else {
+                                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                                try!(self.rec_quasiquote(qq_level-1, env, ctx, &pair.0));
+                            }
+                        } else {
+                            ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                            try!(self.rec_quasiquote(qq_level, env, ctx, &pair.0));
+                        }
+
                         try!(self.rec_quasiquote(qq_level, env, ctx, &pair.1));
                         ctx.code.push(Inst::Call(2));
                     },

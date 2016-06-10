@@ -220,6 +220,7 @@ mod test {
         compare_fmt("'(a b)", list!(sym!("quote"), list!(sym!("a"), sym!("b"))));
         compare_fmt("`a", list!(sym!("quasiquote"), sym!("a")));
         compare_fmt(",a", list!(sym!("unquote"), sym!("a")));
+        compare_fmt(",@a", list!(sym!("unquote-splicing"), sym!("a")));
     }
 
     #[test]

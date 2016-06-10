@@ -59,7 +59,8 @@ static CHAR_MAP: phf::Map<&'static str, char> = phf_map! {
 pub static SPECIAL_TOKEN_MAP: phf::Map<&'static str, &'static str> = phf_map! {
     "quote" => "'",
     "quasiquote" => "`",
-    "unquote" => ","
+    "unquote" => ",",
+    "unquote-splicing" => ",@"
 };
 
 fn parse_char(ch: &str) -> Option<char> {
@@ -393,6 +394,9 @@ impl <R: Read + Sized> Parser<R> {
             Token::Comma => self.parse_datum().map(|v|
                 cons(Datum::Sym(Cow::Borrowed("unquote")), cons(v, Datum::Nil))
             ),
+            Token::UnquoteSplicing => self.parse_datum().map(|v|
+                cons(Datum::Sym(Cow::Borrowed("unquote-splicing")), cons(v, Datum::Nil))
+            ),
             _ => Err(unexpected_token(&tok, "Datum or OpenParen".to_string()))
         }
     }
@@ -584,5 +588,10 @@ mod test {
     #[test]
     fn test_parse_unquote() {
         test_parse_ok!(",a", list!(sym!("unquote"), sym!("a")));
+    }
+
+    #[test]
+    fn test_parse_unquote_splicing() {
+        test_parse_ok!(",@a", list!(sym!("unquote-splicing"), sym!("a")));
     }
 }
