@@ -1,6 +1,8 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp::PartialOrd;
 use std::iter::FromIterator;
+use std::rc::Rc;
 
 use num::{Zero, One};
 
@@ -216,6 +218,13 @@ fn list(args: Vec<RDatum>) -> RDatum {
 /// `(list a0 a1 ...)`
 pub static PRIM_LIST:Fold<RDatum> = Fold { fold: list };
 
+/// `(vector a0 a1 ...)`
+pub static PRIM_VECTOR:Fold<RDatum> = Fold { fold: vector };
+
+fn vector(args: Vec<RDatum>) -> RDatum {
+    Datum::Vector(Rc::new(RefCell::new(args)))
+}
+
 fn car(arg: (RDatum, RDatum)) -> RDatum {
     arg.0
 }
@@ -340,6 +349,7 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("*", &PRIM_MUL),
         ("/", &PRIM_DIV),
         ("list", &PRIM_LIST),
+        ("vector", &PRIM_VECTOR),
         ("boolean?", &PRIM_IS_BOOLEAN),
         ("pair?", &PRIM_IS_PAIR),
         ("symbol?", &PRIM_IS_SYMBOL),

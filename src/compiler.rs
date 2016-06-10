@@ -7,7 +7,7 @@ use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
-use primitive::PRIM_CONS;
+use primitive::{PRIM_CONS, PRIM_VECTOR};
 use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum};
 
 /// Syntax variables
@@ -614,7 +614,7 @@ impl<'g> Compiler<'g> {
         match iter.next() {
             Some(Ok(v)) => {
                 match iter.next() {
-                    None => self.rec_quote(ctx, v),
+                    None => self.rec_quote(ctx, &v),
                     Some(_) => Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 }
             },
@@ -622,16 +622,24 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn rec_quote(&self, ctx: &mut CodeGenContext, v: RDatum) -> Result<(), CompileError> {
+    fn rec_quote(&self, ctx: &mut CodeGenContext, v: &RDatum) -> Result<(), CompileError> {
         match v {
-            Datum::Cons(ref ptr) => {
+            &Datum::Cons(ref ptr) => {
                 let pair = ptr.borrow();
                 ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
-                try!(self.rec_quote(ctx, pair.0.clone()));
-                try!(self.rec_quote(ctx, pair.1.clone()));
+                try!(self.rec_quote(ctx, &pair.0));
+                try!(self.rec_quote(ctx, &pair.1));
                 ctx.code.push(Inst::Call(2));
             },
-            _ => match SimpleDatum::from_datum(v) {
+            &Datum::Vector(ref ptr) => {
+                let v = ptr.borrow();
+                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
+                for e in v.iter() {
+                    try!(self.rec_quote(ctx, e));
+                }
+                ctx.code.push(Inst::Call(v.len()));
+            },
+            _ => match SimpleDatum::from_datum(v.clone()) {
                 Some(c) => {
                     ctx.code.push(Inst::PushArg(MemRef::Const(c)));
                 },
@@ -716,7 +724,16 @@ impl<'g> Compiler<'g> {
             &Datum::Sym(ref sym) => {
                 let ptr = try!(self.compile_ref(env, ctx, sym));
                 ctx.code.push(Inst::PushArg(ptr));
-                return Ok(());
+                Ok(())
+            },
+            &Datum::Vector(ref ptr) => {
+                let v = ptr.borrow();
+                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
+                for e in v.iter() {
+                    try!(self.rec_quote(ctx, e));
+                }
+                ctx.code.push(Inst::Call(v.len()));
+                Ok(())
             },
             _ => match SimpleDatum::from_datum(datum.clone()) {
                 Some(c) => {
@@ -865,6 +882,7 @@ mod test {
             Inst::PushArg(MemRef::Const(SimpleDatum::Nil)),
             Inst::Call(2),
             Inst::Call(2),
+            Inst::PushArg(MemRef::Const(SimpleDatum::Nil)),
             Inst::Call(2),
             Inst::Call(2),
             Inst::Return

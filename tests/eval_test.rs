@@ -18,20 +18,20 @@ macro_rules! assert_evaluates_to {
             let mut src_parser = Parser::new($src.as_bytes());
             let sourcecode = match src_parser.parse_datum() {
                 Ok(code) => code,
-                Err(e) => panic!("failed to parse source: {:?}", e)
+                Err(e) => panic!("failed to parse {}: {:?}", $src, e)
             };
 
             let mut res_parser = Parser::new($expected.as_bytes());
             let expected = match res_parser.parse_datum() {
                 Ok(val) => val,
-                Err(e) => panic!("failed to parse result: {:?}", e)
+                Err(e) => panic!("failed to parse {}: {:?}", $expected, e)
             };
 
             let base = libbase();
             let compiler = Compiler::new(&base);
             let bytecode = match compiler.compile(&sourcecode) {
                 Ok(code) => code,
-                Err(e) => panic!("compile failure: {:?}", e)
+                Err(e) => panic!("Failed to compile {:?}: {:?}", &sourcecode, e)
             };
             let mut runtime = Runtime::new(bytecode);
             let result = runtime.run();
@@ -193,6 +193,7 @@ fn typecheck_test() {
     assert_evaluates_to!(r#"(null? (list 1 2))"#, "#f");
 
     assert_evaluates_to!(r#"(vector? #(a b c))"#, "#t");
+    assert_evaluates_to!(r#"(vector? #(a #(b) c))"#, "#t");
     assert_evaluates_to!(r#"(vector? (list 1 2))"#, "#f");
 }
 
