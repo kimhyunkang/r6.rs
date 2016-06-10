@@ -168,6 +168,17 @@ pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
     Datum::Cons(Rc::new(RefCell::new((head, tail))))
 }
 
+pub fn concat<T: Clone>(x: Datum<T>, y: Datum<T>) -> Result<Datum<T>, ()> {
+    match x {
+        Datum::Nil => Ok(y),
+        Datum::Cons(ptr) => {
+            let pair = ptr.borrow();
+            concat(pair.1.clone(), y).map(|new_y| cons(pair.0.clone(), new_y))
+        },
+        _ => Err(())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{Datum, cons};

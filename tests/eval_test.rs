@@ -301,6 +301,15 @@ fn cons_test() {
 }
 
 #[test]
+fn append_test() {
+    assert_evaluates_to!("(append '(x) '(y))", "(x y)");
+    assert_evaluates_to!("(append '(a) '(b c d))", "(a b c d)");
+    assert_evaluates_to!("(append '(a (b)) '((c)))", "(a (b) (c))");
+    assert_evaluates_to!("(append '(a b) '(c . d))", "(a b c . d)");
+    assert_evaluates_to!("(append '() 'a)", "a");
+}
+
+#[test]
 fn symbol_string_test() {
     assert_evaluates_to!("(symbol->string 'a)", "\"a\"");
 }

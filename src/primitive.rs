@@ -9,7 +9,7 @@ use num::{Zero, One};
 use cast::DatumCast;
 use number::Number;
 use real::Real;
-use datum::Datum;
+use datum::{concat, Datum};
 use error::{RuntimeError, RuntimeErrorKind};
 use runtime::{RDatum, DatumType};
 
@@ -19,6 +19,10 @@ pub trait PrimFunc {
 
 pub struct Fold<P> {
     fold: fn(Vec<P>) -> P
+}
+
+pub struct FoldErr<P> {
+    fold: fn(Vec<P>) -> Result<P, RuntimeError>
 }
 
 pub struct Fold1<P> {
@@ -50,6 +54,13 @@ impl<T> PrimFunc for Fold<T> where T: DatumCast {
         let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
         let f = self.fold;
         p_args.map(|v| f(v).wrap())
+    }
+}
+
+impl<T> PrimFunc for FoldErr<T> where T: DatumCast {
+    fn call(&self, args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+        let p_args:Result<Vec<T>, RuntimeError> = args.into_iter().map(DatumCast::unwrap).collect();
+        p_args.and_then(|v| (self.fold)(v)).map(DatumCast::wrap)
     }
 }
 
@@ -342,6 +353,32 @@ fn symbol_string(sym: &Cow<'static, str>) -> String {
     sym.to_string()
 }
 
+pub static PRIM_APPEND: FoldErr<RDatum> = FoldErr { fold: append };
+
+fn append(mut lists: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+    let mut res = match lists.pop() {
+        Some(elem) => elem,
+        None => return Ok(Datum::Nil)
+    };
+
+    loop {
+        match lists.pop() {
+            Some(elem) => {
+                res = match concat(elem, res) {
+                    Ok(list) => list,
+                    Err(()) => return Err(RuntimeError {
+                        kind: RuntimeErrorKind::InvalidType,
+                        desc: "Non-list given to append".to_string()
+                    })
+                };
+            },
+            None => {
+                return Ok(res)
+            }
+        }
+    }
+}
+
 /// Lists all primitive functions with its name
 pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
     vec![
@@ -375,6 +412,7 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         (">", &PRIM_GT),
         ("<=", &PRIM_LE),
         (">=", &PRIM_GE),
-        ("symbol->string", &PRIM_SYMBOL_TO_STRING)
+        ("symbol->string", &PRIM_SYMBOL_TO_STRING),
+        ("append", &PRIM_APPEND)
     ]
 }
