@@ -63,3 +63,5 @@ pub mod base;
 pub mod real;
 /// Numerical tower
 pub mod number;
+/// Cast Datum into rust types
+pub mod cast;

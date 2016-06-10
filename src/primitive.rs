@@ -6,11 +6,12 @@ use std::rc::Rc;
 
 use num::{Zero, One};
 
+use cast::DatumCast;
 use number::Number;
 use real::Real;
 use datum::Datum;
 use error::{RuntimeError, RuntimeErrorKind};
-use runtime::{DatumCast, RDatum, DatumType};
+use runtime::{RDatum, DatumType};
 
 pub trait PrimFunc {
     fn call(&self, Vec<RDatum>) -> Result<RDatum, RuntimeError>;
