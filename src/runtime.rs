@@ -170,8 +170,14 @@ pub enum Inst {
     DropArg,
     /// roll args [n..] into a list
     RollArgs(usize),
+    /// pop pair(h, t) from the top of the list, then push h, then push t
+    Uncons,
+    /// compare top of the stack with given pointer, and push `#t` if the type equals
+    Type(DatumType),
     /// call the function in (stack_top - n)
     Call(usize),
+    /// call the function at the bottom of the current frame
+    CallSplicing,
     /// pop the call stack frame, and return to the call site
     Return,
     /// push the call stack without jumping, and move stack_bottom to (stack_top - n)
@@ -186,6 +192,8 @@ pub enum Inst {
     JumpIfFalse(usize),
     /// jump to the given pc if current stack top is not `#f`
     JumpIfNotFalse(usize),
+    /// throw error if current stack top is `#f`
+    ThrowIfFalse(&'static str)
 }
 
 /// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
@@ -405,6 +413,38 @@ impl Runtime {
         self.arg_stack.pop()
     }
 
+    fn call(&mut self, n: usize) -> bool {
+        let top = self.arg_stack.len();
+        let datum = self.arg_stack[top - n - 1].clone();
+        match datum {
+            Datum::Ext(RuntimeData::PrimFunc(fptr)) => {
+                let args = if n == 0 {
+                    Vec::new()
+                } else {
+                    self.arg_stack.split_off(top-n)
+                };
+                let res = match fptr.function.call(args) {
+                    Ok(x) => x,
+                    Err(e) => panic!("Error in primitive function <{}>: {:?}", fptr.name, e)
+                };
+                match self.arg_stack.pop() {
+                    None => panic!("arg_stack size mismatch"),
+                    Some(_) => ()
+                };
+                self.push_stack(res);
+                self.frame.pc += 1;
+                true
+            },
+            Datum::Ext(RuntimeData::Closure(closure)) => {
+                self.push_call_stack(n, closure);
+                true
+            },
+            _ => {
+                panic!("Not callable")
+            }
+        }
+    }
+
     fn step(&mut self) -> bool {
         let inst = self.fetch();
 
@@ -426,36 +466,22 @@ impl Runtime {
                 self.frame.pc += 1;
                 true
             },
-            Inst::Call(n) => {
-                let top = self.arg_stack.len();
-                let datum = self.arg_stack[top - n - 1].clone();
-                match datum {
-                    Datum::Ext(RuntimeData::PrimFunc(fptr)) => {
-                        let args = if n == 0 {
-                            Vec::new()
-                        } else {
-                            self.arg_stack.split_off(top-n)
-                        };
-                        let res = match fptr.function.call(args) {
-                            Ok(x) => x,
-                            Err(e) => panic!("Error in primitive function <{}>: {:?}", fptr.name, e)
-                        };
-                        match self.arg_stack.pop() {
-                            None => panic!("arg_stack size mismatch"),
-                            Some(_) => ()
-                        };
-                        self.push_stack(res);
-                        self.frame.pc += 1;
-                        true
-                    },
-                    Datum::Ext(RuntimeData::Closure(closure)) => {
-                        self.push_call_stack(n, closure);
-                        true
-                    },
-                    _ => {
-                        panic!("Not callable")
-                    }
+            Inst::Type(typeinfo) => {
+                let val = {
+                    let arg = self.arg_stack.last().expect("arg_stack empty!");
+                    DatumType::get_type(arg) == typeinfo
+                };
+                self.arg_stack.push(Datum::Bool(val));
+                self.frame.pc += 1;
+                true
+            },
+            Inst::Call(n) => self.call(n),
+            Inst::CallSplicing => {
+                let n_args = self.arg_stack.len() - self.frame.stack_bottom;
+                if n_args == 0 {
+                    panic!("Call args empty");
                 }
+                self.call(n_args - 1)
             },
             Inst::PushFrame(n) => {
                 let new_closure = Closure {
@@ -515,6 +541,17 @@ impl Runtime {
                 None =>
                     panic!("Stack empty!")
             },
+            Inst::ThrowIfFalse(msg) => {
+                match self.arg_stack.last() {
+                    Some(&Datum::Bool(false)) => panic!(msg),
+                    Some(_) => {
+                        self.frame.pc += 1;
+                        true
+                    },
+                    None =>
+                        panic!("Stack empty!")
+                }
+            },
             Inst::PushArg(ptr) => {
                 let val = self.fetch_mem(ptr);
                 self.arg_stack.push(val);
@@ -543,6 +580,18 @@ impl Runtime {
                 self.frame.arg_size = n+1;
                 self.frame.pc += 1;
                 true
+            },
+            Inst::Uncons => {
+                let arg = self.arg_stack.pop().expect("arg_stack empty!");
+                if let Datum::Cons(ptr) = arg {
+                    let pair = ptr.borrow();
+                    self.arg_stack.push(pair.0.clone());
+                    self.arg_stack.push(pair.1.clone());
+                    self.frame.pc += 1;
+                    true
+                } else {
+                    panic!("top of the stack is not a pair");
+                }
             },
             Inst::Return => {
                 let n = self.frame.arg_size;

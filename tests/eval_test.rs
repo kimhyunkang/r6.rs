@@ -314,3 +314,10 @@ fn append_test() {
 fn symbol_string_test() {
     assert_evaluates_to!("(symbol->string 'a)", "\"a\"");
 }
+
+#[test]
+fn apply_test() {
+    assert_evaluates_to!("(apply + '(1 2 3))", "6");
+    assert_evaluates_to!("(apply + (list 3 4))", "7");
+    assert_evaluates_to!("(apply + 1 2 '(3))", "6");
+}
