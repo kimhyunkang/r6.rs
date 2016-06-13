@@ -27,8 +27,9 @@ enum_from_primitive! {
         Unquote = 10, // `unquote`
         UnquoteSplicing = 11, // `unquote`
         Cond = 12, // `cond`
-        And = 13, // `and`
-        Or = 14, // `or`
+        Case = 13, // `case`
+        And = 14, // `and`
+        Or = 15, // `or`
     }
 }
 
@@ -67,6 +68,7 @@ impl Syntax {
             &Syntax::Unquote => "unquote",
             &Syntax::UnquoteSplicing => "unquote-splicing",
             &Syntax::Cond => "cond",
+            &Syntax::Case => "case",
             &Syntax::And => "and",
             &Syntax::Or => "or"
         }
@@ -187,6 +189,8 @@ impl<'g> Compiler<'g> {
                                 }),
                             Syntax::Cond =>
                                 self.compile_cond(env, ctx, &c_args),
+                            Syntax::Case =>
+                                self.compile_case(env, ctx, &c_args),
                             Syntax::And =>
                                 self.compile_and(env, ctx, &c_args),
                             Syntax::Or =>
@@ -846,6 +850,92 @@ impl<'g> Compiler<'g> {
             ctx.code[jump_inst] = Inst::JumpIfFalse(jump_pos);
 
             ctx.code.push(Inst::DropArg);
+        }
+
+        if let Some(exprs) = else_exprs {
+            try!(self.compile_exprs(env, ctx, &exprs));
+        }
+
+        let pos = ctx.code.len();
+        for inst in placeholders.into_iter() {
+            ctx.code[inst] = Inst::Jump(pos);
+        }
+
+        Ok(())
+    }
+
+    fn compile_case(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut placeholders = Vec::new();
+        let mut clauses: Vec<RDatum> = match preds.iter().collect() {
+            Ok(v) => v,
+            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        };
+
+        if clauses.len() < 2 {
+            return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+        }
+
+        let expr = clauses.remove(0);
+
+        try!(self.compile_expr(env, ctx, &expr));
+
+        let else_exprs = try!(self.get_else_clause(&mut clauses));
+
+        for clause in clauses.into_iter() {
+            let mut case_placeholders = Vec::new();
+
+            let terms: Vec<RDatum> = match clause.iter().collect() {
+                Ok(v) => v,
+                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+            };
+
+            if terms.len() < 2 {
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+            }
+
+            let cases: Vec<RDatum> = match terms[0].iter().collect() {
+                Ok(v) => v,
+                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+            };
+
+            for case in cases.iter() {
+                try!(self.rec_quote(ctx, case));
+
+                ctx.code.push(Inst::Eqv);
+
+                // placeholder for JumpIfNotFalse
+                case_placeholders.push(ctx.code.len());
+                ctx.code.push(Inst::Nop);
+
+                ctx.code.push(Inst::DropArg);
+                ctx.code.push(Inst::DropArg);
+            }
+
+            // Case not matches: Jump to next case
+            let no_match_jump_pos = ctx.code.len();
+            ctx.code.push(Inst::Nop);
+
+            // Case matches: JumpIfNotFalse jumps here
+            let match_case = ctx.code.len();
+            for pos in case_placeholders.into_iter() {
+                ctx.code[pos] = Inst::JumpIfNotFalse(match_case);
+            }
+
+            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg);
+
+            try!(self.compile_exprs(env, ctx, &terms[1..]));
+
+            // placeholder for Jump: to the end of case expression
+            placeholders.push(ctx.code.len());
+            ctx.code.push(Inst::Nop);
+
+            // Next case: no_match_jump comes here
+            let next_case = ctx.code.len();
+            ctx.code[no_match_jump_pos] = Inst::Jump(next_case);
         }
 
         if let Some(exprs) = else_exprs {
