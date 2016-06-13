@@ -33,7 +33,6 @@ pub fn libbase() -> HashMap<Cow<'static, str>, EnvVar> {
 
     let eqv: Vec<Inst> = vec![
         Inst::Eqv,
-        Inst::SetArgSize(0),
         Inst::Return
     ];
 

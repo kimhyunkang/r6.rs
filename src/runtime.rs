@@ -629,9 +629,16 @@ impl Runtime {
                 true
             },
             Inst::Eqv => {
-                let y = self.arg_stack.pop().expect("arg_stack empty!");
-                let x = self.arg_stack.pop().expect("arg_stack empty!");
-                self.arg_stack.push(Datum::Bool(x.eqv(&y)));
+                let n = self.arg_stack.len();
+                if n < 2 {
+                    panic!("arg_stack too low!");
+                }
+                let b = {
+                    let y = &self.arg_stack[n-1];
+                    let x = &self.arg_stack[n-2];
+                    x.eqv(y)
+                };
+                self.arg_stack.push(Datum::Bool(b));
                 self.frame.pc += 1;
                 true
             },
