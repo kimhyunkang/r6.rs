@@ -26,6 +26,8 @@ pub enum Token {
     QuasiQuote,
     /// `,`
     Comma,
+    /// `,@`
+    UnquoteSplicing,
     Identifier(Cow<'static, str>),
     /// `#t`
     True,
@@ -50,6 +52,7 @@ impl fmt::Debug for Token {
             Token::Quote => write!(f, "Quote"),
             Token::QuasiQuote => write!(f, "QuasiQuote"),
             Token::Comma => write!(f, "Comma"),
+            Token::UnquoteSplicing => write!(f, "UnquoteSplicing"),
             Token::Identifier(ref name) => write!(f, "Identifier({})", name),
             Token::True => write!(f, "#t"),
             Token::False => write!(f, "#f"),
@@ -174,6 +177,14 @@ impl <R: Read + Sized> Lexer<R> {
                     None => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
                 }
             }
+        } else if c == ',' {
+            match self.lookahead() {
+                Some(Ok('@')) => {
+                    self.consume();
+                    Ok(wrap(line, col, Token::UnquoteSplicing))
+                },
+                _ => Ok(wrap(line, col, Token::Comma))
+            }
         } else if c == '(' {
             Ok(wrap(line, col, Token::OpenParen))
         } else if c == ')' {
@@ -184,8 +195,6 @@ impl <R: Read + Sized> Lexer<R> {
             Ok(wrap(line, col, Token::Quote))
         } else if c == '`' {
             Ok(wrap(line, col, Token::QuasiQuote))
-        } else if c == ',' {
-            Ok(wrap(line, col, Token::Comma))
         } else if c == '#' {
             let c0 = try_consume!(self);
             match c0 {

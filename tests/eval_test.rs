@@ -171,6 +171,7 @@ fn quote_abbrev_test() {
 fn quasiquote_test() {
     assert_evaluates_to!("`(0 1 2)", "(0 1 2)");
     assert_evaluates_to!("`(0 ,(+ 1 2) 4)", "(0 3 4)");
+    assert_evaluates_to!("`(0 ,@(list 1 2) 4)", "(0 1 2 4)");
     assert_evaluates_to!("`(1 `,(+ 1 ,(+ 2 3)) 4)", "(1 `,(+ 1 5) 4)");
 }
 
@@ -308,6 +309,22 @@ fn cons_test() {
 }
 
 #[test]
+fn append_test() {
+    assert_evaluates_to!("(append '(x) '(y))", "(x y)");
+    assert_evaluates_to!("(append '(a) '(b c d))", "(a b c d)");
+    assert_evaluates_to!("(append '(a (b)) '((c)))", "(a (b) (c))");
+    assert_evaluates_to!("(append '(a b) '(c . d))", "(a b c . d)");
+    assert_evaluates_to!("(append '() 'a)", "a");
+}
+
+#[test]
 fn symbol_string_test() {
     assert_evaluates_to!("(symbol->string 'a)", "\"a\"");
+}
+
+#[test]
+fn apply_test() {
+    assert_evaluates_to!("(apply + '(1 2 3))", "6");
+    assert_evaluates_to!("(apply + (list 3 4))", "7");
+    assert_evaluates_to!("(apply + 1 2 '(3))", "6");
 }

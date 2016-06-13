@@ -5,9 +5,8 @@ use std::mem;
 use std::fmt;
 use std::ops::DerefMut;
 
+use cast::DatumCast;
 use number::Number;
-use real::Real;
-use error::{RuntimeErrorKind, RuntimeError};
 use datum::Datum;
 use primitive::PrimFunc;
 
@@ -120,120 +119,6 @@ impl fmt::Debug for RuntimeData {
 /// RDatum contains RuntimeData in addition to normal Datum
 pub type RDatum = Datum<RuntimeData>;
 
-/// Types with implementing DatumCast trait can cast from/to Datum
-pub trait DatumCast: Sized {
-    /// Casts Datum into Self, possibly raising error
-    fn unwrap(datum: RDatum) -> Result<Self, RuntimeError>;
-    /// Casts Self into Datum
-    fn wrap(self) -> RDatum;
-}
-
-impl DatumCast for Number {
-    fn unwrap(datum: RDatum) -> Result<Number, RuntimeError> {
-        match datum {
-            Datum::Num(n) => Ok(n),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Num, but received {:?}", DatumType::get_type(&datum))
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum{
-        Datum::Num(self)
-    }
-}
-
-impl DatumCast for Real {
-    fn unwrap(datum: RDatum) -> Result<Real, RuntimeError> {
-        match datum {
-            Datum::Num(Number::Real(n)) => Ok(n),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Real, but received {:?}", DatumType::get_type(&datum))
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum {
-        Datum::Num(Number::Real(self))
-    }
-}
-
-impl DatumCast for bool {
-    fn unwrap(datum: RDatum) -> Result<bool, RuntimeError> {
-        match datum {
-            Datum::Bool(b) => Ok(b),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Bool, but received {:?}", DatumType::get_type(&datum))
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum{
-        Datum::Bool(self)
-    }
-}
-
-impl DatumCast for (RDatum, RDatum) {
-    fn unwrap(datum: RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
-        match datum {
-            Datum::Cons(c) => Ok(c.borrow().clone()),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Pair, but received {:?}", DatumType::get_type(&datum))
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum {
-        Datum::Cons(Rc::new(RefCell::new(self)))
-    }
-}
-
-impl DatumCast for Cow<'static, str> {
-    fn unwrap(datum: RDatum) -> Result<Cow<'static, str>, RuntimeError> {
-        match datum {
-            Datum::Sym(c) => Ok(c.clone()),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected Symbol, but received {:?}", DatumType::get_type(&datum))
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum {
-        Datum::Sym(self)
-    }
-}
-
-impl DatumCast for String {
-    fn unwrap(datum: RDatum) -> Result<String, RuntimeError> {
-        match datum {
-            Datum::String(s) => Ok(s.clone()),
-            _ => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: format!("expected String, but received {:?}", DatumType::get_type(&datum))
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum {
-        Datum::String(self)
-    }
-}
-
-impl DatumCast for RDatum {
-    fn unwrap(datum: RDatum) -> Result<RDatum, RuntimeError> {
-        Ok(datum)
-    }
-
-    fn wrap(self) -> RDatum {
-        self
-    }
-}
-
 /// Pointer referring to memory locations in the VM
 #[derive(Clone, Debug, PartialEq)]
 pub enum MemRef {
@@ -255,30 +140,6 @@ pub enum SimpleDatum {
     Bytes(Rc<RefCell<Vec<u8>>>),
     Num(Number),
     Nil
-}
-
-impl DatumCast for SimpleDatum {
-    fn unwrap(datum: RDatum) -> Result<SimpleDatum, RuntimeError> {
-        match SimpleDatum::from_datum(datum) {
-            Some(v) => Ok(v),
-            None => Err(RuntimeError {
-                kind: RuntimeErrorKind::InvalidType,
-                desc: "Trying to cast non-simple datum to const type".to_string()
-            })
-        }
-    }
-
-    fn wrap(self) -> RDatum {
-        match self {
-            SimpleDatum::Sym(s) => Datum::Sym(s),
-            SimpleDatum::Bool(b) => Datum::Bool(b),
-            SimpleDatum::Char(c) => Datum::Char(c),
-            SimpleDatum::String(s) => Datum::String(s),
-            SimpleDatum::Bytes(v) => Datum::Bytes(v),
-            SimpleDatum::Num(n) => Datum::Num(n),
-            SimpleDatum::Nil => Datum::Nil
-        }
-    }
 }
 
 impl SimpleDatum {
@@ -311,8 +172,14 @@ pub enum Inst {
     SwapArg,
     /// roll args [n..] into a list
     RollArgs(usize),
+    /// pop pair(h, t) from the top of the list, then push h, then push t
+    Uncons,
+    /// compare top of the stack with given pointer, and push `#t` if the type equals
+    Type(DatumType),
     /// call the function in (stack_top - n)
     Call(usize),
+    /// call the function at the bottom of the current frame
+    CallSplicing,
     /// pop the call stack frame, and return to the call site
     Return,
     /// push the call stack without jumping, and move stack_bottom to (stack_top - n)
@@ -327,6 +194,8 @@ pub enum Inst {
     JumpIfFalse(usize),
     /// jump to the given pc if current stack top is not `#f`
     JumpIfNotFalse(usize),
+    /// throw error if current stack top is `#f`
+    ThrowIfFalse(&'static str)
 }
 
 /// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
@@ -546,6 +415,38 @@ impl Runtime {
         self.arg_stack.pop()
     }
 
+    fn call(&mut self, n: usize) -> bool {
+        let top = self.arg_stack.len();
+        let datum = self.arg_stack[top - n - 1].clone();
+        match datum {
+            Datum::Ext(RuntimeData::PrimFunc(fptr)) => {
+                let args = if n == 0 {
+                    Vec::new()
+                } else {
+                    self.arg_stack.split_off(top-n)
+                };
+                let res = match fptr.function.call(args) {
+                    Ok(x) => x,
+                    Err(e) => panic!("Error in primitive function <{}>: {:?}", fptr.name, e)
+                };
+                match self.arg_stack.pop() {
+                    None => panic!("arg_stack size mismatch"),
+                    Some(_) => ()
+                };
+                self.push_stack(res);
+                self.frame.pc += 1;
+                true
+            },
+            Datum::Ext(RuntimeData::Closure(closure)) => {
+                self.push_call_stack(n, closure);
+                true
+            },
+            _ => {
+                panic!("Not callable")
+            }
+        }
+    }
+
     fn step(&mut self) -> bool {
         let inst = self.fetch();
 
@@ -567,36 +468,22 @@ impl Runtime {
                 self.frame.pc += 1;
                 true
             },
-            Inst::Call(n) => {
-                let top = self.arg_stack.len();
-                let datum = self.arg_stack[top - n - 1].clone();
-                match datum {
-                    Datum::Ext(RuntimeData::PrimFunc(fptr)) => {
-                        let args = if n == 0 {
-                            Vec::new()
-                        } else {
-                            self.arg_stack.split_off(top-n)
-                        };
-                        let res = match fptr.function.call(args) {
-                            Ok(x) => x,
-                            Err(e) => panic!("Error in primitive function <{}>: {:?}", fptr.name, e)
-                        };
-                        match self.arg_stack.pop() {
-                            None => panic!("arg_stack size mismatch"),
-                            Some(_) => ()
-                        };
-                        self.push_stack(res);
-                        self.frame.pc += 1;
-                        true
-                    },
-                    Datum::Ext(RuntimeData::Closure(closure)) => {
-                        self.push_call_stack(n, closure);
-                        true
-                    },
-                    _ => {
-                        panic!("Not callable")
-                    }
+            Inst::Type(typeinfo) => {
+                let val = {
+                    let arg = self.arg_stack.last().expect("arg_stack empty!");
+                    DatumType::get_type(arg) == typeinfo
+                };
+                self.arg_stack.push(Datum::Bool(val));
+                self.frame.pc += 1;
+                true
+            },
+            Inst::Call(n) => self.call(n),
+            Inst::CallSplicing => {
+                let n_args = self.arg_stack.len() - self.frame.stack_bottom;
+                if n_args == 0 {
+                    panic!("Call args empty");
                 }
+                self.call(n_args - 1)
             },
             Inst::PushFrame(n) => {
                 let new_closure = Closure {
@@ -656,6 +543,17 @@ impl Runtime {
                 None =>
                     panic!("Stack empty!")
             },
+            Inst::ThrowIfFalse(msg) => {
+                match self.arg_stack.last() {
+                    Some(&Datum::Bool(false)) => panic!(msg),
+                    Some(_) => {
+                        self.frame.pc += 1;
+                        true
+                    },
+                    None =>
+                        panic!("Stack empty!")
+                }
+            },
             Inst::PushArg(ptr) => {
                 let val = self.fetch_mem(ptr);
                 self.arg_stack.push(val);
@@ -692,6 +590,18 @@ impl Runtime {
                 self.frame.arg_size = n+1;
                 self.frame.pc += 1;
                 true
+            },
+            Inst::Uncons => {
+                let arg = self.arg_stack.pop().expect("arg_stack empty!");
+                if let Datum::Cons(ptr) = arg {
+                    let pair = ptr.borrow();
+                    self.arg_stack.push(pair.0.clone());
+                    self.arg_stack.push(pair.1.clone());
+                    self.frame.pc += 1;
+                    true
+                } else {
+                    panic!("top of the stack is not a pair");
+                }
             },
             Inst::Return => {
                 let n = self.frame.arg_size;
