@@ -6,6 +6,7 @@ use std::fmt;
 use std::ops::DerefMut;
 
 use cast::DatumCast;
+use eqv::DatumEqv;
 use number::Number;
 use datum::Datum;
 use primitive::PrimFunc;
@@ -27,6 +28,12 @@ impl PrimFuncPtr {
 impl PartialEq for PrimFuncPtr {
     fn eq(&self, other: &PrimFuncPtr) -> bool {
         (self.function as *const PrimFunc) == (other.function as *const PrimFunc)
+    }
+}
+
+impl DatumEqv for PrimFuncPtr {
+    fn eqv(&self, other: &PrimFuncPtr) -> bool {
+        self.name == other.name && (self.function as *const PrimFunc) == (other.function as *const PrimFunc)
     }
 }
 
@@ -56,6 +63,12 @@ pub struct Closure {
     code: Rc<Vec<Inst>>,
     // The lexical environment directly enclosing the code
     static_link: Option<StaticLink>
+}
+
+impl DatumEqv for Closure {
+    fn eqv(&self, other: &Closure) -> bool {
+        self.code.eqv(&other.code) && self.static_link.eqv(&other.static_link)
+    }
 }
 
 impl Closure {
@@ -99,6 +112,28 @@ impl DatumType {
             &Datum::Ext(RuntimeData::PrimFunc(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Closure(_)) => DatumType::Callable,
             &Datum::Ext(RuntimeData::Undefined) => DatumType::Undefined
+        }
+    }
+}
+
+impl DatumEqv for RuntimeData {
+    fn eqv(&self, other: &RuntimeData) -> bool {
+        match self {
+            &RuntimeData::Closure(ref self_v) => if let &RuntimeData::Closure(ref other_v) = other {
+                    self_v.eqv(other_v)
+                } else {
+                    false
+                },
+            &RuntimeData::PrimFunc(ref self_v) => if let &RuntimeData::PrimFunc(ref other_v) = other {
+                    self_v.eqv(other_v)
+                } else {
+                    false
+                },
+            &RuntimeData::Undefined => if let &RuntimeData::Undefined = other {
+                    true
+                } else {
+                    false
+                },
         }
     }
 }
@@ -174,6 +209,8 @@ pub enum Inst {
     RollArgs(usize),
     /// pop pair(h, t) from the top of the list, then push h, then push t
     Uncons,
+    /// compare two top values of the stack with `eqv?` operator
+    Eqv,
     /// compare top of the stack with given pointer, and push `#t` if the type equals
     Type(DatumType),
     /// call the function in (stack_top - n)
@@ -588,6 +625,13 @@ impl Runtime {
                 self.arg_stack.truncate(vararg_start);
                 self.push_stack(list);
                 self.frame.arg_size = n+1;
+                self.frame.pc += 1;
+                true
+            },
+            Inst::Eqv => {
+                let y = self.arg_stack.pop().expect("arg_stack empty!");
+                let x = self.arg_stack.pop().expect("arg_stack empty!");
+                self.arg_stack.push(Datum::Bool(x.eqv(&y)));
                 self.frame.pc += 1;
                 true
             },

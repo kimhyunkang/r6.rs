@@ -31,7 +31,14 @@ pub fn libbase() -> HashMap<Cow<'static, str>, EnvVar> {
         Inst::Return
     ];
 
+    let eqv: Vec<Inst> = vec![
+        Inst::Eqv,
+        Inst::SetArgSize(0),
+        Inst::Return
+    ];
+
     lib.insert(Cow::Borrowed("apply"), EnvVar::Procedure(Rc::new(apply)));
+    lib.insert(Cow::Borrowed("eqv?"), EnvVar::Procedure(Rc::new(eqv)));
 
     for syn in Syntax::iter() {
         lib.insert(Cow::Borrowed(syn.name()), EnvVar::Syntax(syn));

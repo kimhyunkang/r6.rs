@@ -6,6 +6,7 @@ use num::bigint::BigInt;
 use num::rational::{Ratio, BigRational};
 use num::{Zero, One, FromPrimitive};
 
+use eqv::DatumEqv;
 use real::{Real, int2rat, fix2rat, rat2flo};
 
 #[derive(Clone)]
@@ -235,6 +236,12 @@ fn coerce_arith<R, E, I>(lhs: &Number, rhs: &Number,
            },
            |x, y| Number::ICmplx(i_op(x, y))
     )
+}
+
+impl DatumEqv for Number {
+    fn eqv(&self, other: &Number) -> bool {
+        self.is_exact() == other.is_exact() && self == other
+    }
 }
 
 impl PartialEq for Number {

@@ -328,3 +328,23 @@ fn apply_test() {
     assert_evaluates_to!("(apply + (list 3 4))", "7");
     assert_evaluates_to!("(apply + 1 2 '(3))", "6");
 }
+
+#[test]
+fn eqv_test() {
+    assert_evaluates_to!("(eqv? 'a 'a)", "#t");
+    assert_evaluates_to!("(eqv? 'a 'b)", "#f");
+
+    assert_evaluates_to!("(eqv? 2 2)", "#t");
+
+    assert_evaluates_to!("(eqv? '() '())", "#t");
+
+    assert_evaluates_to!("(eqv? 100000000 100000000)", "#t");
+
+    assert_evaluates_to!("(eqv? (cons 1 2) (cons 1 2))", "#f");
+
+    assert_evaluates_to!("(eqv? (lambda () 1) (lambda () 2))", "#f");
+
+    assert_evaluates_to!("(eqv? #f 'nil)", "#f");
+
+    assert_evaluates_to!("(let ((x '(a))) (eqv? x x))", "#t");
+}

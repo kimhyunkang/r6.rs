@@ -49,6 +49,8 @@ macro_rules! nil{
 pub mod error;
 /// Basic datum types
 pub mod datum;
+/// Implement eqv? primitive
+pub mod eqv;
 pub mod parser;
 pub mod lexer;
 /// Virtual machine running the bytecode
