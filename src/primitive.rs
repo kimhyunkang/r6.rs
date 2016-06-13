@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::cmp::PartialOrd;
 use std::iter::FromIterator;
 use std::rc::Rc;
@@ -234,7 +233,7 @@ pub static PRIM_LIST:Fold<RDatum> = Fold { fold: list };
 pub static PRIM_VECTOR:Fold<RDatum> = Fold { fold: vector };
 
 fn vector(args: Vec<RDatum>) -> RDatum {
-    Datum::Vector(Rc::new(RefCell::new(args)))
+    Datum::Vector(Rc::new(args))
 }
 
 fn car(arg: (RDatum, RDatum)) -> RDatum {

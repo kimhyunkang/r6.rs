@@ -1,5 +1,4 @@
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::iter::{FromIterator, IntoIterator};
 use std::fmt;
 use std::borrow::Cow;
@@ -22,9 +21,9 @@ pub enum Datum<T> {
     /// String
     String(String),
     /// Vector
-    Vector(Rc<RefCell<Vec<Datum<T>>>>),
+    Vector(Rc<Vec<Datum<T>>>),
     /// Byte vector
-    Bytes(Rc<RefCell<Vec<u8>>>),
+    Bytes(Rc<Vec<u8>>),
     /// Numeric value
     Num(Number),
     /// `()`
@@ -72,8 +71,7 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Bool(false) => write!(f, "#f"),
             Datum::Char(c) => format_char(c, f),
             Datum::String(ref s) => write!(f, "{:?}", s),
-            Datum::Vector(ref ptr) => {
-                let vec = ptr.borrow();
+            Datum::Vector(ref vec) => {
                 if vec.is_empty() {
                     write!(f, "#()")
                 } else {
@@ -84,8 +82,7 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
                     write!(f, ")")
                 }
             },
-            Datum::Bytes(ref ptr) => {
-                let vec = ptr.borrow();
+            Datum::Bytes(ref vec) => {
                 if vec.is_empty() {
                     write!(f, "#vu8()")
                 } else {
@@ -180,7 +177,6 @@ mod test {
     use number::Number;
     use std::borrow::Cow;
     use std::rc::Rc;
-    use std::cell::RefCell;
 
     use num::FromPrimitive;
 
@@ -199,14 +195,14 @@ mod test {
 
     #[test]
     fn test_vec_fmt() {
-        compare_fmt("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
-        compare_fmt("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
+        compare_fmt("#(a b)", Datum::Vector(Rc::new(vec![sym!("a"), sym!("b")])));
+        compare_fmt("#()", Datum::Vector(Rc::new(Vec::new())));
     }
 
     #[test]
     fn test_bytes_fmt() {
-        compare_fmt("#vu8(1 2 3)", Datum::Bytes(Rc::new(RefCell::new(vec![1, 2, 3]))));
-        compare_fmt("#vu8()", Datum::Bytes(Rc::new(RefCell::new(Vec::new()))));
+        compare_fmt("#vu8(1 2 3)", Datum::Bytes(Rc::new(vec![1, 2, 3])));
+        compare_fmt("#vu8()", Datum::Bytes(Rc::new(Vec::new())));
     }
 
     #[test]

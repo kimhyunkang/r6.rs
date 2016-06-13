@@ -3,7 +3,6 @@ use std::mem;
 use std::fmt::Write;
 use std::borrow::Cow;
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::char;
 
 use phf;
@@ -353,7 +352,7 @@ impl <R: Read + Sized> Parser<R> {
             Token::Identifier(ident) => Ok(Datum::Sym(ident)),
             Token::OpenParen => self.parse_list(),
             Token::OpenVectorParen => self.parse_vector().map(|v|
-                Datum::Vector(Rc::new(RefCell::new(v)))
+                Datum::Vector(Rc::new(v))
             ),
             Token::OpenBytesParen => {
                 let v:Vec<Datum<T>> = try!(self.parse_vector());
@@ -368,7 +367,7 @@ impl <R: Read + Sized> Parser<R> {
                                 kind: ParserErrorKind::ByteVectorElement
                             })
                     }).collect();
-                bytes.map(|v| Datum::Bytes(Rc::new(RefCell::new(v))))
+                bytes.map(|v| Datum::Bytes(Rc::new(v)))
             },
             Token::True => Ok(Datum::Bool(true)),
             Token::False => Ok(Datum::Bool(false)),
@@ -467,7 +466,6 @@ impl <R: Read + Sized> Parser<R> {
 mod test {
     use std::borrow::Cow;
     use std::rc::Rc;
-    use std::cell::RefCell;
 
     use num::{Float, FromPrimitive};
 
@@ -552,14 +550,14 @@ mod test {
 
     #[test]
     fn test_vector() {
-        test_parse_ok!("#()", Datum::Vector(Rc::new(RefCell::new(Vec::new()))));
-        test_parse_ok!("#(a b)", Datum::Vector(Rc::new(RefCell::new(vec![sym!("a"), sym!("b")]))));
+        test_parse_ok!("#()", Datum::Vector(Rc::new(Vec::new())));
+        test_parse_ok!("#(a b)", Datum::Vector(Rc::new(vec![sym!("a"), sym!("b")])));
     }
 
     #[test]
     fn test_bytes() {
-        test_parse_ok!("#vu8()", Datum::Bytes(Rc::new(RefCell::new(Vec::new()))));
-        test_parse_ok!("#vu8(1 2 3)", Datum::Bytes(Rc::new(RefCell::new(vec![1, 2, 3]))));
+        test_parse_ok!("#vu8()", Datum::Bytes(Rc::new(Vec::new())));
+        test_parse_ok!("#vu8(1 2 3)", Datum::Bytes(Rc::new(vec![1, 2, 3])));
     }
 
     #[test]

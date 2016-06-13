@@ -137,7 +137,7 @@ pub enum SimpleDatum {
     Bool(bool),
     Char(char),
     String(String),
-    Bytes(Rc<RefCell<Vec<u8>>>),
+    Bytes(Rc<Vec<u8>>),
     Num(Number),
     Nil
 }

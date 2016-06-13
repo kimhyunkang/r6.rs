@@ -650,8 +650,7 @@ impl<'g> Compiler<'g> {
                 try!(self.rec_quote(ctx, &pair.1));
                 ctx.code.push(Inst::Call(2));
             },
-            &Datum::Vector(ref ptr) => {
-                let v = ptr.borrow();
+            &Datum::Vector(ref v) => {
                 ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
                 for e in v.iter() {
                     try!(self.rec_quote(ctx, e));
@@ -742,8 +741,7 @@ impl<'g> Compiler<'g> {
                         try!(self.rec_quasiquote(qq_level, env, ctx, &pair.1));
                         ctx.code.push(Inst::Call(2));
                     },
-                    &Datum::Vector(ref ptr) => {
-                        let v = ptr.borrow();
+                    &Datum::Vector(ref v) => {
                         ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
                         for e in v.iter() {
                             try!(self.rec_quasiquote(qq_level, env, ctx, e));
@@ -938,8 +936,7 @@ impl<'g> Compiler<'g> {
                 ctx.code.push(Inst::PushArg(ptr));
                 Ok(())
             },
-            &Datum::Vector(ref ptr) => {
-                let v = ptr.borrow();
+            &Datum::Vector(ref v) => {
                 ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
                 for e in v.iter() {
                     try!(self.rec_quote(ctx, e));
