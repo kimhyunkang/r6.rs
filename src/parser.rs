@@ -375,7 +375,7 @@ impl <R: Read + Sized> Parser<R> {
                 Some(c) => Ok(Datum::Char(c)),
                 None => Err(invalid_token(&tok))
             },
-            Token::String(s) => Ok(Datum::String(s)),
+            Token::String(s) => Ok(Datum::String(Rc::new(s))),
             Token::Numeric(ref rep) => match parse_numeric(rep.as_ref()) {
                 Ok(n) => Ok(Datum::Num(n)),
                 Err(e) => Err(ParserError {

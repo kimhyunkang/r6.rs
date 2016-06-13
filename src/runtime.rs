@@ -136,7 +136,7 @@ pub enum SimpleDatum {
     Sym(Cow<'static, str>),
     Bool(bool),
     Char(char),
-    String(String),
+    String(Rc<String>),
     Bytes(Rc<Vec<u8>>),
     Num(Number),
     Nil

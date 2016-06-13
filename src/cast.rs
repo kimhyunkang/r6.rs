@@ -98,7 +98,7 @@ impl DatumCast for Cow<'static, str> {
 impl DatumCast for String {
     fn unwrap(datum: RDatum) -> Result<String, RuntimeError> {
         match datum {
-            Datum::String(s) => Ok(s.clone()),
+            Datum::String(s) => Ok(s.as_ref().clone()),
             _ => Err(RuntimeError {
                 kind: RuntimeErrorKind::InvalidType,
                 desc: format!("expected String, but received {:?}", DatumType::get_type(&datum))
@@ -107,7 +107,7 @@ impl DatumCast for String {
     }
 
     fn wrap(self) -> RDatum {
-        Datum::String(self)
+        Datum::String(Rc::new(self))
     }
 }
 
