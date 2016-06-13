@@ -214,6 +214,12 @@ fn make_vector_test() {
 }
 
 #[test]
+fn vector_conv_test() {
+    assert_evaluates_to!("(vector->list '#(dah dah didah))", "(dah dah didah)");
+    assert_evaluates_to!("(list->vector '(dididit dah))", "#(dididit dah)");
+}
+
+#[test]
 fn car_test() {
     assert_evaluates_to!("(car '(a b))", "a");
 }

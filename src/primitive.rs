@@ -182,7 +182,7 @@ impl<T0: DatumCast, T1: DatumCast, R: PossibleError> PrimFunc for F2<T0, Option<
     }
 }
 
-impl<T0: DatumCast, R: DatumCast> PrimFunc for F1<T0, R> {
+impl<T0: DatumCast, R: PossibleError> PrimFunc for F1<T0, R> {
     fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
         if args.len() != 1 {
             return Err(RuntimeError {
@@ -190,8 +190,7 @@ impl<T0: DatumCast, R: DatumCast> PrimFunc for F1<T0, R> {
                 desc: format!("Expected 1 argument, received {:?}", args.len())
             });
         }
-        let f = self.f1;
-        DatumCast::unwrap(args.remove(0)).map(|v| f(v).wrap())
+        DatumCast::unwrap(args.remove(0)).and_then(|v| (self.f1)(v).make_result())
     }
 }
 
@@ -286,6 +285,24 @@ fn vector_ref(vector: Vec<RDatum>, k: usize) -> Result<RDatum, RuntimeError> {
             desc: format!("vector length is {}, but index is {}", vector.len(), k)
         })
     }
+}
+
+/// `(vector->list vector)`
+pub static PRIM_VECTOR_TO_LIST: F1<Vec<RDatum>, RDatum> = F1 { f1: vector_to_list };
+
+fn vector_to_list(vector: Vec<RDatum>) -> RDatum {
+    Datum::from_iter(vector)
+}
+
+/// `(list->vector list)`
+pub static PRIM_LIST_TO_VECTOR: F1<RDatum, Result<Vec<RDatum>, RuntimeError>> = F1 { f1: list_to_vector };
+
+fn list_to_vector(list: RDatum) -> Result<Vec<RDatum>, RuntimeError> {
+    let v: Result<Vec<RDatum>, ()> = list.iter().collect();
+    v.map_err(|_| RuntimeError {
+        kind: RuntimeErrorKind::InvalidType,
+        desc: format!("Expected list, but received {:?}", DatumType::get_type(&list))
+    })
 }
 
 /// `(vector a0 a1 ...)`
@@ -448,6 +465,8 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("vector", &PRIM_VECTOR),
         ("make-vector", &PRIM_MAKE_VECTOR),
         ("vector-ref", &PRIM_VECTOR_REF),
+        ("vector->list", &PRIM_VECTOR_TO_LIST),
+        ("list->vector", &PRIM_LIST_TO_VECTOR),
         ("boolean?", &PRIM_IS_BOOLEAN),
         ("pair?", &PRIM_IS_PAIR),
         ("symbol?", &PRIM_IS_SYMBOL),
