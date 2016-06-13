@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::PartialOrd;
-use std::iter::FromIterator;
+use std::iter::{repeat, FromIterator};
 use std::rc::Rc;
 
 use num::{Zero, One};
@@ -10,10 +10,26 @@ use number::Number;
 use real::Real;
 use datum::{concat, Datum};
 use error::{RuntimeError, RuntimeErrorKind};
-use runtime::{RDatum, DatumType};
+use runtime::{RDatum, RuntimeData, DatumType};
 
 pub trait PrimFunc {
     fn call(&self, Vec<RDatum>) -> Result<RDatum, RuntimeError>;
+}
+
+pub trait PossibleError {
+    fn make_result(self) -> Result<RDatum, RuntimeError>;
+}
+
+impl <T: DatumCast> PossibleError for T {
+    fn make_result(self) -> Result<RDatum, RuntimeError> {
+        Ok(DatumCast::wrap(self))
+    }
+}
+
+impl <T: DatumCast> PossibleError for Result<T, RuntimeError> {
+    fn make_result(self) -> Result<RDatum, RuntimeError> {
+        self.map(DatumCast::wrap)
+    }
 }
 
 pub struct Fold<P> {
@@ -128,19 +144,41 @@ impl<T0: DatumCast, R: DatumCast> PrimFunc for R1<T0, R> {
     }
 }
 
-impl<T0: DatumCast, T1: DatumCast> PrimFunc for F2<T0, T1, RDatum> {
+impl<T0: DatumCast, T1: DatumCast, R: PossibleError> PrimFunc for F2<T0, T1, R> {
     fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
         if args.len() != 2 {
             return Err(RuntimeError {
                 kind: RuntimeErrorKind::NumArgs,
-                desc: format!("Expected 2 argument, received {:?}", args.len())
+                desc: format!("Expected 2 arguments, received {:?}", args.len())
             });
         }
 
         let a1 = try!(DatumCast::unwrap(args.pop().unwrap()));
         let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
 
-        Ok((self.f2)(a0, a1))
+        ((self.f2)(a0, a1)).make_result()
+    }
+}
+
+impl<T0: DatumCast, T1: DatumCast, R: PossibleError> PrimFunc for F2<T0, Option<T1>, R> {
+    fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
+        let (a0, a1) = match args.len() {
+            1 => {
+                let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
+                (a0, None)
+            },
+            2 => {
+                let a1 = try!(DatumCast::unwrap(args.pop().unwrap()));
+                let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
+                (a0, Some(a1))
+            },
+            _ => return Err(RuntimeError {
+                kind: RuntimeErrorKind::NumArgs,
+                desc: format!("Expected 1 or 2 arguments, received {:?}", args.len())
+            })
+        };
+
+        ((self.f2)(a0, a1)).make_result()
     }
 }
 
@@ -228,6 +266,27 @@ fn list(args: Vec<RDatum>) -> RDatum {
 
 /// `(list a0 a1 ...)`
 pub static PRIM_LIST:Fold<RDatum> = Fold { fold: list };
+
+/// `(make-vector k)` or `(make-vector k fill)`
+pub static PRIM_MAKE_VECTOR: F2<usize, Option<RDatum>, Vec<RDatum>> = F2 { f2: make_vector };
+
+fn make_vector(k: usize, fill_opt: Option<RDatum>) -> Vec<RDatum> {
+    let fill = fill_opt.unwrap_or(Datum::Ext(RuntimeData::Undefined));
+    repeat(fill).take(k).collect()
+}
+
+/// `(vector-ref vector k)`
+pub static PRIM_VECTOR_REF: F2<Vec<RDatum>, usize, Result<RDatum, RuntimeError>> = F2 { f2: vector_ref };
+
+fn vector_ref(vector: Vec<RDatum>, k: usize) -> Result<RDatum, RuntimeError> {
+    match vector.get(k) {
+        Some(e) => Ok(e.clone()),
+        None => Err(RuntimeError {
+            kind: RuntimeErrorKind::IndexOutOfRange,
+            desc: format!("vector length is {}, but index is {}", vector.len(), k)
+        })
+    }
+}
 
 /// `(vector a0 a1 ...)`
 pub static PRIM_VECTOR:Fold<RDatum> = Fold { fold: vector };
@@ -387,6 +446,8 @@ pub fn libprimitive() -> Vec<(&'static str, &'static (PrimFunc + 'static))> {
         ("/", &PRIM_DIV),
         ("list", &PRIM_LIST),
         ("vector", &PRIM_VECTOR),
+        ("make-vector", &PRIM_MAKE_VECTOR),
+        ("vector-ref", &PRIM_VECTOR_REF),
         ("boolean?", &PRIM_IS_BOOLEAN),
         ("pair?", &PRIM_IS_PAIR),
         ("symbol?", &PRIM_IS_SYMBOL),

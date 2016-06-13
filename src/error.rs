@@ -115,7 +115,9 @@ pub enum RuntimeErrorKind {
     /// Argument type did not match
     InvalidType,
     /// Divide by zero
-    DivideByZero
+    DivideByZero,
+    /// Index out of range
+    IndexOutOfRange
 }
 
 /// Errors raised in runtime

@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 use std::rc::Rc;
 
+use num::{BigInt, FromPrimitive};
+use num::rational::Ratio;
+
 use datum::Datum;
 use error::{RuntimeError, RuntimeErrorKind};
 use number::Number;
@@ -28,6 +31,33 @@ impl DatumCast for Number {
 
     fn wrap(self) -> RDatum{
         Datum::Num(self)
+    }
+}
+
+impl DatumCast for usize {
+    fn unwrap(datum: RDatum) -> Result<usize, RuntimeError> {
+        let datumtype = DatumType::get_type(&datum);
+
+        if let Datum::Num(n) = datum {
+            if let Number::Real(r) = n.reduce() {
+                if let Real::Fixnum(f) = r.reduce() {
+                    if f >= 0 {
+                        return Ok(f as usize);
+                    }
+                }
+            }
+        }
+
+        Err(RuntimeError {
+            kind: RuntimeErrorKind::InvalidType,
+            desc: format!("expected unsigned integer, but received {:?}", datumtype)
+        })
+    }
+
+    fn wrap(self) -> RDatum {
+        let r: BigInt = FromPrimitive::from_usize(self).unwrap();
+        let n: Real = Real::Rational(Ratio::from_integer(r)).reduce();
+        Datum::Num(Number::Real(n))
     }
 }
 
@@ -108,6 +138,22 @@ impl DatumCast for String {
 
     fn wrap(self) -> RDatum {
         Datum::String(Rc::new(self))
+    }
+}
+
+impl <T: DatumCast> DatumCast for Vec<T> {
+    fn unwrap(datum: RDatum) -> Result<Vec<T>, RuntimeError> {
+        match datum {
+            Datum::Vector(v) => v.iter().cloned().map(DatumCast::unwrap).collect(),
+            _ => Err(RuntimeError {
+                kind: RuntimeErrorKind::InvalidType,
+                desc: format!("expected Vector, but received {:?}", DatumType::get_type(&datum))
+            })
+        }
+    }
+
+    fn wrap(self) -> RDatum {
+        Datum::Vector(Rc::new(self.into_iter().map(DatumCast::wrap).collect()))
     }
 }
 

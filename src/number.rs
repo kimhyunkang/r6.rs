@@ -101,6 +101,18 @@ impl Number {
             &Number::ICmplx(_) => false
         }
     }
+
+    pub fn reduce(self) -> Number {
+        match self {
+            Number::ECmplx(ref c) => if c.im.is_zero() {
+                Number::Real(Real::Rational(c.re.clone()).reduce())
+            } else {
+                self.clone()
+            },
+            _ =>
+                self
+        }
+    }
 }
 
 impl fmt::Display for Number {

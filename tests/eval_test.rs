@@ -206,6 +206,13 @@ fn typecheck_test() {
 }
 
 #[test]
+fn make_vector_test() {
+    assert_evaluates_to!("(vector? (make-vector 5))", "#t");
+    assert_evaluates_to!("(vector? (make-vector 5 'a))", "#t");
+    assert_evaluates_to!("(vector-ref (make-vector 5 'a) 3)", "a");
+}
+
+#[test]
 fn car_test() {
     assert_evaluates_to!("(car '(a b))", "a");
 }
