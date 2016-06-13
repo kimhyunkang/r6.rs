@@ -353,4 +353,6 @@ fn eqv_test() {
     assert_evaluates_to!("(eqv? #f 'nil)", "#f");
 
     assert_evaluates_to!("(let ((x '(a))) (eqv? x x))", "#t");
+
+    assert_evaluates_to!("(letrec ((f (lambda () (if (eqv? f g) 'f 'both))) (g (lambda () (if (eqv? f g) 'g 'both)))) (eqv? f g))", "#f");
 }
