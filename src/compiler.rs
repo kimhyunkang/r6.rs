@@ -775,15 +775,9 @@ impl<'g> Compiler<'g> {
         }
     }
 
-    fn compile_cond(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
-            -> Result<(), CompileError>
+    fn get_else_clause(&self, clauses: &mut Vec<RDatum>)
+            -> Result<Option<Vec<RDatum>>, CompileError>
     {
-        let mut placeholders = Vec::new();
-        let mut clauses: Vec<RDatum> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
-
         let else_exprs = match clauses.last() {
             None => return Err(CompileError { kind: CompileErrorKind::BadSyntax }),
             Some(last_clause) => match last_clause {
@@ -806,6 +800,20 @@ impl<'g> Compiler<'g> {
         if else_exprs.is_some() {
             clauses.pop();
         }
+
+        Ok(else_exprs)
+    }
+
+    fn compile_cond(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut placeholders = Vec::new();
+        let mut clauses: Vec<RDatum> = match preds.iter().collect() {
+            Ok(v) => v,
+            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        };
+
+        let else_exprs = try!(self.get_else_clause(&mut clauses));
 
         for clause in clauses.into_iter() {
             let terms: Vec<RDatum> = match clause.iter().collect() {
