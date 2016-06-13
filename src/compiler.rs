@@ -25,8 +25,9 @@ enum_from_primitive! {
         Quote = 8, // `quote`
         Quasiquote = 9, // `quasiquote`
         Unquote = 10, // `unquote`
-        And = 11, // `and`
-        Or = 12, // `or`
+        Cond = 11, // `cond`
+        And = 12, // `and`
+        Or = 13, // `or`
     }
 }
 
@@ -63,6 +64,7 @@ impl Syntax {
             &Syntax::Quote => "quote",
             &Syntax::Quasiquote => "quasiquote",
             &Syntax::Unquote => "unquote",
+            &Syntax::Cond => "cond",
             &Syntax::And => "and",
             &Syntax::Or => "or"
         }
@@ -181,6 +183,8 @@ impl<'g> Compiler<'g> {
                                 return Err(CompileError {
                                     kind: CompileErrorKind::UnquoteContext
                                 }),
+                            Syntax::Cond =>
+                                self.compile_cond(env, ctx, &c_args),
                             Syntax::And =>
                                 self.compile_and(env, ctx, &c_args),
                             Syntax::Or =>
@@ -743,6 +747,98 @@ impl<'g> Compiler<'g> {
                     }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    fn is_sym(&self, datum: &RDatum, sym: &str) -> bool {
+        if let &Datum::Sym(ref s) = datum {
+            s.as_ref() == sym
+        } else {
+            false
+        }
+    }
+
+    fn compile_cond(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+            -> Result<(), CompileError>
+    {
+        let mut placeholders = Vec::new();
+        let mut clauses: Vec<RDatum> = match preds.iter().collect() {
+            Ok(v) => v,
+            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        };
+
+        let else_exprs = match clauses.last() {
+            None => return Err(CompileError { kind: CompileErrorKind::BadSyntax }),
+            Some(last_clause) => match last_clause {
+                &Datum::Cons(ref ptr) =>  {
+                    let pair = ptr.borrow();
+                    if self.is_sym(&pair.0, "else") {
+                        let exprs: Vec<RDatum> = match pair.1.iter().collect() {
+                            Ok(v) => v,
+                            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                        };
+                        Some(exprs)
+                    } else {
+                        None
+                    }
+                },
+                _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+            }
+        };
+
+        if else_exprs.is_some() {
+            clauses.pop();
+        }
+
+        for clause in clauses.into_iter() {
+            let terms: Vec<RDatum> = match clause.iter().collect() {
+                Ok(v) => v,
+                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+            };
+
+            if terms.len() < 2 {
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+            }
+
+            try!(self.compile_expr(env, ctx, &terms[0]));
+
+            // placeholder for JumpIfFalse
+            let jump_inst = ctx.code.len();
+            ctx.code.push(Inst::Nop);
+
+            if self.is_sym(&terms[1], "=>") {
+                if terms.len() != 3 {
+                    return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+                }
+
+                try!(self.compile_expr(env, ctx, &terms[2]));
+                ctx.code.push(Inst::SwapArg);
+                ctx.code.push(Inst::Call(1));
+            } else {
+                ctx.code.push(Inst::DropArg);
+                try!(self.compile_exprs(env, ctx, &terms[1..]));
+            }
+
+            // placeholder for Jump: this jumps to the end of cond expr
+            placeholders.push(ctx.code.len());
+            ctx.code.push(Inst::Nop);
+
+            // JumpIfFalse jumps here
+            let jump_pos = ctx.code.len();
+            ctx.code[jump_inst] = Inst::JumpIfFalse(jump_pos);
+
+            ctx.code.push(Inst::DropArg);
+        }
+
+        if let Some(exprs) = else_exprs {
+            try!(self.compile_exprs(env, ctx, &exprs));
+        }
+
+        let pos = ctx.code.len();
+        for inst in placeholders.into_iter() {
+            ctx.code[inst] = Inst::Jump(pos);
         }
 
         Ok(())

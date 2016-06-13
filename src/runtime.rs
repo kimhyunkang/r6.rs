@@ -307,6 +307,8 @@ pub enum Inst {
     PopArg(MemRef),
     /// pop value from the stack and remove it
     DropArg,
+    /// swap two top values of the stack
+    SwapArg,
     /// roll args [n..] into a list
     RollArgs(usize),
     /// call the function in (stack_top - n)
@@ -671,6 +673,14 @@ impl Runtime {
             },
             Inst::DropArg => {
                 self.arg_stack.pop();
+                self.frame.pc += 1;
+                true
+            },
+            Inst::SwapArg => {
+                let y = self.arg_stack.pop().expect("Stack empty!");
+                let x = self.arg_stack.pop().expect("Stack empty!");
+                self.arg_stack.push(y);
+                self.arg_stack.push(x);
                 self.frame.pc += 1;
                 true
             },

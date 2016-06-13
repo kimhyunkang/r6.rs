@@ -282,6 +282,13 @@ fn and_or_test() {
 }
 
 #[test]
+fn cond_test() {
+    assert_evaluates_to!("(cond ((> 3 2) 'greater) ((< 3 2) 'less))", "greater");
+    assert_evaluates_to!("(cond ((> 3 3) 'greater) ((< 3 3) 'less) (else 'equal))", "equal");
+    assert_evaluates_to!("(cond ('(1 2 3) => car) (else #f))", "1");
+}
+
+#[test]
 fn not_test() {
     assert_evaluates_to!("(not #t)", "#f");
     assert_evaluates_to!("(not 3)", "#f");
