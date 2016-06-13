@@ -30,7 +30,7 @@ pub enum Datum<T> {
     /// `()`
     Nil,
     /// Pair
-    Cons(Rc<RefCell<(Datum<T>, Datum<T>)>>),
+    Cons(Rc<(Datum<T>, Datum<T>)>),
     /// Extra values
     Ext(T)
 }
@@ -40,8 +40,7 @@ fn write_cons<T: fmt::Debug>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Re
         &Datum::Nil => {
             write!(f, ")")
         },
-        &Datum::Cons(ref ptr) => {
-            let pair = ptr.borrow();
+        &Datum::Cons(ref pair) => {
             try!(write!(f, " {:?}", pair.0));
             write_cons(&pair.1, f)
         },
@@ -100,14 +99,12 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
             Datum::Num(ref n) => write!(f, "{}", n),
             Datum::Ext(ref x) => x.fmt(f),
             Datum::Nil => write!(f, "()"),
-            Datum::Cons(ref ptr) => {
-                let pair = ptr.borrow();
+            Datum::Cons(ref pair) => {
                 if let Datum::Sym(ref s) = pair.0 {
                     match SPECIAL_TOKEN_MAP.get(s.as_ref()) {
                         Some(ch) => if let Datum::Cons(ref tail) = pair.1 {
-                            let tail_ptr = tail.borrow();
-                            if let Datum::Nil = tail_ptr.1 {
-                                return write!(f, "{}{:?}", ch, tail_ptr.0);
+                            if let Datum::Nil = tail.1 {
+                                return write!(f, "{}{:?}", ch, tail.0);
                             }
                         },
                         _ => ()
@@ -139,8 +136,7 @@ impl<T: Clone> Iterator for DatumIter<T> {
     fn next(&mut self) -> Option<Result<Datum<T>, ()>> {
         let (val, next) = match self.ptr {
             Datum::Nil => return None,
-            Datum::Cons(ref ptr) => {
-                let pair = ptr.borrow();
+            Datum::Cons(ref pair) => {
                 (pair.0.clone(), pair.1.clone())
             }
             _ => return Some(Err(()))
@@ -165,14 +161,13 @@ impl<T> FromIterator<Datum<T>> for Datum<T> {
 
 /// `cons` the values into a pair
 pub fn cons<T>(head: Datum<T>, tail: Datum<T>) -> Datum<T> {
-    Datum::Cons(Rc::new(RefCell::new((head, tail))))
+    Datum::Cons(Rc::new((head, tail)))
 }
 
 pub fn concat<T: Clone>(x: Datum<T>, y: Datum<T>) -> Result<Datum<T>, ()> {
     match x {
         Datum::Nil => Ok(y),
-        Datum::Cons(ptr) => {
-            let pair = ptr.borrow();
+        Datum::Cons(pair) => {
             concat(pair.1.clone(), y).map(|new_y| cons(pair.0.clone(), new_y))
         },
         _ => Err(())

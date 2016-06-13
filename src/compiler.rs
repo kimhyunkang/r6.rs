@@ -151,7 +151,7 @@ impl<'g> Compiler<'g> {
             -> Result<(), CompileError>
     {
         let (callee, c_args) = match datum {
-            &Datum::Cons(ref ptr) => ptr.borrow().clone(),
+            &Datum::Cons(ref ptr) => ptr.as_ref().clone(),
             _ => return Err(CompileError { kind: CompileErrorKind::NullEval })
         };
 
@@ -246,11 +246,10 @@ impl<'g> Compiler<'g> {
                 [Datum::Sym(ref v), ref e] =>
                     Ok(Some((v.clone(), Def::Expr(e.clone())))),
                 [Datum::Cons(ref form), ..] => {
-                    let pair = form.borrow();
-                    if let Datum::Sym(ref v) = pair.0 {
+                    if let Datum::Sym(ref v) = form.0 {
                         Ok(Some((
                             v.clone(),
-                            Def::Proc(pair.1.clone(), list[2..].to_vec())
+                            Def::Proc(form.1.clone(), list[2..].to_vec())
                         )))
                     } else {
                         Err(CompileError {
@@ -393,7 +392,7 @@ impl<'g> Compiler<'g> {
             -> Result<(Vec<Cow<'static, str>>, Vec<RDatum>, RDatum), CompileError>
     {
         if let &Datum::Cons(ref ptr) = form {
-            let (ref binding_form, ref body) = *ptr.borrow();
+            let (ref binding_form, ref body) = *ptr.as_ref();
             let mut syms = Vec::new();
             let mut exprs = Vec::new();
             for b in binding_form.iter() {
@@ -489,7 +488,7 @@ impl<'g> Compiler<'g> {
             -> Result<(), CompileError>
     {
         if let &Datum::Cons(ref ptr) = tail {
-            let (ref cur_args, ref body) = *ptr.borrow();
+            let (ref cur_args, ref body) = *ptr.as_ref();
             let res: Result<Vec<RDatum>, ()> = body.iter().collect();
             match res {
                 Ok(exprs) => {
@@ -520,7 +519,7 @@ impl<'g> Compiler<'g> {
 
             loop {
                 let (val, next) = match iter {
-                    Datum::Cons(ref ptr) => ptr.borrow().clone(),
+                    Datum::Cons(ref ptr) => ptr.as_ref().clone(),
                     Datum::Sym(ref s) => {
                         nargs.push(s.clone());
                         var_arg = true;
@@ -645,8 +644,7 @@ impl<'g> Compiler<'g> {
 
     fn rec_quote(&self, ctx: &mut CodeGenContext, v: &RDatum) -> Result<(), CompileError> {
         match v {
-            &Datum::Cons(ref ptr) => {
-                let pair = ptr.borrow();
+            &Datum::Cons(ref pair) => {
                 ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
                 try!(self.rec_quote(ctx, &pair.0));
                 try!(self.rec_quote(ctx, &pair.1));
@@ -727,9 +725,7 @@ impl<'g> Compiler<'g> {
             },
             _ => {
                 match v {
-                    &Datum::Cons(ref ptr) => {
-                        let pair = ptr.borrow();
-
+                    &Datum::Cons(ref pair) => {
                         if let Some((Syntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
                             if qq_level == 0 {
                                 ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))));
@@ -781,8 +777,7 @@ impl<'g> Compiler<'g> {
         let else_exprs = match clauses.last() {
             None => return Err(CompileError { kind: CompileErrorKind::BadSyntax }),
             Some(last_clause) => match last_clause {
-                &Datum::Cons(ref ptr) =>  {
-                    let pair = ptr.borrow();
+                &Datum::Cons(ref pair) =>  {
                     if self.is_sym(&pair.0, "else") {
                         let exprs: Vec<RDatum> = match pair.1.iter().collect() {
                             Ok(v) => v,

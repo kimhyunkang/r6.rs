@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use datum::Datum;
@@ -67,7 +66,7 @@ impl DatumCast for bool {
 impl DatumCast for (RDatum, RDatum) {
     fn unwrap(datum: RDatum) -> Result<(RDatum, RDatum), RuntimeError> {
         match datum {
-            Datum::Cons(c) => Ok(c.borrow().clone()),
+            Datum::Cons(c) => Ok(c.as_ref().clone()),
             _ => Err(RuntimeError {
                 kind: RuntimeErrorKind::InvalidType,
                 desc: format!("expected Pair, but received {:?}", DatumType::get_type(&datum))
@@ -76,7 +75,7 @@ impl DatumCast for (RDatum, RDatum) {
     }
 
     fn wrap(self) -> RDatum {
-        Datum::Cons(Rc::new(RefCell::new(self)))
+        Datum::Cons(Rc::new(self))
     }
 }
 

@@ -593,8 +593,7 @@ impl Runtime {
             },
             Inst::Uncons => {
                 let arg = self.arg_stack.pop().expect("arg_stack empty!");
-                if let Datum::Cons(ptr) = arg {
-                    let pair = ptr.borrow();
+                if let Datum::Cons(pair) = arg {
                     self.arg_stack.push(pair.0.clone());
                     self.arg_stack.push(pair.1.clone());
                     self.frame.pc += 1;
