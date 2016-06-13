@@ -524,10 +524,10 @@ mod test {
 
     #[test]
     fn test_string() {
-        test_parse_ok!(r#""abc""#, Datum::String("abc".to_string()));
-        test_parse_ok!(r#""\x41;bc""#, Datum::String("Abc".to_string()));
-        test_parse_ok!(r#""\x41; bc""#, Datum::String("A bc".to_string()));
-        test_parse_ok!(r#""\x41bc;""#, Datum::String("\u{41bc}".to_string()));
+        test_parse_ok!(r#""abc""#, Datum::String(Rc::new("abc".to_string())));
+        test_parse_ok!(r#""\x41;bc""#, Datum::String(Rc::new("Abc".to_string())));
+        test_parse_ok!(r#""\x41; bc""#, Datum::String(Rc::new("A bc".to_string())));
+        test_parse_ok!(r#""\x41bc;""#, Datum::String(Rc::new("\u{41bc}".to_string())));
     }
 
     #[test]
