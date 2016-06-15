@@ -211,6 +211,8 @@ pub enum Inst {
     Uncons,
     /// compare two top values of the stack with `eqv?` operator
     Eqv,
+    /// compare two top values of the stack with `equal?` operator
+    Equal,
     /// compare top of the stack with given pointer, and push `#t` if the type equals
     Type(DatumType),
     /// call the function in (stack_top - n)
@@ -637,6 +639,20 @@ impl Runtime {
                     let y = &self.arg_stack[n-1];
                     let x = &self.arg_stack[n-2];
                     x.eqv(y)
+                };
+                self.arg_stack.push(Datum::Bool(b));
+                self.frame.pc += 1;
+                true
+            },
+            Inst::Equal => {
+                let n = self.arg_stack.len();
+                if n < 2 {
+                    panic!("arg_stack too low!");
+                }
+                let b = {
+                    let y = &self.arg_stack[n-1];
+                    let x = &self.arg_stack[n-2];
+                    x == y
                 };
                 self.arg_stack.push(Datum::Bool(b));
                 self.frame.pc += 1;

@@ -370,3 +370,14 @@ fn eqv_test() {
 
     assert_evaluates_to!("(letrec ((f (lambda () (if (eqv? f g) 'f 'both))) (g (lambda () (if (eqv? f g) 'g 'both)))) (eqv? f g))", "#f");
 }
+
+#[test]
+fn equal_test() {
+    assert_evaluates_to!("(equal? 'a 'a)", "#t");
+    assert_evaluates_to!("(equal? '(a) '(a))", "#t");
+    assert_evaluates_to!("(equal? '(a (b) c) '(a (b) c))", "#t");
+    assert_evaluates_to!("(equal? \"abc\" \"abc\")", "#t");
+    assert_evaluates_to!("(equal? 2 2)", "#t");
+    assert_evaluates_to!("(equal? (make-vector 5 'a) (make-vector 5 'a))", "#t");
+    assert_evaluates_to!("(let* ((x (list 'a)) (y (list 'a)) (z (list x y))) (list (equal? z (list y x)) (equal? z (list x x))))", "(#t #t)");
+}

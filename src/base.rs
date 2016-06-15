@@ -36,8 +36,14 @@ pub fn libbase() -> HashMap<Cow<'static, str>, EnvVar> {
         Inst::Return
     ];
 
+    let equal: Vec<Inst> = vec![
+        Inst::Equal,
+        Inst::Return
+    ];
+
     lib.insert(Cow::Borrowed("apply"), EnvVar::Procedure(Rc::new(apply)));
     lib.insert(Cow::Borrowed("eqv?"), EnvVar::Procedure(Rc::new(eqv)));
+    lib.insert(Cow::Borrowed("equal?"), EnvVar::Procedure(Rc::new(equal)));
 
     for syn in Syntax::iter() {
         lib.insert(Cow::Borrowed(syn.name()), EnvVar::Syntax(syn));
