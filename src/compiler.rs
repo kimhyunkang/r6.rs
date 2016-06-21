@@ -245,11 +245,11 @@ impl<'g> Compiler<'g> {
 
         if let Some(Syntax::Define) = self.get_syntax_name(env, &list[0]) {
             match &list[1..] {
-                [Datum::Sym(ref v)] =>
+                &[Datum::Sym(ref v)] =>
                     Ok(Some((v.clone(), Def::Void))),
-                [Datum::Sym(ref v), ref e] =>
+                &[Datum::Sym(ref v), ref e] =>
                     Ok(Some((v.clone(), Def::Expr(e.clone())))),
-                [Datum::Cons(ref form), ..] => {
+                &[Datum::Cons(ref form), ..] => {
                     if let Datum::Sym(ref v) = form.0 {
                         Ok(Some((
                             v.clone(),
@@ -406,13 +406,12 @@ impl<'g> Compiler<'g> {
                             Ok(v) => v,
                             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                         };
-                        match binding.as_ref() {
-                            [Datum::Sym(ref sym), ref expr] => {
-                                syms.push(sym.clone());
-                                exprs.push(expr.clone());
-                            },
-                            _ => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                        };
+                        if let &[Datum::Sym(ref sym), ref expr] = binding.as_slice() {
+                            syms.push(sym.clone());
+                            exprs.push(expr.clone());
+                        } else {
+                            return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+                        }
                     },
                     Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 }
@@ -618,16 +617,14 @@ impl<'g> Compiler<'g> {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
-        match assignment.as_ref() {
-            [Datum::Sym(ref sym), ref expr] => {
-                try!(self.compile_expr(env, ctx, expr));
-                let ptr = try!(self.compile_ref(env, ctx, sym));
-                ctx.code.push(Inst::PopArg(ptr));
-                ctx.code.push(Inst::PushArg(MemRef::Undefined));
-                Ok(())
-            },
-            _ =>
-                return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+        if let &[Datum::Sym(ref sym), ref expr] = assignment.as_slice() {
+            try!(self.compile_expr(env, ctx, expr));
+            let ptr = try!(self.compile_ref(env, ctx, sym));
+            ctx.code.push(Inst::PopArg(ptr));
+            ctx.code.push(Inst::PushArg(MemRef::Undefined));
+            Ok(())
+        } else {
+            Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
     }
 
@@ -694,7 +691,7 @@ impl<'g> Compiler<'g> {
             Err(_) => return None
         };
 
-        if let [Datum::Sym(ref ptr), ref arg] = list.as_ref() {
+        if let &[Datum::Sym(ref ptr), ref arg] = list.as_slice() {
             match ptr.as_ref() {
                 "quasiquote" => Some((Syntax::Quasiquote, arg.clone())),
                 "unquote" => Some((Syntax::Unquote, arg.clone())),

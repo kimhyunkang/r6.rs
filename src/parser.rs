@@ -300,8 +300,8 @@ fn parse_rational(radix: u32, rep: &str, captures: Captures)
         } else if let Some(flt_rep) = captures.at(5) {
             // Floating
             let parts: Vec<&str> = flt_rep.splitn(2, '.').collect();
-            let (rep, exp) = match parts.as_ref() {
-                [int_part, flt_part] => {
+            let (rep, exp) = match parts.as_slice() {
+                &[int_part, flt_part] => {
                     let mut int_rep = String::new();
                     int_rep.write_str(int_part).unwrap();
                     int_rep.write_str(flt_part).unwrap();
