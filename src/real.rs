@@ -185,9 +185,10 @@ pub fn int2flo(n: &BigInt) -> f64 {
     } else {
         u_mantissa
     };
-    let exp = (repr.len() - mantissa_repr.len()) as isize;
+    let exp = (repr.len() - mantissa_repr.len()) as i32;
     let m:f64 = i_mantissa.to_f64().unwrap();
-    return f64::ldexp(m, exp);
+
+    m * 2f64.powi(exp)
 }
 
 pub fn rat2flo(r: &BigRational) -> f64 {

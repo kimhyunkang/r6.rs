@@ -7,7 +7,6 @@
 
 #![feature(slice_patterns)]
 #![feature(io)]
-#![feature(float_extras)]
 
 #![plugin(phf_macros)]
 
