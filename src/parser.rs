@@ -21,7 +21,8 @@ use num::complex::Complex;
 /// Parser parses character stream into a Datum
 pub struct Parser<R> {
     lexer: Lexer<R>,
-    token_buf: Option<TokenWrapper>
+    token_buf: Option<TokenWrapper>,
+    number_parser: NumberParser
 }
 
 fn unexpected_token(tok: &TokenWrapper, expected: String) -> ParserError {
@@ -88,7 +89,136 @@ enum Exactness {
     Unspecified
 }
 
-static PREFIX_PATTERN:Regex = regex!(r"^(?i)(#([iebodx])){0,2}");
+struct NumberParser {
+    prefix_pattern: Regex,
+    bin_real_pattern: Regex,
+    oct_real_pattern: Regex,
+    hex_real_pattern: Regex,
+    dec_real_pattern: Regex
+}
+
+impl NumberParser {
+    fn new() -> NumberParser {
+        NumberParser {
+            prefix_pattern: Regex::new(r"^(?i)(#([iebodx])){0,2}").unwrap(),
+            bin_real_pattern: Regex::new(r"^[+-]?[01]+(/[01]+)?").unwrap(),
+            oct_real_pattern: Regex::new(r"^[+-]?[0-7]+(/[0-7]+)?").unwrap(),
+            hex_real_pattern: Regex::new(r"^[+-]?[0-9a-fA-F]+(/[0-9a-fA-F]+)?").unwrap(),
+
+            //                              1      23         45               6     7                      8         9        10
+            dec_real_pattern: Regex::new(r"^([+-])?((\d+/\d+)|((\d+\.\d*|\.\d+|(\d+))([eEsSfFdDlL][+-]?\d+)?(\|\d+)?)|(nan\.0)|(inf\.0))").unwrap()
+        }
+    }
+
+    fn parse_numerical_tower(&self, exactness: Exactness, radix: u32, rep: &str) -> Result<Number, String> {
+        if rep == "-i" {
+            return Ok(Number::new_int(0, -1));
+        } else if rep == "+i" {
+            return Ok(Number::new_int(0, 1));
+        }
+
+        let (re, re_end) = try!(self.parse_real(exactness, radix, rep));
+
+        if re_end == rep.len() {
+            return Ok(Number::Real(re));
+        }
+
+        match rep[re_end..].chars().next() {
+            Some('@') => {
+                let arg_part = &rep[re_end+1 ..];
+                let (arg, arg_end) = try!(self.parse_real(exactness, radix, arg_part));
+                if arg_end != arg_part.len() {
+                    return Err("Invalid polar literal".to_string());
+                }
+                match exactness {
+                    Exactness::Exact => if arg.is_zero() {
+                            Ok(Number::Real(re))
+                        } else {
+                            Err("Polar literal cannot be exact".to_string())
+                        },
+                    _ =>
+                        Ok(Number::ICmplx(Complex::from_polar(&re.to_f64(), &arg.to_f64())))
+                }
+            },
+            Some('i') => Ok(Number::new_imag(re)),
+            Some('+') | Some('-') => {
+                let im_part = &rep[re_end ..];
+                let (im, im_end) = try!(self.parse_real(exactness, radix, im_part));
+                if im_end+1 == im_part.len() && im_part[im_end..].chars().next() == Some('i') {
+                    if im.is_exact() && im.is_zero() {
+                        Ok(Number::Real(re))
+                    } else {
+                        Ok(Number::new(re, im))
+                    }
+                } else {
+                    Err("Suffix `i` not found at the end of complex literal".to_string())
+                }
+            },
+            _ => Err("Invalid number literal".to_string())
+        }
+    }
+
+    fn parse_numeric(&self, rep: &str) -> Result<Number, String> {
+        let prefix = self.prefix_pattern.captures(rep).unwrap();
+        let num_start = match prefix.pos(0) {
+            None => 0,
+            Some((_, idx)) => idx
+        };
+
+        let (exactness, radix) = try!(parse_prefix(&rep[0 .. num_start]));
+
+        self.parse_numerical_tower(exactness, radix, &rep[num_start ..])
+    }
+
+    fn parse_real(&self, exactness: Exactness, radix: u32, rep: &str) -> Result<(Real, usize), String> {
+        let pattern = match radix {
+            2  => &self.bin_real_pattern,
+            8  => &self.oct_real_pattern,
+            10 => &self.dec_real_pattern,
+            16 => &self.hex_real_pattern,
+            _  => panic!("Invalid radix")
+        };
+
+        let captures = match pattern.captures(rep) {
+            Some(c) => c,
+            None => return Err("Invalid number literal".to_string())
+        };
+
+        let re_part = captures.at(0).unwrap();
+        let re = if let Some(_) = captures.at(9) {
+            // [+-]nan.0
+            if exactness == Exactness::Exact {
+                return Err("Invalid numeric token: nan.0 can't be exact".to_string());
+            } else {
+                Real::Flonum(Float::nan())
+            }
+        } else if let Some(_) = captures.at(10) {
+            // [+-]inf.0
+            if exactness == Exactness::Exact {
+                return Err("Invalid numeric token: inf.0 can't be exact".to_string());
+            } else if rep.chars().next() == Some('-') {
+                Real::Flonum(Float::neg_infinity())
+            } else {
+                Real::Flonum(Float::infinity())
+            }
+        } else {
+            let (r, default_exactness) = try!(parse_rational(radix, re_part, captures));
+            let exact = match exactness {
+                Exactness::Exact => true,
+                Exactness::Unspecified => default_exactness,
+                Exactness::Inexact => false
+            };
+
+            if exact {
+                Real::Rational(r).reduce()
+            } else {
+                Real::Flonum(rat2flo(&r))
+            }
+        };
+
+        return Ok((re, re_part.len()));
+    }
+}
 
 fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     let mut exactness = Exactness::Unspecified;
@@ -136,25 +266,6 @@ fn parse_prefix(prefix: &str) -> Result<(Exactness, u32), String> {
     return Ok((exactness, radix));
 }
 
-fn parse_numeric(rep: &str) -> Result<Number, String> {
-    let prefix = PREFIX_PATTERN.captures(rep).unwrap();
-    let num_start = match prefix.pos(0) {
-        None => 0,
-        Some((_, idx)) => idx
-    };
-
-    let (exactness, radix) = try!(parse_prefix(&rep[0 .. num_start]));
-
-    parse_numerical_tower(exactness, radix, &rep[num_start ..])
-}
-
-static BIN_REAL_PATTERN:Regex = regex!(r"^[+-]?[01]+(/[01]+)?");
-static OCT_REAL_PATTERN:Regex = regex!(r"^[+-]?[0-7]+(/[0-7]+)?");
-static HEX_REAL_PATTERN:Regex = regex!(r"^[+-]?[0-9a-fA-F]+(/[0-9a-fA-F]+)?");
-
-//                                         1      23         45               6     7                      8         9        10
-static DEC_REAL_PATTERN:Regex = regex!(r"^([+-])?((\d+/\d+)|((\d+\.\d*|\.\d+|(\d+))([eEsSfFdDlL][+-]?\d+)?(\|\d+)?)|(nan\.0)|(inf\.0))");
-
 fn pow(base: &BigInt, exp: usize) -> BigInt {
     if exp == 0 {
         return One::one();
@@ -169,103 +280,6 @@ fn pow(base: &BigInt, exp: usize) -> BigInt {
     } else {
         return product * base;
     }
-}
-
-fn parse_numerical_tower(exactness: Exactness, radix: u32, rep: &str) -> Result<Number, String> {
-    if rep == "-i" {
-        return Ok(Number::new_int(0, -1));
-    } else if rep == "+i" {
-        return Ok(Number::new_int(0, 1));
-    }
-
-    let (re, re_end) = try!(parse_real(exactness, radix, rep));
-
-    if re_end == rep.len() {
-        return Ok(Number::Real(re));
-    }
-
-    match rep[re_end..].chars().next() {
-        Some('@') => {
-            let arg_part = &rep[re_end+1 ..];
-            let (arg, arg_end) = try!(parse_real(exactness, radix, arg_part));
-            if arg_end != arg_part.len() {
-                return Err("Invalid polar literal".to_string());
-            }
-            match exactness {
-                Exactness::Exact => if arg.is_zero() {
-                        Ok(Number::Real(re))
-                    } else {
-                        Err("Polar literal cannot be exact".to_string())
-                    },
-                _ =>
-                    Ok(Number::ICmplx(Complex::from_polar(&re.to_f64(), &arg.to_f64())))
-            }
-        },
-        Some('i') => Ok(Number::new_imag(re)),
-        Some('+') | Some('-') => {
-            let im_part = &rep[re_end ..];
-            let (im, im_end) = try!(parse_real(exactness, radix, im_part));
-            if im_end+1 == im_part.len() && im_part[im_end..].chars().next() == Some('i') {
-                if im.is_exact() && im.is_zero() {
-                    Ok(Number::Real(re))
-                } else {
-                    Ok(Number::new(re, im))
-                }
-            } else {
-                Err("Suffix `i` not found at the end of complex literal".to_string())
-            }
-        },
-        _ => Err("Invalid number literal".to_string())
-    }
-}
-
-fn parse_real(exactness: Exactness, radix: u32, rep: &str) -> Result<(Real, usize), String> {
-    let pattern = match radix {
-        2  => &BIN_REAL_PATTERN,
-        8  => &OCT_REAL_PATTERN,
-        10 => &DEC_REAL_PATTERN,
-        16 => &HEX_REAL_PATTERN,
-        _  => panic!("Invalid radix")
-    };
-
-    let captures = match pattern.captures(rep) {
-        Some(c) => c,
-        None => return Err("Invalid number literal".to_string())
-    };
-
-    let re_part = captures.at(0).unwrap();
-    let re = if let Some(_) = captures.at(9) {
-        // [+-]nan.0
-        if exactness == Exactness::Exact {
-            return Err("Invalid numeric token: nan.0 can't be exact".to_string());
-        } else {
-            Real::Flonum(Float::nan())
-        }
-    } else if let Some(_) = captures.at(10) {
-        // [+-]inf.0
-        if exactness == Exactness::Exact {
-            return Err("Invalid numeric token: inf.0 can't be exact".to_string());
-        } else if rep.chars().next() == Some('-') {
-            Real::Flonum(Float::neg_infinity())
-        } else {
-            Real::Flonum(Float::infinity())
-        }
-    } else {
-        let (r, default_exactness) = try!(parse_rational(radix, re_part, captures));
-        let exact = match exactness {
-            Exactness::Exact => true,
-            Exactness::Unspecified => default_exactness,
-            Exactness::Inexact => false
-        };
-
-        if exact {
-            Real::Rational(r).reduce()
-        } else {
-            Real::Flonum(rat2flo(&r))
-        }
-    };
-
-    return Ok((re, re_part.len()));
 }
 
 fn parse_rational(radix: u32, rep: &str, captures: Captures)
@@ -341,7 +355,8 @@ impl <R: Read + Sized> Parser<R> {
     pub fn new(stream: R) -> Parser<R> {
         Parser {
             lexer: Lexer::new(stream),
-            token_buf: None
+            token_buf: None,
+            number_parser: NumberParser::new()
         }
     }
 
@@ -376,7 +391,7 @@ impl <R: Read + Sized> Parser<R> {
                 None => Err(invalid_token(&tok))
             },
             Token::String(s) => Ok(Datum::String(Rc::new(s))),
-            Token::Numeric(ref rep) => match parse_numeric(rep.as_ref()) {
+            Token::Numeric(ref rep) => match self.number_parser.parse_numeric(rep.as_ref()) {
                 Ok(n) => Ok(Datum::Num(n)),
                 Err(e) => Err(ParserError {
                     line: tok.line,

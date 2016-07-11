@@ -10,7 +10,6 @@
 #![feature(float_extras)]
 
 #![plugin(phf_macros)]
-#![plugin(regex_macros)]
 
 // This line should be at the top of the extern link list,
 // because some weird compiler bug lets log imported from rustc, not crates.io log

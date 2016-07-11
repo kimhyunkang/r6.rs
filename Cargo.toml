@@ -8,7 +8,6 @@ num = "0.1"
 phf = "0.7"
 phf_macros = "0.7"
 regex = "0.1"
-regex_macros = "0.1"
 log = "0.3"
 enum_primitive = "0.1"
 
