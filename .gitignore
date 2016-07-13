@@ -15,3 +15,7 @@
 
 # Editor swap files
 *.swp
+
+# IDEA files
+.idea
+*.iml
