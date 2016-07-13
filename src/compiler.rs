@@ -1,6 +1,8 @@
 use std::borrow::Cow;
-use std::fmt;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use num::FromPrimitive;
@@ -8,7 +10,7 @@ use num::FromPrimitive;
 use error::{CompileError, CompileErrorKind};
 use datum::Datum;
 use primitive::{PRIM_APPEND, PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
-use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum};
+use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
 
 /// Syntax variables
 enum_from_primitive! {
@@ -75,22 +77,13 @@ impl Syntax {
     }
 }
 
-/// Environment variables in the global environment
-pub enum EnvVar {
-    /// Syntax variables
-    Syntax(Syntax),
-
-    /// Primitive functions
-    PrimFunc(PrimFuncPtr),
-
-    /// Compiled library functions
-    Procedure(Rc<Vec<Inst>>)
-}
-
 /// Compiler compiles Datum into a bytecode evaluates it
 pub struct Compiler<'g> {
+    /// Syntax environment
+    syntax_env: &'g HashMap<Cow<'static, str>, Syntax>,
+
     /// Global environment
-    global_env: &'g HashMap<Cow<'static, str>, EnvVar>
+    global_env: &'g HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>
 }
 
 struct CodeGenContext {
@@ -128,8 +121,9 @@ enum Def {
 
 impl<'g> Compiler<'g> {
     /// Creates a new compiler with given environment
-    pub fn new<'a>(global_env: &'a HashMap<Cow<'static, str>, EnvVar>) -> Compiler<'a> {
+    pub fn new<'a>(syntax_env: &'a HashMap<Cow<'static, str>, Syntax>, global_env: &'a HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>) -> Compiler<'a> {
         Compiler {
+            syntax_env: syntax_env,
             global_env: global_env
         }
     }
@@ -596,17 +590,21 @@ impl<'g> Compiler<'g> {
         }
 
         match self.global_env.get(sym) {
-            Some(data) => match data {
-                &EnvVar::Syntax(ref s) =>
-                    Err(CompileError { kind: CompileErrorKind::SyntaxReference(s.clone()) }),
-                &EnvVar::PrimFunc(ref fptr) =>
+            Some(data) => match data.borrow().deref() {
+                &Datum::Ext(RuntimeData::PrimFunc(ref fptr)) =>
                     Ok(MemRef::PrimFunc(fptr.clone())),
-                &EnvVar::Procedure(ref code) => {
-                    Ok(MemRef::Closure(code.clone(), 0))
-                }
+                &Datum::Ext(RuntimeData::Closure(ref ptr)) =>
+                    Ok(MemRef::Closure(ptr.code.clone(), 0)),
+                _ =>
+                    Ok(MemRef::Global(data.clone()))
             },
-            None =>
-                Err(CompileError { kind: CompileErrorKind::UnboundVariable })
+            None => {
+                if let Some(syntax) = self.syntax_env.get(sym) {
+                    Err(CompileError { kind: CompileErrorKind::SyntaxReference(syntax.clone()) })
+                } else {
+                    Err(CompileError { kind: CompileErrorKind::UnboundVariable })
+                }
+            }
         }
     }
 
@@ -1056,15 +1054,16 @@ mod test {
     use std::rc::Rc;
     use datum::Datum;
     use runtime::{Inst, MemRef, PrimFuncPtr, SimpleDatum};
-    use base::libbase;
+    use base::{base_syntax, libbase};
     use primitive::{PRIM_ADD, PRIM_CONS};
     use number::Number;
     use super::Compiler;
 
     #[test]
     fn test_simple_expr() {
-        let env = libbase();
-        let compiler = Compiler::new(&env);
+        let global = libbase();
+        let syntax = base_syntax();
+        let compiler = Compiler::new(&syntax, &global);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1 ,0)))),
@@ -1078,8 +1077,9 @@ mod test {
 
     #[test]
     fn test_nested_expr() {
-        let env = libbase();
-        let compiler = Compiler::new(&env);
+        let global = libbase();
+        let syntax = base_syntax();
+        let compiler = Compiler::new(&syntax, &global);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
@@ -1096,8 +1096,9 @@ mod test {
 
     #[test]
     fn test_lambda() {
-        let env = libbase();
-        let compiler = Compiler::new(&env);
+        let global = libbase();
+        let syntax = base_syntax();
+        let compiler = Compiler::new(&syntax, &global);
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1122,8 +1123,9 @@ mod test {
 
     #[test]
     fn test_upvalue() {
-        let env = libbase();
-        let compiler = Compiler::new(&env);
+        let global = libbase();
+        let syntax = base_syntax();
+        let compiler = Compiler::new(&syntax, &global);
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1164,8 +1166,9 @@ mod test {
 
     #[test]
     fn test_quote() {
-        let env = libbase();
-        let compiler = Compiler::new(&env);
+        let global = libbase();
+        let syntax = base_syntax();
+        let compiler = Compiler::new(&syntax, &global);
 
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),

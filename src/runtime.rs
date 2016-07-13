@@ -1,10 +1,12 @@
 use std::rc::Rc;
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::mem;
 use std::fmt;
 use std::ops::DerefMut;
 
+use base::libbase;
 use cast::DatumCast;
 use eqv::DatumEqv;
 use number::Number;
@@ -60,9 +62,9 @@ pub enum RuntimeData {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     // Pointer to the bytecode
-    code: Rc<Vec<Inst>>,
+    pub code: Rc<Vec<Inst>>,
     // The lexical environment directly enclosing the code
-    static_link: Option<StaticLink>
+    pub static_link: Option<StaticLink>
 }
 
 impl DatumEqv for Closure {
@@ -160,6 +162,7 @@ pub enum MemRef {
     RetVal,
     Arg(usize),
     UpValue(usize, usize),
+    Global(Rc<RefCell<RDatum>>),
     Const(SimpleDatum),
     Undefined,
     PrimFunc(PrimFuncPtr),
@@ -289,7 +292,8 @@ pub struct Runtime {
     ret_val: RDatum,
     arg_stack: Vec<RDatum>,
     call_stack: Vec<StackFrame>,
-    frame: StackFrame
+    frame: StackFrame,
+    global: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>
 }
 
 impl Runtime {
@@ -309,7 +313,8 @@ impl Runtime {
                 stack_bottom: 0,
                 arg_size: 0,
                 self_link: Rc::new(RefCell::new(ScopePtr::Stack(0)))
-            }
+            },
+            global: libbase()
         }
     }
 
@@ -387,6 +392,7 @@ impl Runtime {
             MemRef::Arg(idx) => self.get_stack_val(idx),
             MemRef::UpValue(i, j) => self.get_upvalue(i, j),
             MemRef::Const(val) => DatumCast::wrap(val),
+            MemRef::Global(data) => data.borrow().clone(),
             MemRef::Undefined => Datum::Ext(RuntimeData::Undefined),
             MemRef::PrimFunc(ptr) => Datum::Ext(RuntimeData::PrimFunc(ptr)),
             MemRef::Closure(code, _) => Datum::Ext(RuntimeData::Closure(
@@ -407,6 +413,7 @@ impl Runtime {
                 self.arg_stack[self.frame.stack_bottom + idx] = val;
             },
             MemRef::UpValue(i, j) => self.set_upvalue(i, j, val),
+            MemRef::Global(ptr) => { *(ptr.borrow_mut()) = val },
             MemRef::Const(_) => panic!("Cannot write to read-only memory"),
             MemRef::Undefined => panic!("Cannot write to undefined memory address"),
             MemRef::PrimFunc(_) => panic!("Cannot write to code area"),

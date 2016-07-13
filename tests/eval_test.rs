@@ -4,7 +4,7 @@ extern crate env_logger;
 use std::sync::{Once, ONCE_INIT};
 use r6::runtime::Runtime;
 use r6::compiler::Compiler;
-use r6::base::libbase;
+use r6::base::{base_syntax, libbase};
 use r6::parser::Parser;
 
 static START: Once = ONCE_INIT;
@@ -27,8 +27,9 @@ macro_rules! assert_evaluates_to {
                 Err(e) => panic!("failed to parse {}: {:?}", $expected, e)
             };
 
+            let syntax = base_syntax();
             let base = libbase();
-            let compiler = Compiler::new(&base);
+            let compiler = Compiler::new(&syntax, &base);
             let bytecode = match compiler.compile(&sourcecode) {
                 Ok(code) => code,
                 Err(e) => panic!("Failed to compile {:?}: {:?}", &sourcecode, e)
@@ -51,8 +52,9 @@ macro_rules! assert_evaluates_datum {
                 Err(e) => panic!("failed to parse source: {:?}", e)
             };
 
+            let syntax = base_syntax();
             let base = libbase();
-            let compiler = Compiler::new(&base);
+            let compiler = Compiler::new(&syntax, &base);
             let bytecode = match compiler.compile(&sourcecode) {
                 Ok(code) => code,
                 Err(e) => panic!("compile failure: {:?}", e)

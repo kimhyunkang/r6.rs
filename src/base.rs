@@ -1,16 +1,32 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::borrow::Cow;
 use std::rc::Rc;
 
-use compiler::{EnvVar, Syntax};
+use compiler::Syntax;
+use datum::Datum;
 use primitive::libprimitive;
-use runtime::{DatumType, Inst, PrimFuncPtr};
+use runtime::{DatumType, Inst, PrimFuncPtr, RuntimeData, Closure, RDatum};
 
 /// Compiles the global env from `base`
-pub fn libbase() -> HashMap<Cow<'static, str>, EnvVar> {
+pub fn base_syntax() -> HashMap<Cow<'static, str>, Syntax> {
+    let mut lib = HashMap::new();
+
+    for syn in Syntax::iter() {
+        lib.insert(Cow::Borrowed(syn.name()), syn);
+    }
+
+    return lib;
+}
+
+pub fn static_closure(bytecode: Vec<Inst>) -> Rc<RefCell<RDatum>> {
+    Rc::new(RefCell::new(Datum::Ext(RuntimeData::Closure(Closure::new(Rc::new(bytecode), None)))))
+}
+
+pub fn libbase() -> HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>> {
     let mut lib = HashMap::new();
     for &(name, func) in libprimitive().iter() {
-        lib.insert(Cow::Borrowed(name), EnvVar::PrimFunc(PrimFuncPtr::new(name, func)));
+        lib.insert(Cow::Borrowed(name), Rc::new(RefCell::new(Datum::Ext(RuntimeData::PrimFunc(PrimFuncPtr::new(name, func))))));
     }
 
     let apply: Vec<Inst> = vec![
@@ -41,13 +57,9 @@ pub fn libbase() -> HashMap<Cow<'static, str>, EnvVar> {
         Inst::Return
     ];
 
-    lib.insert(Cow::Borrowed("apply"), EnvVar::Procedure(Rc::new(apply)));
-    lib.insert(Cow::Borrowed("eqv?"), EnvVar::Procedure(Rc::new(eqv)));
-    lib.insert(Cow::Borrowed("equal?"), EnvVar::Procedure(Rc::new(equal)));
-
-    for syn in Syntax::iter() {
-        lib.insert(Cow::Borrowed(syn.name()), EnvVar::Syntax(syn));
-    }
+    lib.insert(Cow::Borrowed("apply"), static_closure(apply));
+    lib.insert(Cow::Borrowed("eqv?"), static_closure(eqv));
+    lib.insert(Cow::Borrowed("equal?"), static_closure(equal));
 
     return lib;
 }
