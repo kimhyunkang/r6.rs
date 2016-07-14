@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem;
 use std::fmt;
+use std::fmt::Debug;
 use std::ops::DerefMut;
 
 use cast::DatumCast;
@@ -205,6 +206,8 @@ pub enum Inst {
     PushArg(MemRef),
     /// pop value from the stack and copy to the given pointer
     PopArg(MemRef),
+    /// pop value from the stack and push to the new global variable
+    PopGlobal(Cow<'static, str>),
     /// pop value from the stack and remove it
     DropArg,
     /// swap two top values of the stack
@@ -344,7 +347,7 @@ impl Runtime {
         }
     }
 
-    pub fn eval<T: Clone>(&mut self, datum: &Datum<T>) -> Result<RDatum, RuntimeError> {
+    pub fn eval<T: Clone+Debug>(&mut self, datum: &Datum<T>) -> Result<RDatum, RuntimeError> {
         let code = match self.compiler.compile(&self.global, datum) {
             Ok(c) => c,
             Err(e) => return Err(RuntimeError {
@@ -646,6 +649,11 @@ impl Runtime {
                 try!(self.write_mem(ptr, val));
                 self.frame.pc += 1;
             },
+            Inst::PopGlobal(sym) => {
+                let val = try!(self.pop_stack());
+                self.global.insert(sym, Rc::new(RefCell::new(val)));
+                self.frame.pc += 1;
+            },
             Inst::DropArg => {
                 try!(self.pop_stack());
                 self.frame.pc += 1;
@@ -706,6 +714,9 @@ impl Runtime {
                 let top = self.arg_stack.len();
                 let res = self.pop_call_stack();
                 let retval = try!(self.pop_stack());
+                if top < n+2 {
+                    return Err(runtime_panic("stack too low".to_string()));
+                }
                 self.arg_stack.truncate(top - n - 2);
                 self.push_stack(retval);
                 if res {

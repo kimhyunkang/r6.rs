@@ -15,7 +15,7 @@ macro_rules! assert_evaluates_to {
                 env_logger::init().unwrap();
             });
             let mut src_parser = Parser::new($src.as_bytes());
-            let sourcecode = match src_parser.parse_datum() {
+            let sourcecode = match src_parser.parse_datum::<()>() {
                 Ok(code) => code,
                 Err(e) => panic!("failed to parse {}: {:?}", $src, e)
             };
@@ -41,7 +41,7 @@ macro_rules! assert_evaluates_datum {
     ($src:expr, $expected:expr) => (
         {
             let mut src_parser = Parser::new($src.as_bytes());
-            let sourcecode = match src_parser.parse_datum() {
+            let sourcecode = match src_parser.parse_datum::<()>() {
                 Ok(code) => code,
                 Err(e) => panic!("failed to parse source: {:?}", e)
             };
