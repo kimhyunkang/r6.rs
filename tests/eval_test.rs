@@ -3,7 +3,6 @@ extern crate env_logger;
 
 use std::sync::{Once, ONCE_INIT};
 use r6::runtime::Runtime;
-use r6::compiler::Compiler;
 use r6::base::{base_syntax, libbase};
 use r6::parser::Parser;
 
