@@ -81,9 +81,6 @@ impl Syntax {
 pub struct Compiler<'g> {
     /// Syntax environment
     syntax_env: &'g HashMap<Cow<'static, str>, Syntax>,
-
-    /// Global environment
-    global_env: &'g HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>
 }
 
 struct CodeGenContext {
@@ -92,17 +89,20 @@ struct CodeGenContext {
 }
 
 #[derive(Clone)]
-struct LexicalContext {
+struct LexicalContext<'g> {
+    /// Current global environment
+    global_env: &'g HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
     static_scope: Vec<Vec<Cow<'static, str>>>,
     args: Vec<Cow<'static, str>>
 }
 
-impl LexicalContext {
-    fn update_arg(&self, args: Vec<Cow<'static, str>>) -> LexicalContext {
+impl<'g> LexicalContext<'g> {
+    fn update_arg(&self, args: Vec<Cow<'static, str>>) -> LexicalContext<'g> {
         let mut scope = self.static_scope.clone();
         scope.push(self.args.clone());
 
         LexicalContext {
+            global_env: self.global_env,
             static_scope: scope,
             args: args
         }
@@ -121,20 +121,20 @@ enum Def {
 
 impl<'g> Compiler<'g> {
     /// Creates a new compiler with given environment
-    pub fn new<'a>(syntax_env: &'a HashMap<Cow<'static, str>, Syntax>, global_env: &'a HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>) -> Compiler<'a> {
+    pub fn new<'a>(syntax_env: &'a HashMap<Cow<'static, str>, Syntax>) -> Compiler<'a> {
         Compiler {
-            syntax_env: syntax_env,
-            global_env: global_env
+            syntax_env: syntax_env
         }
     }
 
     /// Compiles the datum into a bytecode evaluates it
-    pub fn compile(&self, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
+    pub fn compile(&self, global_env: &HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
         };
         let env = LexicalContext {
+            global_env: global_env,
             static_scope: Vec::new(),
             args: Vec::new()
         };
@@ -589,7 +589,7 @@ impl<'g> Compiler<'g> {
             }
         }
 
-        match self.global_env.get(sym) {
+        match env.global_env.get(sym) {
             Some(data) => match data.borrow().deref() {
                 &Datum::Ext(RuntimeData::PrimFunc(ref fptr)) =>
                     Ok(MemRef::PrimFunc(fptr.clone())),
@@ -1063,7 +1063,7 @@ mod test {
     fn test_simple_expr() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax, &global);
+        let compiler = Compiler::new(&syntax);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1 ,0)))),
@@ -1071,7 +1071,7 @@ mod test {
             Inst::Call(2),
             Inst::Return
         ]);
-        let code = compiler.compile(&list![sym!("+"), num!(1), num!(2)]);
+        let code = compiler.compile(&global, &list![sym!("+"), num!(1), num!(2)]);
         assert_eq!(expected, code);
     }
 
@@ -1079,7 +1079,7 @@ mod test {
     fn test_nested_expr() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax, &global);
+        let compiler = Compiler::new(&syntax);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
@@ -1090,7 +1090,7 @@ mod test {
             Inst::Call(2),
             Inst::Return
         ]);
-        let code = compiler.compile(&list![sym!("+"), num!(3), list![sym!("+"), num!(1), num!(2)]]);
+        let code = compiler.compile(&global, &list![sym!("+"), num!(3), list![sym!("+"), num!(1), num!(2)]]);
         assert_eq!(expected, code);
     }
 
@@ -1098,7 +1098,7 @@ mod test {
     fn test_lambda() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax, &global);
+        let compiler = Compiler::new(&syntax);
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1114,7 +1114,7 @@ mod test {
             Inst::Call(1),
             Inst::Return
         ]);
-        let code = compiler.compile(&list![
+        let code = compiler.compile(&global, &list![
                            list![sym!("lambda"), list![sym!("x")],
                                 list![sym!("+"), sym!("x"), num!(2)]],
                             num!(1)]);
@@ -1125,7 +1125,7 @@ mod test {
     fn test_upvalue() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax, &global);
+        let compiler = Compiler::new(&syntax);
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1153,7 +1153,7 @@ mod test {
         //   (lambda (x)            # = g
         //     (lambda (y) (+ x y)) # = f
         //   ) 2) 3)
-        let code = compiler.compile(&list![
+        let code = compiler.compile(&global, &list![
             list![
                 list![sym!("lambda"), list![sym!("x")],
                     list![sym!("lambda"), list![sym!("y")],
@@ -1168,7 +1168,7 @@ mod test {
     fn test_quote() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax, &global);
+        let compiler = Compiler::new(&syntax);
 
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),
@@ -1187,7 +1187,7 @@ mod test {
             Inst::Return
         ]);
 
-        let code = compiler.compile(&list![sym!("quote"), list![num!(1), list![num!(2), num!(3)]]]);
+        let code = compiler.compile(&global, &list![sym!("quote"), list![num!(1), list![num!(2), num!(3)]]]);
         assert_eq!(expected, code)
     }
 }

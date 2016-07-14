@@ -29,8 +29,8 @@ macro_rules! assert_evaluates_to {
 
             let syntax = base_syntax();
             let base = libbase();
-            let compiler = Compiler::new(&syntax, &base);
-            let bytecode = match compiler.compile(&sourcecode) {
+            let compiler = Compiler::new(&syntax);
+            let bytecode = match compiler.compile(&base, &sourcecode) {
                 Ok(code) => code,
                 Err(e) => panic!("Failed to compile {:?}: {:?}", &sourcecode, e)
             };
@@ -54,8 +54,8 @@ macro_rules! assert_evaluates_datum {
 
             let syntax = base_syntax();
             let base = libbase();
-            let compiler = Compiler::new(&syntax, &base);
-            let bytecode = match compiler.compile(&sourcecode) {
+            let compiler = Compiler::new(&syntax);
+            let bytecode = match compiler.compile(&base, &sourcecode) {
                 Ok(code) => code,
                 Err(e) => panic!("compile failure: {:?}", e)
             };
