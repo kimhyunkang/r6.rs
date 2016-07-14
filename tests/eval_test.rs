@@ -29,13 +29,8 @@ macro_rules! assert_evaluates_to {
 
             let syntax = base_syntax();
             let base = libbase();
-            let compiler = Compiler::new(&syntax);
-            let bytecode = match compiler.compile(&base, &sourcecode) {
-                Ok(code) => code,
-                Err(e) => panic!("Failed to compile {:?}: {:?}", &sourcecode, e)
-            };
-            let mut runtime = Runtime::new(bytecode);
-            let result = runtime.run().unwrap();
+            let mut runtime = Runtime::new(base, syntax);
+            let result = runtime.eval(&sourcecode).unwrap();
             if !((result == expected) && (expected == result)) {
                 panic!("test failed: expected `{:?}` but got `{:?}`", expected, result);
             }
@@ -54,13 +49,9 @@ macro_rules! assert_evaluates_datum {
 
             let syntax = base_syntax();
             let base = libbase();
-            let compiler = Compiler::new(&syntax);
-            let bytecode = match compiler.compile(&base, &sourcecode) {
-                Ok(code) => code,
-                Err(e) => panic!("compile failure: {:?}", e)
-            };
-            let mut runtime = Runtime::new(bytecode);
-            let result = runtime.run().unwrap();
+            let mut runtime = Runtime::new(base, syntax);
+            let result = runtime.eval(&sourcecode).unwrap();
+
             if !((result == $expected) && ($expected == result)) {
                 panic!("test failed: expected `{:?}` but got `{:?}`", $expected, result);
             }

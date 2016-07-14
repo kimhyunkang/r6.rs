@@ -6,8 +6,8 @@ use std::mem;
 use std::fmt;
 use std::ops::DerefMut;
 
-use base::libbase;
 use cast::DatumCast;
+use compiler::{Compiler, Syntax};
 use eqv::DatumEqv;
 use error::{RuntimeError, RuntimeErrorKind};
 use number::Number;
@@ -294,7 +294,8 @@ pub struct Runtime {
     arg_stack: Vec<RDatum>,
     call_stack: Vec<StackFrame>,
     frame: StackFrame,
-    global: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>
+    global: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
+    compiler: Compiler
 }
 
 fn runtime_panic(msg: String) -> RuntimeError {
@@ -306,24 +307,54 @@ fn runtime_panic(msg: String) -> RuntimeError {
 
 impl Runtime {
     /// Create the new virtual machine with given code
-    pub fn new(code: Vec<Inst>) -> Runtime {
+    pub fn new(base: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>, base_syntax: HashMap<Cow<'static, str>, Syntax>) -> Runtime {
         Runtime {
             ret_val: Datum::Nil,
             // Return instruction removes current closure with the args
             // However, there isn't a calling closure at the top program because we directly inject
             // the code here.
             // That's why we inject a dummy value at the bottom of the arg stack
-            arg_stack: vec![Datum::Ext(RuntimeData::Undefined)],
+            arg_stack: Vec::new(),
             call_stack: Vec::new(),
             frame: StackFrame {
-                closure: Closure { code: Rc::new(code), static_link: None},
+                closure: Closure { code: Rc::new(Vec::new()), static_link: None},
                 pc: 0,
                 stack_bottom: 0,
                 arg_size: 0,
                 self_link: Rc::new(RefCell::new(ScopePtr::Stack(0)))
             },
-            global: libbase()
+            global: base,
+            compiler: Compiler::new(base_syntax)
         }
+    }
+
+    pub fn load_main(&mut self, code: Vec<Inst>) {
+        // Return instruction removes current closure with the args
+        // However, there isn't a calling closure at the top program because we directly inject
+        // the code here.
+        // That's why we inject a dummy value at the bottom of the arg stack
+        self.arg_stack = vec![Datum::Ext(RuntimeData::Undefined)];
+        self.call_stack = Vec::new();
+        self.frame = StackFrame {
+            closure: Closure { code: Rc::new(code), static_link: None},
+            pc: 0,
+            stack_bottom: 0,
+            arg_size: 0,
+            self_link: Rc::new(RefCell::new(ScopePtr::Stack(0)))
+        }
+    }
+
+    pub fn eval(&mut self, datum: &RDatum) -> Result<RDatum, RuntimeError> {
+        let code = match self.compiler.compile(&self.global, datum) {
+            Ok(c) => c,
+            Err(e) => return Err(RuntimeError {
+                kind: RuntimeErrorKind::CompileError,
+                desc: format!("{:?}", e.kind)
+            })
+        };
+
+        self.load_main(code);
+        self.run()
     }
 
     fn fetch(&self) -> Inst {
@@ -699,8 +730,10 @@ impl Runtime {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
     use std::rc::Rc;
     use super::{Inst, MemRef, PrimFuncPtr, Runtime, SimpleDatum};
+    use base::libbase;
     use datum::Datum;
     use primitive::PRIM_ADD;
     use number::Number;
@@ -715,7 +748,8 @@ mod test {
             Inst::Return
         ];
 
-        let mut runtime = Runtime::new(code);
+        let mut runtime = Runtime::new(libbase(), HashMap::new());
+        runtime.load_main(code);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(3, 0))));
     }
 
@@ -732,7 +766,8 @@ mod test {
             Inst::Return
         ];
 
-        let mut runtime = Runtime::new(code);
+        let mut runtime = Runtime::new(libbase(), HashMap::new());
+        runtime.load_main(code);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(6, 0))));
     }
 
@@ -752,7 +787,8 @@ mod test {
             Inst::Return
         ];
 
-        let mut runtime = Runtime::new(code);
+        let mut runtime = Runtime::new(libbase(), HashMap::new());
+        runtime.load_main(code);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(3, 0))));
     }
 
@@ -783,7 +819,8 @@ mod test {
             Inst::Return
         ];
 
-        let mut runtime = Runtime::new(code);
+        let mut runtime = Runtime::new(libbase(), HashMap::new());
+        runtime.load_main(code);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(5, 0))));
     }
 }

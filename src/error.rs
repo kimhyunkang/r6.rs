@@ -119,7 +119,9 @@ pub enum RuntimeErrorKind {
     /// Divide by zero
     DivideByZero,
     /// Index out of range
-    IndexOutOfRange
+    IndexOutOfRange,
+    /// Compile error
+    CompileError
 }
 
 /// Errors raised in runtime

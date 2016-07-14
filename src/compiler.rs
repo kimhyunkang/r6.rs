@@ -78,9 +78,9 @@ impl Syntax {
 }
 
 /// Compiler compiles Datum into a bytecode evaluates it
-pub struct Compiler<'g> {
+pub struct Compiler {
     /// Syntax environment
-    syntax_env: &'g HashMap<Cow<'static, str>, Syntax>,
+    syntax_env: HashMap<Cow<'static, str>, Syntax>,
 }
 
 struct CodeGenContext {
@@ -119,9 +119,9 @@ enum Def {
     Void
 }
 
-impl<'g> Compiler<'g> {
+impl Compiler {
     /// Creates a new compiler with given environment
-    pub fn new<'a>(syntax_env: &'a HashMap<Cow<'static, str>, Syntax>) -> Compiler<'a> {
+    pub fn new(syntax_env: HashMap<Cow<'static, str>, Syntax>) -> Compiler {
         Compiler {
             syntax_env: syntax_env
         }
@@ -1063,7 +1063,7 @@ mod test {
     fn test_simple_expr() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax);
+        let compiler = Compiler::new(syntax);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1 ,0)))),
@@ -1079,7 +1079,7 @@ mod test {
     fn test_nested_expr() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax);
+        let compiler = Compiler::new(syntax);
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
@@ -1098,7 +1098,7 @@ mod test {
     fn test_lambda() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax);
+        let compiler = Compiler::new(syntax);
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1125,7 +1125,7 @@ mod test {
     fn test_upvalue() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax);
+        let compiler = Compiler::new(syntax);
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1168,7 +1168,7 @@ mod test {
     fn test_quote() {
         let global = libbase();
         let syntax = base_syntax();
-        let compiler = Compiler::new(&syntax);
+        let compiler = Compiler::new(syntax);
 
         let expected = Ok(vec![
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))),
