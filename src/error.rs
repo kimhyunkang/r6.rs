@@ -130,3 +130,9 @@ pub struct RuntimeError {
     pub kind: RuntimeErrorKind,
     pub desc: String
 }
+
+impl fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}: {}", self.kind, self.desc)
+    }
+}

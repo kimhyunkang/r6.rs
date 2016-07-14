@@ -344,7 +344,7 @@ impl Runtime {
         }
     }
 
-    pub fn eval(&mut self, datum: &RDatum) -> Result<RDatum, RuntimeError> {
+    pub fn eval<T: Clone>(&mut self, datum: &Datum<T>) -> Result<RDatum, RuntimeError> {
         let code = match self.compiler.compile(&self.global, datum) {
             Ok(c) => c,
             Err(e) => return Err(RuntimeError {
