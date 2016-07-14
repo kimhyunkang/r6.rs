@@ -35,7 +35,7 @@ macro_rules! assert_evaluates_to {
                 Err(e) => panic!("Failed to compile {:?}: {:?}", &sourcecode, e)
             };
             let mut runtime = Runtime::new(bytecode);
-            let result = runtime.run();
+            let result = runtime.run().unwrap();
             if !((result == expected) && (expected == result)) {
                 panic!("test failed: expected `{:?}` but got `{:?}`", expected, result);
             }
@@ -60,7 +60,7 @@ macro_rules! assert_evaluates_datum {
                 Err(e) => panic!("compile failure: {:?}", e)
             };
             let mut runtime = Runtime::new(bytecode);
-            let result = runtime.run();
+            let result = runtime.run().unwrap();
             if !((result == $expected) && ($expected == result)) {
                 panic!("test failed: expected `{:?}` but got `{:?}`", $expected, result);
             }

@@ -9,6 +9,7 @@ use std::ops::DerefMut;
 use base::libbase;
 use cast::DatumCast;
 use eqv::DatumEqv;
+use error::{RuntimeError, RuntimeErrorKind};
 use number::Number;
 use datum::Datum;
 use primitive::PrimFunc;
@@ -296,6 +297,13 @@ pub struct Runtime {
     global: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>
 }
 
+fn runtime_panic(msg: String) -> RuntimeError {
+    RuntimeError {
+        kind: RuntimeErrorKind::Panic,
+        desc: msg
+    }
+}
+
 impl Runtime {
     /// Create the new virtual machine with given code
     pub fn new(code: Vec<Inst>) -> Runtime {
@@ -340,15 +348,14 @@ impl Runtime {
         }
     }
 
-    fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> RDatum {
-        let mut link = self.frame.closure.static_link.clone();
+    fn get_upvalue(&self, link_cnt: usize, arg_idx: usize) -> Result<RDatum, RuntimeError> {
+        let mut link_res = self.frame.closure.static_link.clone();
         for _ in 0 .. link_cnt {
-            link = self.up_scope(link);
+            link_res = self.up_scope(link_res);
         }
-        match link {
-            None => panic!("get_upvalue({:?}, {:?}) failed!", link_cnt, arg_idx),
-            Some(link) => match *link.borrow() {
-                ScopePtr::Heap(ref data) => data.args[arg_idx].clone(),
+        if let Some(link) = link_res {
+            match *link.borrow() {
+                ScopePtr::Heap(ref data) => Ok(data.args[arg_idx].clone()),
                 ScopePtr::Stack(n) => {
                     let frame_ref = if n == self.call_stack.len() {
                         &self.frame
@@ -356,20 +363,21 @@ impl Runtime {
                         &self.call_stack[n]
                     };
                     let bot = frame_ref.stack_bottom;
-                    self.arg_stack[bot + arg_idx].clone()
+                    Ok(self.arg_stack[bot + arg_idx].clone())
                 }
             }
+        } else {
+            Err(runtime_panic(format!("get_upvalue({:?}, {:?}) failed!", link_cnt, arg_idx)))
         }
     }
 
-    fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: RDatum) {
-        let mut link = self.frame.closure.static_link.clone();
+    fn set_upvalue(&mut self, link_cnt: usize, arg_idx: usize, val: RDatum) -> Result<(), RuntimeError> {
+        let mut link_res = self.frame.closure.static_link.clone();
         for _ in 0 .. link_cnt {
-            link = self.up_scope(link);
+            link_res = self.up_scope(link_res);
         }
-        match link {
-            None => panic!("get_upvalue({:?}, {:?}) failed!", link_cnt, arg_idx),
-            Some(link) => match link.borrow_mut().deref_mut() {
+        if let Some(link) = link_res {
+            match link.borrow_mut().deref_mut() {
                 &mut ScopePtr::Heap(ref mut data) => {
                     data.args[arg_idx] = val;
                 },
@@ -383,14 +391,17 @@ impl Runtime {
                     self.arg_stack[bot + arg_idx] = val;
                 }
             }
+            Ok(())
+        } else {
+            Err(runtime_panic(format!("set_upvalue({:?}, {:?}) failed!", link_cnt, arg_idx)))
         }
     }
 
-    fn fetch_mem(&self, ptr: MemRef) -> RDatum {
-        match ptr {
+    fn fetch_mem(&self, ptr: MemRef) -> Result<RDatum, RuntimeError> {
+        let val = match ptr {
             MemRef::RetVal => self.ret_val.clone(),
             MemRef::Arg(idx) => self.get_stack_val(idx),
-            MemRef::UpValue(i, j) => self.get_upvalue(i, j),
+            MemRef::UpValue(i, j) => try!(self.get_upvalue(i, j)),
             MemRef::Const(val) => DatumCast::wrap(val),
             MemRef::Global(data) => data.borrow().clone(),
             MemRef::Undefined => Datum::Ext(RuntimeData::Undefined),
@@ -401,10 +412,12 @@ impl Runtime {
                     static_link: Some(self.frame.self_link.clone())
                 }
             ))
-        }
+        };
+
+        Ok(val)
     }
 
-    fn write_mem(&mut self, ptr: MemRef, val: RDatum) {
+    fn write_mem(&mut self, ptr: MemRef, val: RDatum) -> Result<(), RuntimeError> {
         match ptr {
             MemRef::RetVal => {
                 self.ret_val = val;
@@ -412,13 +425,15 @@ impl Runtime {
             MemRef::Arg(idx) => {
                 self.arg_stack[self.frame.stack_bottom + idx] = val;
             },
-            MemRef::UpValue(i, j) => self.set_upvalue(i, j, val),
+            MemRef::UpValue(i, j) => return self.set_upvalue(i, j, val),
             MemRef::Global(ptr) => { *(ptr.borrow_mut()) = val },
-            MemRef::Const(_) => panic!("Cannot write to read-only memory"),
-            MemRef::Undefined => panic!("Cannot write to undefined memory address"),
-            MemRef::PrimFunc(_) => panic!("Cannot write to code area"),
-            MemRef::Closure(_, _) => panic!("Cannot write to instruction memory")
+            MemRef::Const(_) => return Err(runtime_panic("Cannot write to read-only memory".to_string())),
+            MemRef::Undefined => return Err(runtime_panic("Cannot write to undefined memory address".to_string())),
+            MemRef::PrimFunc(_) => return Err(runtime_panic("Cannot write to code area".to_string())),
+            MemRef::Closure(_, _) => return Err(runtime_panic("Cannot write to instruction memory".to_string()))
         }
+
+        Ok(())
     }
 
     fn pop_call_stack(&mut self) -> bool {
@@ -457,11 +472,28 @@ impl Runtime {
         self.arg_stack.push(val)
     }
 
-    pub fn pop_stack(&mut self) -> Option<RDatum> {
-        self.arg_stack.pop()
+    pub fn pop_stack(&mut self) -> Result<RDatum, RuntimeError> {
+        match self.arg_stack.pop() {
+            Some(x) => Ok(x),
+            None => Err(runtime_panic("arg_stack empty!".to_string()))
+        }
     }
 
-    fn call(&mut self, n: usize) -> bool {
+    pub fn peek_stack(&self) -> Result<&RDatum, RuntimeError> {
+        match self.arg_stack.last() {
+            Some(x) => Ok(x),
+            None => Err(runtime_panic("arg_stack empty!".to_string()))
+        }
+    }
+
+    pub fn top_is_false(&self) -> Result<bool, RuntimeError> {
+        match try!(self.peek_stack()) {
+            &Datum::Bool(false) => Ok(true),
+            _ => Ok(false)
+        }
+    }
+
+    fn call(&mut self, n: usize) -> Result<(), RuntimeError> {
         let top = self.arg_stack.len();
         let datum = self.arg_stack[top - n - 1].clone();
         match datum {
@@ -471,29 +503,23 @@ impl Runtime {
                 } else {
                     self.arg_stack.split_off(top-n)
                 };
-                let res = match fptr.function.call(args) {
-                    Ok(x) => x,
-                    Err(e) => panic!("Error in primitive function <{}>: {:?}", fptr.name, e)
-                };
-                match self.arg_stack.pop() {
-                    None => panic!("arg_stack size mismatch"),
-                    Some(_) => ()
-                };
+                let res = try!(fptr.function.call(args));
+                try!(self.pop_stack());
                 self.push_stack(res);
                 self.frame.pc += 1;
-                true
             },
             Datum::Ext(RuntimeData::Closure(closure)) => {
                 self.push_call_stack(n, closure);
-                true
             },
             _ => {
-                panic!("Not callable")
+                return Err(runtime_panic(format!("{:?} is not callable", datum)))
             }
         }
+
+        Ok(())
     }
 
-    fn step(&mut self) -> bool {
+    fn step(&mut self) -> Result<bool, RuntimeError> {
         let inst = self.fetch();
 
         if log_enabled!(LogLevel::Debug) {
@@ -512,24 +538,24 @@ impl Runtime {
         match inst {
             Inst::Nop => {
                 self.frame.pc += 1;
-                true
             },
             Inst::Type(typeinfo) => {
                 let val = {
-                    let arg = self.arg_stack.last().expect("arg_stack empty!");
+                    let arg = try!(self.peek_stack());
                     DatumType::get_type(arg) == typeinfo
                 };
                 self.arg_stack.push(Datum::Bool(val));
                 self.frame.pc += 1;
-                true
             },
-            Inst::Call(n) => self.call(n),
+            Inst::Call(n) => {
+                try!(self.call(n));
+            }
             Inst::CallSplicing => {
                 let n_args = self.arg_stack.len() - self.frame.stack_bottom;
                 if n_args == 0 {
-                    panic!("Call args empty");
+                    return Err(runtime_panic("Call args empty".to_string()));
                 }
-                self.call(n_args - 1)
+                try!(self.call(n_args - 1));
             },
             Inst::PushFrame(n) => {
                 let new_closure = Closure {
@@ -548,85 +574,57 @@ impl Runtime {
 
                 self.call_stack.push(new_frame);
                 mem::swap(&mut self.frame, self.call_stack.last_mut().unwrap());
-                true
             },
             Inst::SetArgSize(n) => {
                 self.frame.arg_size = n;
                 self.frame.pc += 1;
-                true
             }
             Inst::PopFrame => {
                 let pc = self.frame.pc;
                 self.pop_call_stack();
                 self.frame.pc = pc+1;
-                true
             },
             Inst::Jump(pc) => {
                 self.frame.pc = pc;
-                true
             },
-            Inst::JumpIfFalse(pc) => match self.arg_stack.last() {
-                Some(&Datum::Bool(false)) => {
+            Inst::JumpIfFalse(pc) =>
+                if try!(self.top_is_false()) {
                     self.frame.pc = pc;
-                    true
-                },
-                Some(_) => {
+                } else {
                     self.frame.pc += 1;
-                    true
                 },
-                None =>
-                    panic!("Stack empty!")
-            },
-            Inst::JumpIfNotFalse(pc) => match self.arg_stack.last() {
-                Some(&Datum::Bool(false)) => {
+            Inst::JumpIfNotFalse(pc) =>
+                if try!(self.top_is_false()) {
                     self.frame.pc += 1;
-                    true
-                },
-                Some(_) => {
+                } else {
                     self.frame.pc = pc;
-                    true
                 },
-                None =>
-                    panic!("Stack empty!")
-            },
-            Inst::ThrowIfFalse(msg) => {
-                match self.arg_stack.last() {
-                    Some(&Datum::Bool(false)) => panic!(msg),
-                    Some(_) => {
-                        self.frame.pc += 1;
-                        true
-                    },
-                    None =>
-                        panic!("Stack empty!")
-                }
-            },
+            Inst::ThrowIfFalse(msg) =>
+                if try!(self.top_is_false()) {
+                    return Err(runtime_panic(msg.to_string()));
+                } else {
+                    self.frame.pc += 1;
+                },
             Inst::PushArg(ptr) => {
-                let val = self.fetch_mem(ptr);
+                let val = try!(self.fetch_mem(ptr));
                 self.arg_stack.push(val);
                 self.frame.pc += 1;
-                true
             },
             Inst::PopArg(ptr) => {
-                let val = match self.arg_stack.pop() {
-                    Some(x) => x,
-                    None => panic!("Stack empty!")
-                };
-                self.write_mem(ptr, val);
+                let val = try!(self.pop_stack());
+                try!(self.write_mem(ptr, val));
                 self.frame.pc += 1;
-                true
             },
             Inst::DropArg => {
-                self.arg_stack.pop();
+                try!(self.pop_stack());
                 self.frame.pc += 1;
-                true
             },
             Inst::SwapArg => {
-                let y = self.arg_stack.pop().expect("Stack empty!");
-                let x = self.arg_stack.pop().expect("Stack empty!");
+                let y = try!(self.pop_stack());
+                let x = try!(self.pop_stack());
                 self.arg_stack.push(y);
                 self.arg_stack.push(x);
                 self.frame.pc += 1;
-                true
             },
             Inst::RollArgs(n) => {
                 let vararg_start = self.frame.stack_bottom + n;
@@ -635,12 +633,11 @@ impl Runtime {
                 self.push_stack(list);
                 self.frame.arg_size = n+1;
                 self.frame.pc += 1;
-                true
             },
             Inst::Eqv => {
                 let n = self.arg_stack.len();
                 if n < 2 {
-                    panic!("arg_stack too low!");
+                    return Err(runtime_panic("arg_stack too low!".to_string()));
                 }
                 let b = {
                     let y = &self.arg_stack[n-1];
@@ -649,12 +646,11 @@ impl Runtime {
                 };
                 self.arg_stack.push(Datum::Bool(b));
                 self.frame.pc += 1;
-                true
             },
             Inst::Equal => {
                 let n = self.arg_stack.len();
                 if n < 2 {
-                    panic!("arg_stack too low!");
+                    return Err(runtime_panic("arg_stack too low!".to_string()));
                 }
                 let b = {
                     let y = &self.arg_stack[n-1];
@@ -663,43 +659,41 @@ impl Runtime {
                 };
                 self.arg_stack.push(Datum::Bool(b));
                 self.frame.pc += 1;
-                true
             },
             Inst::Uncons => {
-                let arg = self.arg_stack.pop().expect("arg_stack empty!");
+                let arg = try!(self.pop_stack());
                 if let Datum::Cons(pair) = arg {
                     self.arg_stack.push(pair.0.clone());
                     self.arg_stack.push(pair.1.clone());
                     self.frame.pc += 1;
-                    true
                 } else {
-                    panic!("top of the stack is not a pair");
+                    return Err(runtime_panic("top of the stack is not a pair".to_string()));
                 }
             },
             Inst::Return => {
                 let n = self.frame.arg_size;
                 let top = self.arg_stack.len();
                 let res = self.pop_call_stack();
-                let retval = match self.arg_stack.pop() {
-                    Some(val) => val,
-                    None => panic!("arg_stack empty!")
-                };
+                let retval = try!(self.pop_stack());
                 self.arg_stack.truncate(top - n - 2);
                 self.push_stack(retval);
                 if res {
                     self.frame.pc += 1;
                 }
-                res
+                return Ok(res)
             }
         }
+
+        Ok(true)
     }
 
-    pub fn run(&mut self) -> RDatum {
-        while self.step() {
-            ()
+    pub fn run(&mut self) -> Result<RDatum, RuntimeError> {
+        loop {
+            let cont = try!(self.step());
+            if !cont {
+                return self.pop_stack();
+            }
         }
-
-        return self.arg_stack.pop().unwrap()
     }
 }
 
@@ -722,7 +716,7 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(3, 0)));
+        assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(3, 0))));
     }
 
     #[test]
@@ -739,7 +733,7 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(6, 0)));
+        assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(6, 0))));
     }
 
     #[test]
@@ -759,7 +753,7 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(3, 0)));
+        assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(3, 0))));
     }
 
     #[test]
@@ -790,6 +784,6 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(code);
-        assert_eq!(runtime.run(), Datum::Num(Number::new_int(5, 0)));
+        assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(5, 0))));
     }
 }

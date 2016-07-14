@@ -110,6 +110,8 @@ pub struct CompileError {
 /// Errors raised in runtime
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum RuntimeErrorKind {
+    /// Fatal non-recoverable error
+    Panic,
     /// Number of arguments did not match
     NumArgs,
     /// Argument type did not match
