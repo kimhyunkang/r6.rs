@@ -113,9 +113,9 @@ impl<'g> LexicalContext<'g> {
     }
 }
 
-enum Def {
-    Proc(RDatum, Vec<RDatum>),
-    Expr(RDatum),
+enum Def<T> {
+    Proc(Datum<T>, Vec<Datum<T>>),
+    Expr(Datum<T>),
     Void
 }
 
@@ -128,7 +128,11 @@ impl Compiler {
     }
 
     /// Compiles the datum into a bytecode evaluates it
-    pub fn compile(&self, global_env: &HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>, datum: &RDatum) -> Result<Vec<Inst>, CompileError> {
+    pub fn compile<T: Clone>(&self,
+                             global_env: &HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
+                             datum: &Datum<T>)
+        -> Result<Vec<Inst>, CompileError>
+    {
         let mut ctx = CodeGenContext {
             code: Vec::new(),
             link_size: 0
@@ -143,7 +147,10 @@ impl Compiler {
         return Ok(ctx.code);
     }
 
-    fn compile_app(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_app<T: Clone>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             datum: &Datum<T>)
             -> Result<(), CompileError>
     {
         let (callee, c_args) = match datum {
@@ -213,7 +220,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn get_syntax_name(&self, env: &LexicalContext, item: &RDatum) -> Option<Syntax> {
+    fn get_syntax_name<T>(&self, env: &LexicalContext, item: &Datum<T>) -> Option<Syntax> {
         if let &Datum::Sym(ref sym) = item {
             if let Err(e) = self.find_var(env, sym) {
                 if let CompileErrorKind::SyntaxReference(syntax) = e.kind {
@@ -225,10 +232,10 @@ impl Compiler {
         return None;
     }
 
-    fn parse_define(&self, env: &LexicalContext, def: &RDatum)
-            -> Result<Option<(Cow<'static, str>, Def)>, CompileError>
+    fn parse_define<T: Clone>(&self, env: &LexicalContext, def: &Datum<T>)
+            -> Result<Option<(Cow<'static, str>, Def<T>)>, CompileError>
     {
-        let list: Vec<RDatum> = match def.iter().collect() {
+        let list: Vec<Datum<T>> = match def.iter().collect() {
             Ok(l) => l,
             _ => return Ok(None)
         };
@@ -262,10 +269,13 @@ impl Compiler {
         }
     }
 
-    fn compile_body(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &RDatum)
+    fn compile_body<T: Clone>(&self,
+                              env: &LexicalContext,
+                              ctx: &mut CodeGenContext,
+                              body: &Datum<T>)
             -> Result<(), CompileError>
     {
-        let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+        let res: Result<Vec<Datum<T>>, ()> = body.iter().collect();
         match res {
             Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_ref()),
             Err(_) => Err(CompileError {
@@ -274,7 +284,10 @@ impl Compiler {
         }
     }
 
-    fn compile_exprs(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[RDatum])
+    fn compile_exprs<T: Clone>(&self,
+                               env: &LexicalContext,
+                               ctx: &mut CodeGenContext,
+                               body: &[Datum<T>])
             -> Result<(), CompileError>
     {
         if body.is_empty() {
@@ -341,10 +354,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_if(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_if<T: Clone>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
     {
-        let exprs:Vec<RDatum> = match tail.iter().collect() {
+        let exprs:Vec<Datum<T>> = match tail.iter().collect() {
             Ok(e) => e,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -386,8 +399,8 @@ impl Compiler {
         }
     }
 
-    fn get_form(&self, form: &RDatum)
-            -> Result<(Vec<Cow<'static, str>>, Vec<RDatum>, RDatum), CompileError>
+    fn get_form<T: Clone>(&self, form: &Datum<T>)
+            -> Result<(Vec<Cow<'static, str>>, Vec<Datum<T>>, Datum<T>), CompileError>
     {
         if let &Datum::Cons(ref ptr) = form {
             let (ref binding_form, ref body) = *ptr.as_ref();
@@ -396,9 +409,11 @@ impl Compiler {
             for b in binding_form.iter() {
                 match b {
                     Ok(datum) => {
-                        let binding:Vec<RDatum> = match datum.iter().collect() {
+                        let binding:Vec<Datum<T>> = match datum.iter().collect() {
                             Ok(v) => v,
-                            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
+                            Err(()) => return Err(CompileError {
+                                kind: CompileErrorKind::BadSyntax
+                            })
                         };
                         if let &[Datum::Sym(ref sym), ref expr] = binding.as_slice() {
                             syms.push(sym.clone());
@@ -416,7 +431,7 @@ impl Compiler {
         }
     }
 
-    fn compile_let(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_let<T: Clone>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
@@ -434,7 +449,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_let_star(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_let_star<T: Clone>(&self,
+                                  env: &LexicalContext,
+                                  ctx: &mut CodeGenContext,
+                                  tail: &Datum<T>)
             -> Result<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
@@ -456,7 +474,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_letrec(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_letrec<T: Clone>(&self,
+                                env: &LexicalContext,
+                                ctx: &mut CodeGenContext,
+                                tail: &Datum<T>)
             -> Result<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
@@ -481,12 +502,15 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_lambda(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &RDatum)
+    fn compile_lambda<T: Clone>(&self,
+                                env: &LexicalContext,
+                                ctx: &mut CodeGenContext,
+                                tail: &Datum<T>)
             -> Result<(), CompileError>
     {
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.as_ref();
-            let res: Result<Vec<RDatum>, ()> = body.iter().collect();
+            let res: Result<Vec<Datum<T>>, ()> = body.iter().collect();
             match res {
                 Ok(exprs) => {
                     let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_ref()));
@@ -506,7 +530,7 @@ impl Compiler {
         }
     }
 
-    fn compile_proc(&self, env: &LexicalContext, formals: &RDatum, body: &[RDatum])
+    fn compile_proc<T: Clone>(&self, env: &LexicalContext, formals: &Datum<T>, body: &[Datum<T>])
             -> Result<CodeGenContext, CompileError>
     {
         let (new_args, var_arg) = {
@@ -608,10 +632,13 @@ impl Compiler {
         }
     }
 
-    fn compile_set(&self, env: &LexicalContext, ctx: &mut CodeGenContext, formal: &RDatum)
+    fn compile_set<T: Clone>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             formal: &Datum<T>)
             -> Result<(), CompileError>
     {
-        let assignment:Vec<RDatum> = match formal.iter().collect() {
+        let assignment:Vec<Datum<T>> = match formal.iter().collect() {
             Ok(v) => v,
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -626,7 +653,7 @@ impl Compiler {
         }
     }
 
-    fn compile_quote(&self, ctx: &mut CodeGenContext, items: &RDatum)
+    fn compile_quote<T: Clone>(&self, ctx: &mut CodeGenContext, items: &Datum<T>)
             -> Result<(), CompileError>
     {
         let mut iter = items.iter();
@@ -641,16 +668,22 @@ impl Compiler {
         }
     }
 
-    fn rec_quote(&self, ctx: &mut CodeGenContext, v: &RDatum) -> Result<(), CompileError> {
+    fn rec_quote<T: Clone>(&self, ctx: &mut CodeGenContext, v: &Datum<T>)
+            -> Result<(), CompileError>
+    {
         match v {
             &Datum::Cons(ref pair) => {
-                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                ctx.code.push(
+                    Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS)))
+                );
                 try!(self.rec_quote(ctx, &pair.0));
                 try!(self.rec_quote(ctx, &pair.1));
                 ctx.code.push(Inst::Call(2));
             },
             &Datum::Vector(ref v) => {
-                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
+                ctx.code.push(
+                    Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR)))
+                );
                 for e in v.iter() {
                     try!(self.rec_quote(ctx, e));
                 }
@@ -667,7 +700,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_quasiquote(&self, env: &LexicalContext, ctx: &mut CodeGenContext, items: &RDatum)
+    fn compile_quasiquote<T: Clone>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             items: &Datum<T>)
             -> Result<(), CompileError>
     {
         let mut iter = items.iter();
@@ -682,8 +718,8 @@ impl Compiler {
         }
     }
 
-    fn get_syntax1(&self, v: &RDatum) -> Option<(Syntax, RDatum)> {
-        let res: Result<Vec<RDatum>, ()> = v.iter().collect();
+    fn get_syntax1<T: Clone>(&self, v: &Datum<T>) -> Option<(Syntax, Datum<T>)> {
+        let res: Result<Vec<Datum<T>>, ()> = v.iter().collect();
         let list = match res {
             Ok(list) => list,
             Err(_) => return None
@@ -701,13 +737,21 @@ impl Compiler {
         }
     }
 
-    fn rec_quasiquote(&self, qq_level: usize, env: &LexicalContext, ctx: &mut CodeGenContext, v: &RDatum)
+    fn rec_quasiquote<T: Clone>(&self,
+                                qq_level: usize,
+                                env: &LexicalContext,
+                                ctx: &mut CodeGenContext,
+                                v: &Datum<T>)
             -> Result<(), CompileError>
     {
         match self.get_syntax1(v) {
             Some((Syntax::Quasiquote, arg)) => {
-                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST))));
-                ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("quasiquote")))));
+                ctx.code.push(
+                    Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST)))
+                );
+                ctx.code.push(
+                    Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("quasiquote"))))
+                );
                 try!(self.rec_quasiquote(qq_level+1, env, ctx, &arg));
                 ctx.code.push(Inst::Call(2));
             },
@@ -715,8 +759,12 @@ impl Compiler {
                 if qq_level == 0 {
                     try!(self.compile_expr(env, ctx, &arg));
                 } else {
-                    ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST))));
-                    ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("unquote")))));
+                    ctx.code.push(
+                        Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST)))
+                    );
+                    ctx.code.push(
+                        Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("unquote"))))
+                    );
                     try!(self.rec_quasiquote(qq_level-1, env, ctx, &arg));
                     ctx.code.push(Inst::Call(2));
                 }
@@ -726,14 +774,20 @@ impl Compiler {
                     &Datum::Cons(ref pair) => {
                         if let Some((Syntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
                             if qq_level == 0 {
-                                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))));
+                                ctx.code.push(Inst::PushArg(
+                                    MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))
+                                ));
                                 try!(self.compile_expr(env, ctx, &arg));
                             } else {
-                                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                                ctx.code.push(Inst::PushArg(
+                                    MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))
+                                ));
                                 try!(self.rec_quasiquote(qq_level-1, env, ctx, &pair.0));
                             }
                         } else {
-                            ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))));
+                            ctx.code.push(Inst::PushArg(
+                                MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))
+                            ));
                             try!(self.rec_quasiquote(qq_level, env, ctx, &pair.0));
                         }
 
@@ -741,7 +795,9 @@ impl Compiler {
                         ctx.code.push(Inst::Call(2));
                     },
                     &Datum::Vector(ref v) => {
-                        ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
+                        ctx.code.push(Inst::PushArg(
+                            MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))
+                        ));
                         for e in v.iter() {
                             try!(self.rec_quasiquote(qq_level, env, ctx, e));
                         }
@@ -760,7 +816,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn is_sym(&self, datum: &RDatum, sym: &str) -> bool {
+    fn is_sym<T>(&self, datum: &Datum<T>, sym: &str) -> bool {
         if let &Datum::Sym(ref s) = datum {
             s.as_ref() == sym
         } else {
@@ -768,15 +824,15 @@ impl Compiler {
         }
     }
 
-    fn get_else_clause(&self, clauses: &mut Vec<RDatum>)
-            -> Result<Option<Vec<RDatum>>, CompileError>
+    fn get_else_clause<T: Clone>(&self, clauses: &mut Vec<Datum<T>>)
+            -> Result<Option<Vec<Datum<T>>>, CompileError>
     {
         let else_exprs = match clauses.last() {
             None => return Err(CompileError { kind: CompileErrorKind::BadSyntax }),
             Some(last_clause) => match last_clause {
                 &Datum::Cons(ref pair) =>  {
                     if self.is_sym(&pair.0, "else") {
-                        let exprs: Vec<RDatum> = match pair.1.iter().collect() {
+                        let exprs: Vec<Datum<T>> = match pair.1.iter().collect() {
                             Ok(v) => v,
                             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                         };
@@ -796,11 +852,14 @@ impl Compiler {
         Ok(else_exprs)
     }
 
-    fn compile_cond(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+    fn compile_cond<T: Clone>(&self,
+                              env: &LexicalContext,
+                              ctx: &mut CodeGenContext,
+                              preds: &Datum<T>)
             -> Result<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses: Vec<RDatum> = match preds.iter().collect() {
+        let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
             Ok(v) => v,
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -808,7 +867,7 @@ impl Compiler {
         let else_exprs = try!(self.get_else_clause(&mut clauses));
 
         for clause in clauses.into_iter() {
-            let terms: Vec<RDatum> = match clause.iter().collect() {
+            let terms: Vec<Datum<T>> = match clause.iter().collect() {
                 Ok(v) => v,
                 Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
             };
@@ -859,11 +918,14 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_case(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+    fn compile_case<T: Clone>(&self,
+                              env: &LexicalContext,
+                              ctx: &mut CodeGenContext,
+                              preds: &Datum<T>)
             -> Result<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses: Vec<RDatum> = match preds.iter().collect() {
+        let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
             Ok(v) => v,
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -881,7 +943,7 @@ impl Compiler {
         for clause in clauses.into_iter() {
             let mut case_placeholders = Vec::new();
 
-            let terms: Vec<RDatum> = match clause.iter().collect() {
+            let terms: Vec<Datum<T>> = match clause.iter().collect() {
                 Ok(v) => v,
                 Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
             };
@@ -890,7 +952,7 @@ impl Compiler {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
-            let cases: Vec<RDatum> = match terms[0].iter().collect() {
+            let cases: Vec<Datum<T>> = match terms[0].iter().collect() {
                 Ok(v) => v,
                 Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
             };
@@ -945,11 +1007,14 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_and(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+    fn compile_and<T: Clone>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             preds: &Datum<T>)
             -> Result<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs: Vec<RDatum> = match preds.iter().collect() {
+        let exprs: Vec<Datum<T>> = match preds.iter().collect() {
             Ok(v) => v,
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -977,11 +1042,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_or(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &RDatum)
+    fn compile_or<T: Clone>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
             -> Result<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs: Vec<RDatum> = match preds.iter().collect() {
+        let exprs: Vec<Datum<T>> = match preds.iter().collect() {
             Ok(v) => v,
             Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
@@ -1009,7 +1074,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_expr(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &RDatum)
+    fn compile_expr<T: Clone>(&self,
+                              env: &LexicalContext,
+                              ctx: &mut CodeGenContext,
+                              datum: &Datum<T>)
             -> Result<(), CompileError>
     {
         match datum {
@@ -1022,7 +1090,9 @@ impl Compiler {
                 Ok(())
             },
             &Datum::Vector(ref v) => {
-                ctx.code.push(Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))));
+                ctx.code.push(
+                    Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR)))
+                );
                 for e in v.iter() {
                     try!(self.rec_quote(ctx, e));
                 }
@@ -1071,7 +1141,7 @@ mod test {
             Inst::Call(2),
             Inst::Return
         ]);
-        let code = compiler.compile(&global, &list![sym!("+"), num!(1), num!(2)]);
+        let code = compiler.compile::<()>(&global, &list![sym!("+"), num!(1), num!(2)]);
         assert_eq!(expected, code);
     }
 
@@ -1090,7 +1160,11 @@ mod test {
             Inst::Call(2),
             Inst::Return
         ]);
-        let code = compiler.compile(&global, &list![sym!("+"), num!(3), list![sym!("+"), num!(1), num!(2)]]);
+        let code = compiler.compile::<()>(&global,
+                                          &list![sym!("+"),
+                                                 num!(3),
+                                                 list![sym!("+"), num!(1), num!(2)]
+                                                ]);
         assert_eq!(expected, code);
     }
 
@@ -1114,7 +1188,7 @@ mod test {
             Inst::Call(1),
             Inst::Return
         ]);
-        let code = compiler.compile(&global, &list![
+        let code = compiler.compile::<()>(&global, &list![
                            list![sym!("lambda"), list![sym!("x")],
                                 list![sym!("+"), sym!("x"), num!(2)]],
                             num!(1)]);
@@ -1153,7 +1227,7 @@ mod test {
         //   (lambda (x)            # = g
         //     (lambda (y) (+ x y)) # = f
         //   ) 2) 3)
-        let code = compiler.compile(&global, &list![
+        let code = compiler.compile::<()>(&global, &list![
             list![
                 list![sym!("lambda"), list![sym!("x")],
                     list![sym!("lambda"), list![sym!("y")],
@@ -1187,7 +1261,11 @@ mod test {
             Inst::Return
         ]);
 
-        let code = compiler.compile(&global, &list![sym!("quote"), list![num!(1), list![num!(2), num!(3)]]]);
+        let code = compiler.compile::<()>(&global,
+                                          &list![
+                                                 sym!("quote"),
+                                                 list![num!(1), list![num!(2), num!(3)]]
+                                          ]);
         assert_eq!(expected, code)
     }
 }
