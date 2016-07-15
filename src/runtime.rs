@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::mem;
 use std::fmt;
 use std::fmt::Debug;
-use std::ops::DerefMut;
+use std::ops::{Deref, DerefMut};
 
 use cast::DatumCast;
 use compiler::{Compiler, Syntax};
@@ -246,10 +246,69 @@ pub enum Inst {
 
 /// When the enclosing lexical env goes out of scope of the closure, the env is copied into heap
 /// memory. HeapClosure represents the env in heap memory
-#[derive(Debug, PartialEq)]
 pub struct HeapClosure {
     args: Vec<RDatum>,
     static_link: Option<StaticLink>
+}
+
+impl HeapClosure {
+    fn debug_fmt(&self, f: &mut fmt::Formatter, depth: usize) -> fmt::Result {
+        try!(write!(f, "HeapClosure(args: ["));
+        let mut first = true;
+        for arg in self.args.iter() {
+            if first {
+                first = false;
+            } else {
+                try!(write!(f, ", "))
+            }
+
+            if let &Datum::Ext(RuntimeData::Closure(Closure {code: ref code, static_link: Some(ref static_link)})) = arg {
+                try!(write!(f, "Ext(Closure(code: {:?}, static_link: ", code));
+                try!(
+                    match static_link.borrow().deref() {
+                        &ScopePtr::Stack(n) => write!(f, "Stack({})", n),
+                        &ScopePtr::Heap(ref heap_closure) =>
+                            if depth == 0 {
+                                write!(f, "HeapClosure(..)")
+                            } else {
+                                heap_closure.debug_fmt(f, depth-1)
+                            }
+                    }
+                );
+                try!(write!(f, "))"));
+            } else {
+                try!(write!(f, "{:?}", arg));
+            }
+        }
+        try!(write!(f, "], static_link: "));
+        try!(
+            match &self.static_link {
+                &None => write!(f, "None"),
+                &Some(ref ptr) => match ptr.borrow().deref() {
+                    &ScopePtr::Stack(n) => write!(f, "Stack({})", n),
+                    &ScopePtr::Heap(ref heap_closure) =>
+                        if depth == 0 {
+                            write!(f, "HeapClosure(..)")
+                        } else {
+                            heap_closure.debug_fmt(f, depth-1)
+                        }
+                }
+            }
+        );
+        write!(f, ")")
+    }
+}
+
+impl PartialEq for HeapClosure {
+    fn eq(&self, other: &HeapClosure) -> bool {
+        (self as *const HeapClosure) == (other as *const HeapClosure)
+    }
+}
+
+impl fmt::Debug for HeapClosure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.debug_fmt(f, 10)
+    }
 }
 
 /// ScopePtr points to the directly enclosing lexical env of the frame. It might be live in stack,
@@ -348,6 +407,7 @@ impl Runtime {
     }
 
     pub fn eval<T: Clone+Debug>(&mut self, datum: &Datum<T>) -> Result<RDatum, RuntimeError> {
+        debug!("eval {:?}", datum);
         let code = match self.compiler.compile(&self.global, datum) {
             Ok(c) => c,
             Err(e) => return Err(RuntimeError {
