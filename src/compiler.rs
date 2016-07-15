@@ -238,21 +238,30 @@ impl Compiler {
             -> Result<(), CompileError>
     {
         if let Some((var, def)) = try!(self.parse_define(env, &expr)) {
+            ctx.code.push(Inst::PushFrame(0));
+            ctx.code.push(Inst::SetArgSize(1));
+            ctx.code.push(Inst::PushArg(MemRef::Undefined));
+            let new_env = env.update_arg(vec![var.clone()]);
+
             match def {
                 Def::Proc(formals, body) => {
-                    let proc_ctx = try!(self.compile_proc(env, &formals, &body));
+                    let proc_ctx = try!(self.compile_proc(&new_env, &formals, &body));
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                         Rc::new(proc_ctx.code),
                         proc_ctx.link_size
                     )));
                 },
                 Def::Expr(expr) => {
-                    try!(self.compile_expr(env, ctx, &expr));
+                    try!(self.compile_expr(&new_env, ctx, &expr));
                 },
                 Def::Void => {
                     ctx.code.push(Inst::PushArg(MemRef::Undefined));
                 }
             }
+
+            ctx.code.push(Inst::PopArg(MemRef::Arg(0)));
+            ctx.code.push(Inst::PushArg(MemRef::Arg(0)));
+            ctx.code.push(Inst::PopFrame);
             ctx.code.push(Inst::PopGlobal(var));
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
             Ok(())
@@ -656,8 +665,6 @@ impl Compiler {
             Some(data) => match data.borrow().deref() {
                 &Datum::Ext(RuntimeData::PrimFunc(ref fptr)) =>
                     Ok(MemRef::PrimFunc(fptr.clone())),
-                &Datum::Ext(RuntimeData::Closure(ref ptr)) =>
-                    Ok(MemRef::Closure(ptr.code.clone(), 0)),
                 _ =>
                     Ok(MemRef::Global(data.clone()))
             },

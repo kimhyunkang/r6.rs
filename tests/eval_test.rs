@@ -4,6 +4,8 @@ extern crate env_logger;
 use std::sync::{Once, ONCE_INIT};
 use r6::runtime::Runtime;
 use r6::base::{base_syntax, libbase};
+use r6::datum::Datum;
+use r6::number::Number;
 use r6::parser::Parser;
 
 static START: Once = ONCE_INIT;
@@ -375,4 +377,16 @@ fn equal_test() {
     assert_evaluates_to!("(equal? 2 2)", "#t");
     assert_evaluates_to!("(equal? (make-vector 5 'a) (make-vector 5 'a))", "#t");
     assert_evaluates_to!("(let* ((x (list 'a)) (y (list 'a)) (z (list x y))) (list (equal? z (list y x)) (equal? z (list x x))))", "(#t #t)");
+}
+
+#[test]
+fn test_global_define() {
+    let code0 = Parser::new("(define fact (lambda (n) (if (zero? n) 1 (* n (fact (- n 1))))))".as_bytes()).parse_datum::<()>().expect("Failed to parse");
+    let code1 = Parser::new("(fact 3)".as_bytes()).parse_datum::<()>().expect("Failed to parse");
+
+    let mut runtime = Runtime::new(libbase(), base_syntax());
+    runtime.eval(&code0).expect("Failed to run");
+    let result = runtime.eval(&code1);
+
+    assert_eq!(result, Ok(Datum::Num(Number::new_int(6, 0))));
 }
