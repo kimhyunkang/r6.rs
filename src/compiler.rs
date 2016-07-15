@@ -665,7 +665,7 @@ impl Compiler {
                 if let Some(syntax) = self.syntax_env.get(sym) {
                     Err(CompileError { kind: CompileErrorKind::SyntaxReference(syntax.clone()) })
                 } else {
-                    Err(CompileError { kind: CompileErrorKind::UnboundVariable })
+                    Err(CompileError { kind: CompileErrorKind::UnboundVariable(sym.clone()) })
                 }
             }
         }

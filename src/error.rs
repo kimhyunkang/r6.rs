@@ -1,6 +1,7 @@
-use std::io::CharsError;
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
+use std::io::CharsError;
 
 use compiler::Syntax;
 
@@ -75,7 +76,7 @@ impl From<CharsError> for ParserError {
 }
 
 /// Possible compiler errors
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum CompileErrorKind {
     /// The syntax is not implemented yet
     NotImplemented,
@@ -98,11 +99,11 @@ pub enum CompileErrorKind {
     /// `unquote` or its variants are not allowed in this context
     UnquoteContext,
     /// Trying to refer an unbound variable
-    UnboundVariable
+    UnboundVariable(Cow<'static, str>)
 }
 
 /// Compiler error
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct CompileError {
     pub kind: CompileErrorKind
 }
