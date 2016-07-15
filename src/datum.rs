@@ -1,7 +1,7 @@
-use std::rc::Rc;
-use std::iter::{FromIterator, IntoIterator};
-use std::fmt;
 use std::borrow::Cow;
+use std::fmt;
+use std::iter::{FromIterator, IntoIterator};
+use std::rc::Rc;
 
 use number::Number;
 use parser::SPECIAL_TOKEN_MAP;
@@ -118,6 +118,40 @@ impl<T: Clone> Datum<T> {
     /// Iterate the values if it's a proper list
     pub fn iter(&self) -> DatumIter<T> {
         DatumIter { ptr: self.clone() }
+    }
+}
+
+pub trait TryConv<T, E> {
+    fn try_conv(&self) -> Result<T, E>;
+}
+
+impl<E> TryConv<(), E> for () {
+    fn try_conv(&self) -> Result<(), E> {
+        Ok(())
+    }
+}
+
+impl<S, T, E> TryConv<Datum<T>, E> for Datum<S> where S: TryConv<T, E> {
+    fn try_conv(&self) -> Result<Datum<T>, E> {
+        match self {
+            &Datum::Sym(ref v) => Ok(Datum::Sym(v.clone())),
+            &Datum::Bool(ref v) => Ok(Datum::Bool(*v)),
+            &Datum::Char(ref v) => Ok(Datum::Char(*v)),
+            &Datum::String(ref v) => Ok(Datum::String(v.clone())),
+            &Datum::Vector(ref v) => {
+                let res: Result<Vec<Datum<T>>, E> = v.iter().map(|x| x.try_conv()).collect();
+                res.map(|v| Datum::Vector(Rc::new(v)))
+            },
+            &Datum::Bytes(ref v) => Ok(Datum::Bytes(v.clone())),
+            &Datum::Num(ref v) => Ok(Datum::Num(v.clone())),
+            &Datum::Nil => Ok(Datum::Nil),
+            &Datum::Cons(ref v) => {
+                let h = try!(v.0.try_conv());
+                let t = try!(v.1.try_conv());
+                Ok(Datum::Cons(Rc::new((h, t))))
+            },
+            &Datum::Ext(ref v) => v.try_conv().map(Datum::Ext)
+        }
     }
 }
 

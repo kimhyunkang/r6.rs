@@ -99,7 +99,9 @@ pub enum CompileErrorKind {
     /// `unquote` or its variants are not allowed in this context
     UnquoteContext,
     /// Trying to refer an unbound variable
-    UnboundVariable(Cow<'static, str>)
+    UnboundVariable(Cow<'static, str>),
+    /// Trying to compile invalid datum
+    InvalidDatum(String)
 }
 
 /// Compiler error
@@ -121,6 +123,8 @@ pub enum RuntimeErrorKind {
     DivideByZero,
     /// Index out of range
     IndexOutOfRange,
+    /// Invalid datum in source code
+    CompileInvalidDatum,
     /// Compile error
     CompileError
 }
@@ -130,6 +134,15 @@ pub enum RuntimeErrorKind {
 pub struct RuntimeError {
     pub kind: RuntimeErrorKind,
     pub desc: String
+}
+
+impl From<CompileError> for RuntimeError {
+    fn from(err: CompileError) -> RuntimeError {
+        RuntimeError {
+            kind: RuntimeErrorKind::CompileError,
+            desc: format!("{:?}", err)
+        }
+    }
 }
 
 impl fmt::Display for RuntimeError {

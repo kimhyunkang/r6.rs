@@ -9,8 +9,9 @@ use std::ops::{Deref, DerefMut};
 
 use cast::DatumCast;
 use compiler::{Compiler, Syntax};
+use datum::TryConv;
 use eqv::DatumEqv;
-use error::{RuntimeError, RuntimeErrorKind};
+use error::{CompileError, CompileErrorKind, RuntimeError, RuntimeErrorKind};
 use number::Number;
 use datum::Datum;
 use primitive::PrimFunc;
@@ -60,13 +61,21 @@ pub enum RuntimeData {
     Undefined
 }
 
+impl TryConv<(), CompileError> for RuntimeData {
+    fn try_conv(&self) -> Result<(), CompileError> {
+        Err(CompileError { kind: CompileErrorKind::InvalidDatum(format!("{:?}", self)) })
+    }
+}
+
 /// Compiled closure object
 #[derive(Debug, Clone, PartialEq)]
 pub struct Closure {
     // Pointer to the bytecode
     pub code: Rc<Vec<Inst>>,
     // The lexical environment directly enclosing the code
-    pub static_link: Option<StaticLink>
+    pub static_link: Option<StaticLink>,
+    // Source code
+    source: Option<Rc<Datum<()>>>
 }
 
 impl DatumEqv for Closure {
@@ -76,10 +85,11 @@ impl DatumEqv for Closure {
 }
 
 impl Closure {
-    pub fn new(code: Rc<Vec<Inst>>, static_link: Option<StaticLink>) -> Closure {
+    pub fn new(code: Rc<Vec<Inst>>, static_link: Option<StaticLink>, source: Option<Datum<()>>) -> Closure {
         Closure {
             code: code,
-            static_link: static_link
+            static_link: static_link,
+            source: source.map(|x| Rc::new(x))
         }
     }
 }
@@ -168,7 +178,7 @@ pub enum MemRef {
     Const(SimpleDatum),
     Undefined,
     PrimFunc(PrimFuncPtr),
-    Closure(Rc<Vec<Inst>>, usize)
+    Closure(Rc<Vec<Inst>>, usize, Option<Datum<()>>)
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -262,8 +272,8 @@ impl HeapClosure {
                 try!(write!(f, ", "))
             }
 
-            if let &Datum::Ext(RuntimeData::Closure(Closure {code: ref code, static_link: Some(ref static_link)})) = arg {
-                try!(write!(f, "Ext(Closure(code: {:?}, static_link: ", code));
+            if let &Datum::Ext(RuntimeData::Closure(Closure {code: _, ref source, static_link: Some(ref static_link)})) = arg {
+                try!(write!(f, "Ext(Closure(source: {:?}, static_link: ", source));
                 try!(
                     match static_link.borrow().deref() {
                         &ScopePtr::Stack(n) => write!(f, "Stack({})", n),
@@ -379,7 +389,7 @@ impl Runtime {
             arg_stack: Vec::new(),
             call_stack: Vec::new(),
             frame: StackFrame {
-                closure: Closure { code: Rc::new(Vec::new()), static_link: None},
+                closure: Closure { code: Rc::new(Vec::new()), static_link: None, source: None },
                 pc: 0,
                 stack_bottom: 0,
                 arg_size: 0,
@@ -390,7 +400,7 @@ impl Runtime {
         }
     }
 
-    pub fn load_main(&mut self, code: Vec<Inst>) {
+    pub fn load_main(&mut self, code: Vec<Inst>, source: Option<Datum<()>>) {
         // Return instruction removes current closure with the args
         // However, there isn't a calling closure at the top program because we directly inject
         // the code here.
@@ -398,7 +408,7 @@ impl Runtime {
         self.arg_stack = vec![Datum::Ext(RuntimeData::Undefined)];
         self.call_stack = Vec::new();
         self.frame = StackFrame {
-            closure: Closure { code: Rc::new(code), static_link: None},
+            closure: Closure { code: Rc::new(code), static_link: None, source: source.map(Rc::new) },
             pc: 0,
             stack_bottom: 0,
             arg_size: 0,
@@ -406,8 +416,11 @@ impl Runtime {
         }
     }
 
-    pub fn eval<T: Clone+Debug>(&mut self, datum: &Datum<T>) -> Result<RDatum, RuntimeError> {
+    pub fn eval<T>(&mut self, datum: &Datum<T>) -> Result<RDatum, RuntimeError>
+        where T: Clone + Debug + TryConv<(), CompileError>
+    {
         debug!("eval {:?}", datum);
+
         let code = match self.compiler.compile(&self.global, datum) {
             Ok(c) => c,
             Err(e) => return Err(RuntimeError {
@@ -416,7 +429,8 @@ impl Runtime {
             })
         };
 
-        self.load_main(code);
+        let src: Datum<()> = try!(datum.try_conv());
+        self.load_main(code, Some(src));
         self.run()
     }
 
@@ -500,10 +514,11 @@ impl Runtime {
             MemRef::Global(data) => data.borrow().clone(),
             MemRef::Undefined => Datum::Ext(RuntimeData::Undefined),
             MemRef::PrimFunc(ptr) => Datum::Ext(RuntimeData::PrimFunc(ptr)),
-            MemRef::Closure(code, _) => Datum::Ext(RuntimeData::Closure(
+            MemRef::Closure(code, _, src) => Datum::Ext(RuntimeData::Closure(
                 Closure {
                     code: code.clone(),
-                    static_link: Some(self.frame.self_link.clone())
+                    static_link: Some(self.frame.self_link.clone()),
+                    source: src.map(Rc::new)
                 }
             ))
         };
@@ -524,7 +539,7 @@ impl Runtime {
             MemRef::Const(_) => return Err(runtime_panic("Cannot write to read-only memory".to_string())),
             MemRef::Undefined => return Err(runtime_panic("Cannot write to undefined memory address".to_string())),
             MemRef::PrimFunc(_) => return Err(runtime_panic("Cannot write to code area".to_string())),
-            MemRef::Closure(_, _) => return Err(runtime_panic("Cannot write to instruction memory".to_string()))
+            MemRef::Closure(_, _, _) => return Err(runtime_panic("Cannot write to instruction memory".to_string()))
         }
 
         Ok(())
@@ -654,7 +669,8 @@ impl Runtime {
             Inst::PushFrame(n) => {
                 let new_closure = Closure {
                     code: self.frame.closure.code.clone(),
-                    static_link: Some(self.frame.self_link.clone())
+                    static_link: Some(self.frame.self_link.clone()),
+                    source: self.frame.closure.source.clone()
                 };
                 let idx = self.call_stack.len();
 
@@ -820,7 +836,7 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(libbase(), HashMap::new());
-        runtime.load_main(code);
+        runtime.load_main(code, None);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(3, 0))));
     }
 
@@ -838,7 +854,7 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(libbase(), HashMap::new());
-        runtime.load_main(code);
+        runtime.load_main(code, None);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(6, 0))));
     }
 
@@ -852,14 +868,14 @@ mod test {
             Inst::Return
         ];
         let code = vec![
-            Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
+            Inst::PushArg(MemRef::Closure(Rc::new(f), 0, None)),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
             Inst::Call(1),
             Inst::Return
         ];
 
         let mut runtime = Runtime::new(libbase(), HashMap::new());
-        runtime.load_main(code);
+        runtime.load_main(code, None);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(3, 0))));
     }
 
@@ -873,7 +889,7 @@ mod test {
             Inst::Return
         ];
         let g = vec![
-            Inst::PushArg(MemRef::Closure(Rc::new(f), 1)),
+            Inst::PushArg(MemRef::Closure(Rc::new(f), 1, None)),
             Inst::Return
         ];
 
@@ -882,7 +898,7 @@ mod test {
         //     (lambda (y) (+ x y)) # = f
         //   ) 2) 3)
         let code = vec![
-            Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
+            Inst::PushArg(MemRef::Closure(Rc::new(g), 0, None)),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(1),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
@@ -891,7 +907,7 @@ mod test {
         ];
 
         let mut runtime = Runtime::new(libbase(), HashMap::new());
-        runtime.load_main(code);
+        runtime.load_main(code, None);
         assert_eq!(runtime.run(), Ok(Datum::Num(Number::new_int(5, 0))));
     }
 }

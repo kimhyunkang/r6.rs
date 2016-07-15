@@ -20,7 +20,7 @@ pub fn base_syntax() -> HashMap<Cow<'static, str>, Syntax> {
 }
 
 pub fn static_closure(bytecode: Vec<Inst>) -> Rc<RefCell<RDatum>> {
-    Rc::new(RefCell::new(Datum::Ext(RuntimeData::Closure(Closure::new(Rc::new(bytecode), None)))))
+    Rc::new(RefCell::new(Datum::Ext(RuntimeData::Closure(Closure::new(Rc::new(bytecode), None, None)))))
 }
 
 pub fn libbase() -> HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>> {

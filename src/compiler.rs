@@ -9,7 +9,7 @@ use std::rc::Rc;
 use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
-use datum::Datum;
+use datum::{cons, Datum, TryConv};
 use primitive::{PRIM_APPEND, PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
 use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
 
@@ -129,10 +129,11 @@ impl Compiler {
     }
 
     /// Compiles the datum into a bytecode evaluates it
-    pub fn compile<T: Clone+Debug>(&self,
-                                   global_env: &HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
-                                   datum: &Datum<T>)
-        -> Result<Vec<Inst>, CompileError>
+    pub fn compile<T>(&self,
+                      global_env: &HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
+                      datum: &Datum<T>)
+            -> Result<Vec<Inst>, CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut ctx = CodeGenContext {
             code: Vec::new(),
@@ -148,11 +149,9 @@ impl Compiler {
         return Ok(ctx.code);
     }
 
-    fn compile_app<T: Clone+Debug>(&self,
-                                   env: &LexicalContext,
-                                   ctx: &mut CodeGenContext,
-                                   datum: &Datum<T>)
+    fn compile_app<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let (callee, c_args) = match datum {
             &Datum::Cons(ref ptr) => ptr.as_ref().clone(),
@@ -231,11 +230,12 @@ impl Compiler {
         return None;
     }
 
-    fn compile_define_toplevel<T: Clone+Debug>(&self,
-                                               env: &LexicalContext,
-                                               ctx: &mut CodeGenContext,
-                                               expr: &Datum<T>)
+    fn compile_define_toplevel<T>(&self,
+                                  env: &LexicalContext,
+                                  ctx: &mut CodeGenContext,
+                                  expr: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         if let Some((var, def)) = try!(self.parse_define(env, &expr)) {
             ctx.code.push(Inst::PushFrame(0));
@@ -248,7 +248,8 @@ impl Compiler {
                     let proc_ctx = try!(self.compile_proc(&new_env, &formals, &body));
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                         Rc::new(proc_ctx.code),
-                        proc_ctx.link_size
+                        proc_ctx.link_size,
+                        Some(try!(expr.try_conv()))
                     )));
                 },
                 Def::Expr(expr) => {
@@ -307,11 +308,9 @@ impl Compiler {
         }
     }
 
-    fn compile_body<T: Clone+Debug>(&self,
-                                    env: &LexicalContext,
-                                    ctx: &mut CodeGenContext,
-                                    body: &Datum<T>)
+    fn compile_body<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let res: Result<Vec<Datum<T>>, ()> = body.iter().collect();
         match res {
@@ -322,11 +321,9 @@ impl Compiler {
         }
     }
 
-    fn compile_exprs<T: Clone+Debug>(&self,
-                                     env: &LexicalContext,
-                                     ctx: &mut CodeGenContext,
-                                     body: &[Datum<T>])
+    fn compile_exprs<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[Datum<T>])
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         if body.is_empty() {
             return Err(CompileError { kind: CompileErrorKind::EmptyBody });
@@ -334,12 +331,14 @@ impl Compiler {
 
         let mut def_vars = Vec::new();
         let mut defs = Vec::new();
+        let mut srcs = Vec::new();
 
         for expr in body.iter() {
             match try!(self.parse_define(env, &expr)) {
                 Some((var, def)) => {
                     def_vars.push(var);
                     defs.push(def);
+                    srcs.push(expr);
                 },
                 None => break
             }
@@ -357,7 +356,8 @@ impl Compiler {
                     let proc_ctx = try!(self.compile_proc(&mod_env, formals, body));
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                             Rc::new(proc_ctx.code),
-                            proc_ctx.link_size
+                            proc_ctx.link_size,
+                            Some(try!(srcs[i].try_conv()))
                     )));
                     ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
                 },
@@ -392,11 +392,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_if<T: Clone+Debug>(&self,
-                                  env: &LexicalContext,
-                                  ctx: &mut CodeGenContext,
-                                  tail: &Datum<T>)
+    fn compile_if<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let exprs:Vec<Datum<T>> = match tail.iter().collect() {
             Ok(e) => e,
@@ -473,11 +471,9 @@ impl Compiler {
         }
     }
 
-    fn compile_let<T: Clone+Debug>(&self,
-                                   env: &LexicalContext,
-                                   ctx: &mut CodeGenContext,
-                                   tail: &Datum<T>)
+    fn compile_let<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
         for expr in exprs.iter() {
@@ -494,11 +490,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_let_star<T: Clone+Debug>(&self,
-                                        env: &LexicalContext,
-                                        ctx: &mut CodeGenContext,
-                                        tail: &Datum<T>)
+    fn compile_let_star<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
 
@@ -519,11 +513,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_letrec<T: Clone+Debug>(&self,
-                                      env: &LexicalContext,
-                                      ctx: &mut CodeGenContext,
-                                      tail: &Datum<T>)
+    fn compile_letrec<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
 
@@ -547,22 +539,22 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_lambda<T: Clone+Debug>(&self,
-                                      env: &LexicalContext,
-                                      ctx: &mut CodeGenContext,
-                                      tail: &Datum<T>)
+    fn compile_lambda<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.as_ref();
             let res: Result<Vec<Datum<T>>, ()> = body.iter().collect();
+            let expr = cons(Datum::Sym(Cow::Borrowed("lambda")), try!(tail.try_conv()));
             match res {
                 Ok(exprs) => {
                     let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_ref()));
 
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                             Rc::new(block_ctx.code),
-                            block_ctx.link_size
+                            block_ctx.link_size,
+                            Some(expr)
                     )));
 
                     return Ok(());
@@ -575,11 +567,9 @@ impl Compiler {
         }
     }
 
-    fn compile_proc<T: Clone+Debug>(&self,
-                                    env: &LexicalContext,
-                                    formals: &Datum<T>,
-                                    body: &[Datum<T>])
+    fn compile_proc<T>(&self, env: &LexicalContext, formals: &Datum<T>, body: &[Datum<T>])
             -> Result<CodeGenContext, CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let (new_args, var_arg) = {
             let mut nargs = Vec::new();
@@ -678,11 +668,9 @@ impl Compiler {
         }
     }
 
-    fn compile_set<T: Clone+Debug>(&self,
-                                   env: &LexicalContext,
-                                   ctx: &mut CodeGenContext,
-                                   formal: &Datum<T>)
+    fn compile_set<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, formal: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let assignment:Vec<Datum<T>> = match formal.iter().collect() {
             Ok(v) => v,
@@ -746,11 +734,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_quasiquote<T: Clone+Debug>(&self,
-                                          env: &LexicalContext,
-                                          ctx: &mut CodeGenContext,
-                                          items: &Datum<T>)
+    fn compile_quasiquote<T>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             items: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut iter = items.iter();
         match iter.next() {
@@ -783,12 +772,13 @@ impl Compiler {
         }
     }
 
-    fn rec_quasiquote<T: Clone+Debug>(&self,
-                                      qq_level: usize,
-                                      env: &LexicalContext,
-                                      ctx: &mut CodeGenContext,
-                                      v: &Datum<T>)
+    fn rec_quasiquote<T>(&self,
+                         qq_level: usize,
+                         env: &LexicalContext,
+                         ctx: &mut CodeGenContext,
+                         v: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         match self.get_syntax1(v) {
             Some((Syntax::Quasiquote, arg)) => {
@@ -898,11 +888,9 @@ impl Compiler {
         Ok(else_exprs)
     }
 
-    fn compile_cond<T: Clone+Debug>(&self,
-                                    env: &LexicalContext,
-                                    ctx: &mut CodeGenContext,
-                                    preds: &Datum<T>)
+    fn compile_cond<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
         let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
@@ -964,11 +952,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_case<T: Clone+Debug>(&self,
-                                    env: &LexicalContext,
-                                    ctx: &mut CodeGenContext,
-                                    preds: &Datum<T>)
+    fn compile_case<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
         let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
@@ -1053,11 +1039,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_and<T: Clone+Debug>(&self,
-                                   env: &LexicalContext,
-                                   ctx: &mut CodeGenContext,
-                                   preds: &Datum<T>)
+    fn compile_and<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
         let exprs: Vec<Datum<T>> = match preds.iter().collect() {
@@ -1088,11 +1072,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_or<T: Clone+Debug>(&self,
-                                  env: &LexicalContext,
-                                  ctx: &mut CodeGenContext,
-                                  preds: &Datum<T>)
+    fn compile_or<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
         let exprs: Vec<Datum<T>> = match preds.iter().collect() {
@@ -1123,11 +1105,9 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_expr<T: Clone+Debug>(&self,
-                                    env: &LexicalContext,
-                                    ctx: &mut CodeGenContext,
-                                    datum: &Datum<T>)
+    fn compile_expr<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &Datum<T>)
             -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
     {
         match datum {
             &Datum::Cons(_) =>
@@ -1222,6 +1202,7 @@ mod test {
         let global = libbase();
         let syntax = base_syntax();
         let compiler = Compiler::new(syntax);
+        let lambda: Datum<()> = list![sym!("lambda"), list![sym!("x")], list![sym!("+"), sym!("x"), num!(2)]];
 
         let f = vec![
             Inst::SetArgSize(1),
@@ -1232,15 +1213,13 @@ mod test {
             Inst::Return
         ];
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Closure(Rc::new(f), 0)),
+            Inst::PushArg(MemRef::Closure(Rc::new(f), 0, Some(lambda.clone()))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
             Inst::Call(1),
             Inst::Return
         ]);
-        let code = compiler.compile::<()>(&global, &list![
-                           list![sym!("lambda"), list![sym!("x")],
-                                list![sym!("+"), sym!("x"), num!(2)]],
-                            num!(1)]);
+
+        let code = compiler.compile::<()>(&global, &list![lambda, num!(1)]);
         assert_eq!(expected, code);
     }
 
@@ -1249,7 +1228,8 @@ mod test {
         let global = libbase();
         let syntax = base_syntax();
         let compiler = Compiler::new(syntax);
-
+        let f_src: Datum<()> = list![sym!("lambda"), list![sym!("y")], list![sym!("+"), sym!("x"), sym!("y")]];
+        let g_src: Datum<()> = list![sym!("lambda"), list![sym!("x")], f_src.clone()];
         let f = vec![
             Inst::SetArgSize(1),
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
@@ -1260,11 +1240,11 @@ mod test {
         ];
         let g = vec![
             Inst::SetArgSize(1),
-            Inst::PushArg(MemRef::Closure(Rc::new(f), 1)),
+            Inst::PushArg(MemRef::Closure(Rc::new(f), 1, Some(f_src))),
             Inst::Return
         ];
         let expected = Ok(vec![
-            Inst::PushArg(MemRef::Closure(Rc::new(g), 0)),
+            Inst::PushArg(MemRef::Closure(Rc::new(g), 0, Some(g_src.clone()))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(1),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
@@ -1276,14 +1256,7 @@ mod test {
         //   (lambda (x)            # = g
         //     (lambda (y) (+ x y)) # = f
         //   ) 2) 3)
-        let code = compiler.compile::<()>(&global, &list![
-            list![
-                list![sym!("lambda"), list![sym!("x")],
-                    list![sym!("lambda"), list![sym!("y")],
-                        list![sym!("+"), sym!("x"), sym!("y")]]],
-                num!(2)],
-            num!(3)
-        ]);
+        let code = compiler.compile::<()>(&global, &list![list![g_src, num!(2)], num!(3)]);
         assert_eq!(expected, code)
     }
 
