@@ -1309,26 +1309,4 @@ mod test {
                                           ]);
         assert_eq!(expected, code)
     }
-
-    #[test]
-    fn test_define_global() {
-        let global = libbase();
-        let syntax = base_syntax();
-        let compiler = Compiler::new(syntax);
-
-        let expected = Ok(vec![
-            Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
-            Inst::PopGlobal(Cow::Owned("x".to_string())),
-            Inst::PushArg(MemRef::Undefined),
-            Inst::Return
-        ]);
-
-        let code = compiler.compile::<()>(&global, &list![
-                                                sym!("define"),
-                                                sym!("x"),
-                                                num!(3)
-                                          ]);
-
-        assert_eq!(expected, code);
-    }
 }
