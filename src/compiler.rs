@@ -403,6 +403,7 @@ impl Compiler {
             let cond_jump_pc = ctx.code.len();
             // placeholder to replace with JumpIfFalse
             ctx.code.push(Inst::Nop);
+            ctx.code.push(Inst::DropArg);
 
             try!(self.compile_expr(env, ctx, then_expr));
 

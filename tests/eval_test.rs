@@ -85,6 +85,9 @@ fn local_define_test() {
 fn if_expression_test() {
     assert_evaluates_to!("(if #t 1 0)", "1");
     assert_evaluates_to!("(if #f 1 0)", "0");
+
+    assert_evaluates_to!("(+ 3 (if #t 1 0))", "4");
+    assert_evaluates_to!("(+ 3 (if #f 1 0))", "3");
 }
 
 #[test]
