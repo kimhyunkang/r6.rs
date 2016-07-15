@@ -380,8 +380,20 @@ fn equal_test() {
 }
 
 #[test]
-fn test_global_define() {
+fn test_global_define_lambda() {
     let code0 = Parser::new("(define fact (lambda (n) (if (zero? n) 1 (* n (fact (- n 1))))))".as_bytes()).parse_datum::<()>().expect("Failed to parse");
+    let code1 = Parser::new("(fact 3)".as_bytes()).parse_datum::<()>().expect("Failed to parse");
+
+    let mut runtime = Runtime::new(libbase(), base_syntax());
+    runtime.eval(&code0).expect("Failed to run");
+    let result = runtime.eval(&code1);
+
+    assert_eq!(result, Ok(Datum::Num(Number::new_int(6, 0))));
+}
+
+#[test]
+fn test_global_define() {
+    let code0 = Parser::new("(define (fact n) (if (zero? n) 1 (* n (fact (- n 1)))))".as_bytes()).parse_datum::<()>().expect("Failed to parse");
     let code1 = Parser::new("(fact 3)".as_bytes()).parse_datum::<()>().expect("Failed to parse");
 
     let mut runtime = Runtime::new(libbase(), base_syntax());
