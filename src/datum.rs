@@ -34,21 +34,6 @@ pub enum Datum<T> {
     Ext(T)
 }
 
-fn write_cons<T: fmt::Debug>(tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
-    match tail {
-        &Datum::Nil => {
-            write!(f, ")")
-        },
-        &Datum::Cons(ref pair) => {
-            try!(write!(f, " {:?}", pair.0));
-            write_cons(&pair.1, f)
-        },
-        _ => {
-            write!(f, " . {:?})", tail)
-        }
-    }
-}
-
 fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
     try!(write!(f, "#\\"));
     match c {
@@ -63,9 +48,11 @@ fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Datum<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
+trait DatumFormatter<T> {
+    fn ext_fmt(&self, &T, &mut fmt::Formatter) -> fmt::Result;
+
+    fn datum_fmt(&self, datum: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
+        match *datum {
             Datum::Sym(ref s) => write!(f, "{}", s),
             Datum::Bool(true) => write!(f, "#t"),
             Datum::Bool(false) => write!(f, "#f"),
@@ -75,9 +62,11 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
                 if vec.is_empty() {
                     write!(f, "#()")
                 } else {
-                    try!(write!(f, "#({:?}", vec[0]));
+                    try!(write!(f, "#("));
+                    try!(self.datum_fmt(&vec[0], f));
                     for x in vec[1..].iter() {
-                        try!(write!(f, " {:?}", x));
+                        try!(f.write_str(" "));
+                        try!(self.datum_fmt(x, f));
                     }
                     write!(f, ")")
                 }
@@ -94,23 +83,75 @@ impl<T: fmt::Debug> fmt::Debug for Datum<T> {
                 }
             },
             Datum::Num(ref n) => write!(f, "{}", n),
-            Datum::Ext(ref x) => x.fmt(f),
+            Datum::Ext(ref x) => self.ext_fmt(x, f),
             Datum::Nil => write!(f, "()"),
             Datum::Cons(ref pair) => {
                 if let Datum::Sym(ref s) = pair.0 {
                     match SPECIAL_TOKEN_MAP.get(s.as_ref()) {
                         Some(ch) => if let Datum::Cons(ref tail) = pair.1 {
                             if let Datum::Nil = tail.1 {
-                                return write!(f, "{}{:?}", ch, tail.0);
+                                try!(write!(f, "{}", ch));
+                                return self.datum_fmt(&tail.0, f);
                             }
                         },
                         _ => ()
                     }
                 }
-                try!(write!(f, "({:?}", pair.0));
-                write_cons(&pair.1, f)
+                try!(write!(f, "("));
+                try!(self.datum_fmt(&pair.0, f));
+                self.write_cons(&pair.1, f)
             }
         }
+    }
+
+    fn write_cons(&self, tail: &Datum<T>, f: &mut fmt::Formatter) -> fmt::Result {
+        match tail {
+            &Datum::Nil => {
+                write!(f, ")")
+            },
+            &Datum::Cons(ref pair) => {
+                try!(write!(f, " "));
+                try!(self.datum_fmt(&pair.0, f));
+                self.write_cons(&pair.1, f)
+            },
+            _ => {
+                try!(write!(f, " . "));
+                try!(self.datum_fmt(&tail, f));
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+struct DebugFormatter;
+
+impl<T: fmt::Debug> DatumFormatter<T> for DebugFormatter {
+    fn ext_fmt(&self, ext: &T, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", ext)
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for Datum<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let debug_fmt = DebugFormatter;
+
+        debug_fmt.datum_fmt(self, f)
+    }
+}
+
+struct DisplayFormatter;
+
+impl<T: fmt::Display> DatumFormatter<T> for DisplayFormatter {
+    fn ext_fmt(&self, ext: &T, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", ext)
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for Datum<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let debug_fmt = DisplayFormatter;
+
+        debug_fmt.datum_fmt(self, f)
     }
 }
 

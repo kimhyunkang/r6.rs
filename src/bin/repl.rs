@@ -23,7 +23,7 @@ fn main() {
         let mut parser = Parser::new(line.as_bytes());
         match parser.parse_datum::<()>() {
             Ok(code) => match runtime.eval(&code) {
-                Ok(v) => println!("{:?}", v),
+                Ok(v) => println!("{}", v),
                 Err(e) => println!("Error: {}", e)
             },
             Err(e) => println!("Error: {}", e)

@@ -165,6 +165,24 @@ impl fmt::Debug for RuntimeData {
     }
 }
 
+impl fmt::Display for RuntimeData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            &RuntimeData::PrimFunc(ref func_ptr) =>
+                write!(f, "<primitive: {:?}>", func_ptr.name),
+            &RuntimeData::Closure(ref closure) => {
+                try!(write!(f, "<procedure"));
+                match closure.source {
+                    None => write!(f, ">"),
+                    Some(ref ptr) => write!(f, ": {:?}>", ptr.deref())
+                }
+            },
+            &RuntimeData::Undefined =>
+                write!(f, "<undefined>")
+        }
+    }
+}
+
 /// RDatum contains RuntimeData in addition to normal Datum
 pub type RDatum = Datum<RuntimeData>;
 
