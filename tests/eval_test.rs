@@ -380,6 +380,12 @@ fn equal_test() {
 }
 
 #[test]
+fn first_class_function() {
+    assert_evaluates_to!("(let ((h (lambda (op x y) (op x y)))) (h + 23 42))", "65");
+    assert_evaluates_to!("(let ((h (lambda (op x y) (op x y)))) (h * 23 42))", "966");
+}
+
+#[test]
 fn test_global_define_lambda() {
     let code0 = Parser::new("(define fact (lambda (n) (if (zero? n) 1 (* n (fact (- n 1))))))".as_bytes()).parse_datum::<()>().expect("Failed to parse");
     let code1 = Parser::new("(fact 3)".as_bytes()).parse_datum::<()>().expect("Failed to parse");
