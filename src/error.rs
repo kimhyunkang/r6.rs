@@ -10,6 +10,8 @@ use compiler::Syntax;
 pub enum ParserErrorKind {
     /// Parser met EOF before parsing a proper datum
     UnexpectedEOF,
+    /// Non-whitespace input left after parsing a datum
+    TrailingInput,
     /// Unexpected token: the first string describes expected token, and the second describes
     /// actual token
     UnexpectedToken(String, String),

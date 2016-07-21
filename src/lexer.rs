@@ -141,15 +141,24 @@ impl <R: Read + Sized> Lexer<R> {
         }
     }
 
-    /// return next token
     pub fn lex_token(&mut self) -> Result<TokenWrapper, ParserError> {
         try!(self.consume_whitespace());
 
         let line = self.line;
         let col = self.column;
+
+        let token = try!(self.lex());
+
+        try!(self.consume_whitespace());
+
+        Ok(wrap(line, col, token))
+    }
+
+    /// return next token
+    fn lex(&mut self) -> Result<Token, ParserError> {
         let c = match self.consume() {
             Some(Ok(c)) => c,
-            None => return Ok(wrap(line, col, Token::EOF)),
+            None => return Ok(Token::EOF),
             Some(Err(e)) =>
                 return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e))))
         };
@@ -159,50 +168,49 @@ impl <R: Read + Sized> Lexer<R> {
         if is_initial(c) {
             let mut init = String::new();
             init.push(c);
-            self.lex_ident(init).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s))))
+            self.lex_ident(init).map(|s| Token::Identifier(Cow::Owned(s)))
         } else if c == '+' {
             if end_of_token {
-                Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("+"))))
+                Ok(Token::Identifier(Cow::Borrowed("+")))
             } else {
-                self.lex_numeric("+".to_string()).map(|s| wrap(line, col, Token::Numeric(s)))
+                self.lex_numeric("+".to_string()).map(Token::Numeric)
             }
         } else if c == '-' {
             if end_of_token {
-                Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
+                Ok(Token::Identifier(Cow::Borrowed("-")))
             } else {
-                match self.lookahead() {
-                    Some(Ok('>')) => self.lex_ident("-".to_string()).map(|s| wrap(line, col, Token::Identifier(Cow::Owned(s)))),
-                    Some(Ok(_)) => self.lex_numeric("-".to_string()).map(|s| wrap(line, col, Token::Numeric(s))),
-                    Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
-                    None => Ok(wrap(line, col, Token::Identifier(Cow::Borrowed("-"))))
+                match try!(self.lookahead()) {
+                    Some('>') => self.lex_ident("-".to_string()).map(|s| Token::Identifier(Cow::Owned(s))),
+                    Some(_) => self.lex_numeric("-".to_string()).map(Token::Numeric),
+                    None => Ok(Token::Identifier(Cow::Borrowed("-")))
                 }
             }
         } else if c == ',' {
-            match self.lookahead() {
-                Some(Ok('@')) => {
+            match try!(self.lookahead()) {
+                Some('@') => {
                     self.consume();
-                    Ok(wrap(line, col, Token::UnquoteSplicing))
+                    Ok(Token::UnquoteSplicing)
                 },
-                _ => Ok(wrap(line, col, Token::Comma))
+                _ => Ok(Token::Comma)
             }
         } else if c == '(' {
-            Ok(wrap(line, col, Token::OpenParen))
+            Ok(Token::OpenParen)
         } else if c == ')' {
-            Ok(wrap(line, col, Token::CloseParen))
+            Ok(Token::CloseParen)
         } else if c == '.' && end_of_token {
-            Ok(wrap(line, col, Token::Dot))
+            Ok(Token::Dot)
         } else if c == '\'' {
-            Ok(wrap(line, col, Token::Quote))
+            Ok(Token::Quote)
         } else if c == '`' {
-            Ok(wrap(line, col, Token::QuasiQuote))
+            Ok(Token::QuasiQuote)
         } else if c == '#' {
             let c0 = try_consume!(self);
             match c0 {
-                't' | 'T' => Ok(wrap(line, col, Token::True)),
-                'f' | 'F' => Ok(wrap(line, col, Token::False)),
+                't' | 'T' => Ok(Token::True),
+                'f' | 'F' => Ok(Token::False),
                 'b' | 'B' | 'o' | 'O' | 'd' | 'D' | 'x' | 'X' | 'i' | 'I' | 'e' | 'E' => {
                     let s = format!("{}{}", c, c0);
-                    self.lex_numeric(s).map(|s| wrap(line, col, Token::Numeric(s)))
+                    self.lex_numeric(s).map(Token::Numeric)
                 },
                 'v' | 'u' => {
                     let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
@@ -210,29 +218,28 @@ impl <R: Read + Sized> Lexer<R> {
                     let prefix = format!("{}{}{}", c0, rest_prefix, delim);
                     match prefix.as_ref() {
                         "vu8(" | "u8(" =>
-                            Ok(wrap(line, col, Token::OpenBytesParen)),
+                            Ok(Token::OpenBytesParen),
                         _ =>
                             Err(self.make_error(ParserErrorKind::InvalidToken(prefix)))
                     }
                 },
-                '\\' => self.lex_char().map(|s| wrap(line, col, Token::Character(s))),
-                '(' => Ok(wrap(line, col, Token::OpenVectorParen)),
+                '\\' => self.lex_char().map(Token::Character),
+                '(' => Ok(Token::OpenVectorParen),
                 _ => Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
             }
         } else if c == '"' {
-            self.lex_string().map(|s| wrap(line, col, Token::String(s)))
+            self.lex_string().map(Token::String)
         } else if c.is_numeric() {
             let s = format!("{}", c);
-            self.lex_numeric(s).map(|s| wrap(line, col, Token::Numeric(s)))
+            self.lex_numeric(s).map(Token::Numeric)
         } else {
             Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
         }
     }
 
     fn is_end_of_token(&mut self) -> Result<bool, ParserError> {
-        match self.lookahead() {
-            Some(Ok(c)) => Ok(is_whitespace(c) || is_delim(c)),
-            Some(Err(e)) => Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
+        match try!(self.lookahead()) {
+            Some(c) => Ok(is_whitespace(c) || is_delim(c)),
             None => Ok(true)
         }
     }
@@ -325,15 +332,22 @@ impl <R: Read + Sized> Lexer<R> {
         }
     }
 
-    fn lookahead(&mut self) -> Option<Result<char, CharsError>> {
+    fn lookahead(&mut self) -> Result<Option<char>, CharsError> {
         match self.lookahead_buf {
-            Some(c) => Some(Ok(c)),
+            Some(c) => Ok(Some(c)),
             None => {
-                let c = self.stream.next();
-                if let Some(Ok(ch)) = c {
-                    self.lookahead_buf = Some(ch);
+                match self.stream.next() {
+                    Some(Ok(ch)) => {
+                        self.lookahead_buf = Some(ch);
+                        Ok(Some(ch))
+                    },
+                    Some(Err(e)) => {
+                        Err(e)
+                    },
+                    None => {
+                        Ok(None)
+                    }
                 }
-                c
             }
         }
     }
@@ -400,17 +414,14 @@ impl <R: Read + Sized> Lexer<R> {
         loop {
             let whitespace = try!(self.read_while(is_whitespace));
             consumed = consumed || whitespace.len() > 0;
-            match self.lookahead() {
-                Some(Ok(';')) => {
-                    consumed = true;
-                    try!(self.read_while(|c| c != '\n'));
-                    if self.lookahead_buf.is_some() {
-                        self.lookahead_buf = None
-                    }
-                },
-                Some(Ok(_)) | None => return Ok(consumed),
-                Some(Err(e)) =>
-                    return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
+            if let Some(';') = try!(self.lookahead()) {
+                consumed = true;
+                try!(self.read_while(|c| c != '\n'));
+                if self.lookahead_buf.is_some() {
+                    self.lookahead_buf = None;
+                }
+            } else {
+                return Ok(consumed);
             }
         }
     }

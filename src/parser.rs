@@ -360,6 +360,20 @@ impl <R: Read + Sized> Parser<R> {
         }
     }
 
+    pub fn parse_full<T>(&mut self) -> Result<Datum<T>, ParserError> {
+        let datum = try!(self.parse_datum());
+        let t = try!(self.lexer.lex_token());
+        if let Token::EOF = t.token {
+            Ok(datum)
+        } else {
+            Err(ParserError {
+                line: t.line,
+                column: t.column,
+                kind: ParserErrorKind::TrailingInput
+            })
+        }
+    }
+
     /// Parse next datum
     pub fn parse_datum<T>(&mut self) -> Result<Datum<T>, ParserError> {
         let tok = try!(self.consume_token());
@@ -411,6 +425,13 @@ impl <R: Read + Sized> Parser<R> {
             Token::UnquoteSplicing => self.parse_datum().map(|v|
                 cons(Datum::Sym(Cow::Borrowed("unquote-splicing")), cons(v, Datum::Nil))
             ),
+            Token::EOF => {
+                Err(ParserError {
+                    line: tok.line,
+                    column: tok.column,
+                    kind: ParserErrorKind::UnexpectedEOF
+                })
+            },
             _ => Err(unexpected_token(&tok, "Datum or OpenParen".to_string()))
         }
     }
@@ -444,6 +465,12 @@ impl <R: Read + Sized> Parser<R> {
         let t = try!(self.consume_token());
         if t.token == *tok {
             Ok(())
+        } else if t.token == Token::EOF {
+            Err(ParserError {
+                line: t.line,
+                column: t.column,
+                kind: ParserErrorKind::UnexpectedEOF
+            })
         } else {
             Err(unexpected_token(&t, format!("{:?}", tok)))
         }
@@ -484,7 +511,7 @@ mod test {
 
     use num::{Float, FromPrimitive};
 
-    use error::ParserError;
+    use error::{ParserError, ParserErrorKind};
     use super::Parser;
     use datum::{Datum, cons};
     use number::Number;
@@ -493,7 +520,7 @@ mod test {
     macro_rules! test_parse_ok {
         ($s:expr, $e:expr) => ({
             let mut parser = Parser::new($s.as_bytes());
-            let res: Result<Datum<()>, ParserError> = parser.parse_datum();
+            let res: Result<Datum<()>, ParserError> = parser.parse_full();
 
             assert_eq!(res, Ok($e))
         })
@@ -606,5 +633,18 @@ mod test {
     #[test]
     fn test_parse_unquote_splicing() {
         test_parse_ok!(",@a", list!(sym!("unquote-splicing"), sym!("a")));
+    }
+
+    #[test]
+    fn test_parse_trailing_input() {
+        let mut parser = Parser::new("(1 2 3) (4 5)".as_bytes());
+        let res: Result<Datum<()>, ParserError> = parser.parse_full();
+        match res {
+            Ok(datum) => panic!("Expected TrailingInput error, got {:?}", datum),
+            Err(e) => match e.kind {
+                ParserErrorKind::TrailingInput => (),
+                _ => panic!("Expected TrailingInput error, got {}", e)
+            }
+        }
     }
 }
