@@ -1,7 +1,10 @@
 extern crate r6;
 extern crate copperline;
 
+use std::process::exit;
+
 use copperline::{Copperline, Encoding};
+use copperline::Error as CopperlineError;
 
 use r6::base::{libbase, base_syntax};
 use r6::datum::Datum;
@@ -12,7 +15,13 @@ use r6::runtime::Runtime;
 fn read(cl: &mut Copperline) -> Result<Datum<()>, String> {
     let mut input = match cl.read_line(">> ", Encoding::Utf8) {
         Ok(l) => l,
-        Err(e) => return Err(e.to_string())
+        Err(CopperlineError::EndOfFile) => {
+            exit(0);
+        },
+        Err(e) => {
+            println!("{}", e);
+            exit(1);
+        }
     };
 
     if let Some(datum) = try!(parse(input.as_bytes())) {
@@ -22,7 +31,14 @@ fn read(cl: &mut Copperline) -> Result<Datum<()>, String> {
     loop {
         let line = match cl.read_line(".. ", Encoding::Utf8) {
             Ok(l) => l,
-            Err(e) => return Err(e.to_string())
+            Err(CopperlineError::EndOfFile) => {
+                println!("^D");
+                exit(0);
+            },
+            Err(e) => {
+                println!("{}", e);
+                exit(1);
+            }
         };
 
         input.push_str("\n");
@@ -57,7 +73,6 @@ fn main() {
             },
             Err(e) => {
                 println!("Error: {}", e);
-                return;
             }
         }
     }
