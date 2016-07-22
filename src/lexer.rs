@@ -201,16 +201,11 @@ impl <R: Read + Sized> Lexer<R> {
             if end_of_token {
                 Ok(Token::Dot)
             } else {
-                try!(self.expect('.'));
-                try!(self.expect('.'));
-                if try!(self.is_end_of_token()) {
+                let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
+                if rest_prefix == ".." {
                     Ok(Token::Identifier(Cow::Borrowed("...")))
                 } else {
-                    Err(ParserError {
-                        line: self.line,
-                        column: self.column,
-                        kind: ParserErrorKind::InvalidCharacter(try_consume!(self))
-                    })
+                    Err(self.make_error(ParserErrorKind::InvalidToken(format!("{}{}", c, rest_prefix))))
                 }
             }
         } else if c == '\'' {
@@ -363,19 +358,6 @@ impl <R: Read + Sized> Lexer<R> {
                     }
                 }
             }
-        }
-    }
-
-    fn expect(&mut self, expected: char) -> Result<(), ParserError> {
-        let c = try_consume!(self);
-        if c == expected {
-            Ok(())
-        } else {
-            Err(ParserError {
-                line: self.line,
-                column: self.column,
-                kind: ParserErrorKind::InvalidCharacter(c)
-            })
         }
     }
 
