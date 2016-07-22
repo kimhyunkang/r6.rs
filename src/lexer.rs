@@ -113,7 +113,7 @@ fn is_subsequent(c: char) -> bool {
 
 fn is_delim(c: char) -> bool {
     match c {
-        '(' | ')' | '[' | ']' | '"' | ';' => true,
+        '(' | ')' | '[' | ']' | '"' | ';' | '#' => true,
         _ => c.is_whitespace()
     }
 }
