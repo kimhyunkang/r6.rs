@@ -424,3 +424,31 @@ fn test_global_define() {
         "6"
     );
 }
+
+#[test]
+fn test_selection_sort() {
+    assert_evaluates_to!(
+        "(define (smallest L A)
+            (cond ((null? L) A)
+                  ((< (car L) A) (smallest (cdr L) (car L)))
+                  (else (smallest (cdr L) A))
+            )
+         )",
+        "(define (remove L A)
+            (cond ((null? L) '())
+                  ((= (car L) A) (cdr L))
+                  (else (cons (car L) (remove (cdr L) A)))
+            )
+         )",
+        "(define (selection L)
+            (cond ((null? L) '())
+                  (else (cons (smallest L (car L))
+                              (selection (remove L (smallest L (car L)))))
+                  )
+            )
+         )",
+        "(selection '(6 4 5 3 9 3))"
+        =>
+        "(3 3 4 5 6 9)"
+    );
+}
