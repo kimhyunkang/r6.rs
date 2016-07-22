@@ -22,6 +22,8 @@ pub enum Token {
     OpenVectorParen,
     /// `#vu8(`
     OpenBytesParen,
+    /// `#;`
+    DatumComment,
     /// `.`
     Dot,
     /// `'`
@@ -63,6 +65,7 @@ impl fmt::Debug for Token {
             Token::True => write!(f, "#t"),
             Token::False => write!(f, "#f"),
             Token::Character(ref name) => write!(f, "#\\{}", name),
+            Token::DatumComment => write!(f, "DatumComment"),
             Token::Numeric(ref rep) => rep.fmt(f),
             Token::String(ref rep) => write!(f, "{:?}", rep),
             Token::EOF => write!(f, "EOF"),
@@ -247,6 +250,7 @@ impl <R: Read + Sized> Lexer<R> {
                     try!(self.consume_whitespace());
                     self.lex()
                 },
+                ';' => Ok(Token::DatumComment),
                 _ => Err(self.make_error(ParserErrorKind::InvalidToken(format!("#{}", c))))
             }
         } else if c == '"' {

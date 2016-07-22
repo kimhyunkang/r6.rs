@@ -426,6 +426,11 @@ impl <R: Read + Sized> Parser<R> {
             Token::UnquoteSplicing => self.parse_datum().map(|v|
                 cons(Datum::Sym(Cow::Borrowed("unquote-splicing")), cons(v, Datum::Nil))
             ),
+            Token::DatumComment => {
+                // Treat the next datum as a comment
+                try!(self.parse_datum::<T>());
+                self.parse_datum()
+            },
             Token::EOF => {
                 Err(ParserError {
                     line: tok.line,
@@ -653,6 +658,11 @@ mod test {
     #[test]
     fn test_nested_comment() {
         test_parse_ok!("(a #| (b c #|(d e)|# f) |# g h)", list!(sym!("a"), sym!("g"), sym!("h")));
+    }
+
+    #[test]
+    fn test_datum_comment() {
+        test_parse_ok!("(a #; (b c #|(d e)|# f) g h)", list!(sym!("a"), sym!("g"), sym!("h")));
     }
 
     #[test]
