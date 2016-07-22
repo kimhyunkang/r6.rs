@@ -4,6 +4,7 @@ use std::fmt;
 use std::char;
 
 use num::Num;
+use unicode_categories::UnicodeCategories;
 
 use error::{ParserError, ParserErrorKind, StreamError};
 
@@ -99,7 +100,17 @@ fn is_whitespace(c: char) -> bool {
 fn is_initial(c: char) -> bool {
     match c {
         'a'...'z' | 'A'...'Z' | '!' | '$' | '%' | '&' | '*' | '/' | ':' | '<' | '=' | '>' | '?' | '^' | '_' | '~' => true,
-        _ => false
+        _ => c > '\x7f' && (
+            c.is_letter()                   // Lu, Ll, Lt, Lm, Lo
+            || c.is_mark_nonspacing()       // Mn
+            || c.is_number_letter()         // Nl
+            || c.is_number_other()          // No
+            || c.is_punctuation_dash()      // Pd
+            || c.is_punctuation_connector() // Pc
+            || c.is_punctuation_other()     // Po
+            || c.is_symbol()                // Sc, Sm, Sk, So
+            || c.is_other_private_use()     // Co
+        )
     }
 }
 
@@ -109,7 +120,11 @@ fn is_subsequent(c: char) -> bool {
     } else {
         match c {
             '0'...'9' | '+' | '-' | '.' | '@' => true,
-            _ => false
+            _ => (
+                c.is_number_decimal_digit()         // Nd
+                || c.is_mark_spacing_combining()    // Mc
+                || c.is_mark_enclosing()            // Me
+            )
         }
     }
 }
