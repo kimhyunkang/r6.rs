@@ -25,6 +25,14 @@ pub enum Token {
     OpenBytesParen,
     /// `#;`
     DatumComment,
+    /// `#'`
+    Syntax,
+    /// `#``
+    QuasiSyntax,
+    /// `#,`
+    Unsyntax,
+    /// `#,@`
+    UnsyntaxSplicing,
     /// `.`
     Dot,
     /// `'`
@@ -62,6 +70,10 @@ impl fmt::Debug for Token {
             Token::QuasiQuote => write!(f, "QuasiQuote"),
             Token::Comma => write!(f, "Comma"),
             Token::UnquoteSplicing => write!(f, "UnquoteSplicing"),
+            Token::Syntax => write!(f, "Syntax"),
+            Token::QuasiSyntax => write!(f, "QuasiSyntax"),
+            Token::Unsyntax => write!(f, "Unsyntax"),
+            Token::UnsyntaxSplicing => write!(f, "UnsyntaxSplicing"),
             Token::Identifier(ref name) => write!(f, "Identifier({})", name),
             Token::True => write!(f, "#t"),
             Token::False => write!(f, "#f"),
@@ -266,6 +278,14 @@ impl <R: Read + Sized> Lexer<R> {
                     self.lex()
                 },
                 ';' => Ok(Token::DatumComment),
+                '\'' => Ok(Token::Syntax),
+                '`' => Ok(Token::QuasiSyntax),
+                ',' => if let Some('@') = try!(self.lookahead()) {
+                        self.consume().expect("lookahead buffer error");
+                        Ok(Token::UnsyntaxSplicing)
+                    } else {
+                        Ok(Token::Unsyntax)
+                    },
                 _ => Err(self.make_error(ParserErrorKind::InvalidToken(format!("#{}", c))))
             }
         } else if c == '"' {

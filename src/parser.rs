@@ -60,7 +60,11 @@ pub static SPECIAL_TOKEN_MAP: phf::Map<&'static str, &'static str> = phf_map! {
     "quote" => "'",
     "quasiquote" => "`",
     "unquote" => ",",
-    "unquote-splicing" => ",@"
+    "unquote-splicing" => ",@",
+    "syntax" => "#'",
+    "quasisyntax" => "#`",
+    "unsyntax" => "#,",
+    "unsyntax-splicing" => "#,@"
 };
 
 fn parse_char(ch: &str) -> Option<char> {
@@ -414,18 +418,14 @@ impl <R: Read + Sized> Parser<R> {
                     kind: ParserErrorKind::InvalidToken(format!("{:?}: {}", tok.token, e))
                 })
             },
-            Token::Quote => self.parse_datum().map(|v|
-                cons(Datum::Sym(Cow::Borrowed("quote")), cons(v, Datum::Nil))
-            ),
-            Token::QuasiQuote => self.parse_datum().map(|v|
-                cons(Datum::Sym(Cow::Borrowed("quasiquote")), cons(v, Datum::Nil))
-            ),
-            Token::Comma => self.parse_datum().map(|v|
-                cons(Datum::Sym(Cow::Borrowed("unquote")), cons(v, Datum::Nil))
-            ),
-            Token::UnquoteSplicing => self.parse_datum().map(|v|
-                cons(Datum::Sym(Cow::Borrowed("unquote-splicing")), cons(v, Datum::Nil))
-            ),
+            Token::Quote => self.parse_abbrev("quote"),
+            Token::QuasiQuote => self.parse_abbrev("quasiquote"),
+            Token::Comma => self.parse_abbrev("unquote"),
+            Token::UnquoteSplicing => self.parse_abbrev("unquote-splicing"),
+            Token::Syntax => self.parse_abbrev("syntax"),
+            Token::QuasiSyntax => self.parse_abbrev("quasisyntax"),
+            Token::Unsyntax => self.parse_abbrev("unsyntax"),
+            Token::UnsyntaxSplicing => self.parse_abbrev("unsyntax-splicing"),
             Token::DatumComment => {
                 // Treat the next datum as a comment
                 try!(self.parse_datum::<T>());
@@ -440,6 +440,12 @@ impl <R: Read + Sized> Parser<R> {
             },
             _ => Err(unexpected_token(&tok, "Datum or OpenParen".to_string()))
         }
+    }
+
+    fn parse_abbrev<T>(&mut self, name: &'static str) -> Result<Datum<T>, ParserError> {
+        self.parse_datum().map(|v|
+            cons(Datum::Sym(Cow::Borrowed(name)), cons(v, Datum::Nil))
+        )
     }
 
     fn consume_token(&mut self) -> Result<TokenWrapper, ParserError> {

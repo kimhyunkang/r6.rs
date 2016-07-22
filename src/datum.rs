@@ -287,6 +287,12 @@ mod test {
         compare_fmt("`a", list!(sym!("quasiquote"), sym!("a")));
         compare_fmt(",a", list!(sym!("unquote"), sym!("a")));
         compare_fmt(",@a", list!(sym!("unquote-splicing"), sym!("a")));
+
+        compare_fmt("#'a", list!(sym!("syntax"), sym!("a")));
+        compare_fmt("#'(a b)", list!(sym!("syntax"), list!(sym!("a"), sym!("b"))));
+        compare_fmt("#`a", list!(sym!("quasisyntax"), sym!("a")));
+        compare_fmt("#,a", list!(sym!("unsyntax"), sym!("a")));
+        compare_fmt("#,@a", list!(sym!("unsyntax-splicing"), sym!("a")));
     }
 
     #[test]
