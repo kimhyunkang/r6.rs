@@ -14,6 +14,10 @@ pub enum Token {
     OpenParen,
     /// `)`
     CloseParen,
+    /// `[`
+    OpenBracket,
+    /// `]`
+    CloseBracket,
     /// `#(`
     OpenVectorParen,
     /// `#vu8(`
@@ -48,6 +52,8 @@ impl fmt::Debug for Token {
             Token::OpenVectorParen => write!(f, "OpenVectorParen"),
             Token::OpenBytesParen => write!(f, "OpenBytesParen"),
             Token::CloseParen => write!(f, "CloseParen"),
+            Token::OpenBracket => write!(f, "OpenBracket"),
+            Token::CloseBracket => write!(f, "CloseBracket"),
             Token::Dot => write!(f, "Dot"),
             Token::Quote => write!(f, "Quote"),
             Token::QuasiQuote => write!(f, "QuasiQuote"),
@@ -156,11 +162,9 @@ impl <R: Read + Sized> Lexer<R> {
 
     /// return next token
     fn lex(&mut self) -> Result<Token, ParserError> {
-        let c = match self.consume() {
-            Some(Ok(c)) => c,
-            None => return Ok(Token::EOF),
-            Some(Err(e)) =>
-                return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e))))
+        let c = match try!(self.consume_eof()) {
+            Some(c) => c,
+            None => return Ok(Token::EOF)
         };
 
         let end_of_token = try!(self.is_end_of_token());
@@ -188,7 +192,7 @@ impl <R: Read + Sized> Lexer<R> {
         } else if c == ',' {
             match try!(self.lookahead()) {
                 Some('@') => {
-                    self.consume();
+                    self.consume().expect("lookahead buffer error");
                     Ok(Token::UnquoteSplicing)
                 },
                 _ => Ok(Token::Comma)
@@ -197,6 +201,10 @@ impl <R: Read + Sized> Lexer<R> {
             Ok(Token::OpenParen)
         } else if c == ')' {
             Ok(Token::CloseParen)
+        } else if c == '[' {
+            Ok(Token::OpenBracket)
+        } else if c == ']' {
+            Ok(Token::CloseBracket)
         } else if c == '.' {
             if end_of_token {
                 Ok(Token::Dot)
@@ -213,7 +221,7 @@ impl <R: Read + Sized> Lexer<R> {
         } else if c == '`' {
             Ok(Token::QuasiQuote)
         } else if c == '#' {
-            let c0 = try_consume!(self);
+            let c0 = try!(self.consume());
             match c0 {
                 't' | 'T' => Ok(Token::True),
                 'f' | 'F' => Ok(Token::False),
@@ -223,7 +231,7 @@ impl <R: Read + Sized> Lexer<R> {
                 },
                 'v' | 'u' => {
                     let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
-                    let delim = try_consume!(self);
+                    let delim = try!(self.consume());
                     let prefix = format!("{}{}{}", c0, rest_prefix, delim);
                     match prefix.as_ref() {
                         "vu8(" | "u8(" =>
@@ -234,7 +242,7 @@ impl <R: Read + Sized> Lexer<R> {
                 },
                 '\\' => self.lex_char().map(Token::Character),
                 '(' => Ok(Token::OpenVectorParen),
-                _ => Err(self.make_error(ParserErrorKind::InvalidCharacter(c)))
+                _ => Err(self.make_error(ParserErrorKind::InvalidToken(format!("#{}", c))))
             }
         } else if c == '"' {
             self.lex_string().map(Token::String)
@@ -261,8 +269,7 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     fn lex_char(&mut self) -> Result<String, ParserError> {
-        let c = try_consume!(self);
-
+        let c = try!(self.consume());
         let mut s = String::new();
         s.push(c);
         let sub = try!(self.read_while(|c| c.is_alphanumeric()));
@@ -273,9 +280,9 @@ impl <R: Read + Sized> Lexer<R> {
     fn lex_string(&mut self) -> Result<String, ParserError> {
         let mut s = String::new();
         loop {
-            match try_consume!(self) {
+            match try!(self.consume()) {
                 '"' => return Ok(s),
-                '\\' => match try_consume!(self) {
+                '\\' => match try!(self.consume()) {
                     'a' => s.push('\x07'),
                     'b' => s.push('\x08'),
                     't' => s.push('\t'),
@@ -286,12 +293,9 @@ impl <R: Read + Sized> Lexer<R> {
                     '"' => s.push('"'),
                     '\\' => s.push('\\'),
                     'x' => {
-                        let mut hex_str = String::new();
-                        loop {
-                            match try_consume!(self) {
-                                ';' => break,
-                                c => hex_str.push(c)
-                            }
+                        let hex_str = try!(self.read_while(|c| c != ';'));
+                        if try!(self.consume()) != ';' {
+                            panic!("read_while error");
                         }
                         if hex_str.len() == 0 {
                             return Err(self.make_error(ParserErrorKind::InvalidStringEscape(hex_str)))
@@ -309,16 +313,14 @@ impl <R: Read + Sized> Lexer<R> {
                         if c.is_whitespace() {
                             try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
                             if c != '\n' {
-                                if let Some(Ok('\n')) = self.consume() {
+                                if let '\n' = try!(self.consume()) {
                                     try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
                                 } else {
                                     return Err(self.make_error(ParserErrorKind::InvalidStringLiteral))
                                 }
                             }
                         } else {
-                            let mut s = String::new();
-                            s.push(c);
-                            return Err(self.make_error(ParserErrorKind::InvalidStringEscape(s)))
+                            return Err(self.make_error(ParserErrorKind::InvalidStringEscape(format!("{}", c))))
                         }
                 },
                 c => s.push(c),
@@ -402,7 +404,7 @@ impl <R: Read + Sized> Lexer<R> {
         }
     }
 
-    fn consume(&mut self) -> Option<Result<char, CharsError>> {
+    fn consume_eof(&mut self) -> Result<Option<char>, CharsError> {
         let c = match self.lookahead_buf {
             Some(c) => {
                 self.lookahead_buf = None;
@@ -411,11 +413,21 @@ impl <R: Read + Sized> Lexer<R> {
             None => self.stream.next()
         };
 
-        if let Some(Ok(ch)) = c {
-            self.advance(ch);
+        match c {
+            Some(Ok(ch)) => {
+                self.advance(ch);
+                Ok(Some(ch))
+            },
+            Some(Err(e)) => Err(e),
+            None => Ok(None)
         }
+    }
 
-        c
+    fn consume(&mut self) -> Result<char, ParserError> {
+        match try!(self.consume_eof()) {
+            Some(c) => Ok(c),
+            None => return Err(self.make_error(ParserErrorKind::UnexpectedEOF))
+        }
     }
 
     fn consume_whitespace(&mut self) -> Result<bool, ParserError> {

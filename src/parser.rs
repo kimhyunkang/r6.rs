@@ -379,7 +379,8 @@ impl <R: Read + Sized> Parser<R> {
         let tok = try!(self.consume_token());
         match tok.token {
             Token::Identifier(ident) => Ok(Datum::Sym(ident)),
-            Token::OpenParen => self.parse_list(),
+            Token::OpenParen => self.parse_list(&Token::CloseParen),
+            Token::OpenBracket => self.parse_list(&Token::CloseBracket),
             Token::OpenVectorParen => self.parse_vector().map(|v|
                 Datum::Vector(Rc::new(v))
             ),
@@ -476,8 +477,8 @@ impl <R: Read + Sized> Parser<R> {
         }
     }
 
-    fn parse_list<T>(&mut self) -> Result<Datum<T>, ParserError> {
-        if try!(self.consume_if(&Token::CloseParen)) {
+    fn parse_list<T>(&mut self, delim: &Token) -> Result<Datum<T>, ParserError> {
+        if try!(self.consume_if(delim)) {
             return Ok(Datum::Nil);
         }
 
@@ -485,10 +486,10 @@ impl <R: Read + Sized> Parser<R> {
 
         if try!(self.consume_if(&Token::Dot)) {
             let tail = try!(self.parse_datum());
-            try!(self.expect(&Token::CloseParen));
+            try!(self.expect(delim));
             Ok(cons(head, tail))
         } else {
-            let tail = try!(self.parse_list());
+            let tail = try!(self.parse_list(delim));
             Ok(cons(head, tail))
         }
     }
@@ -638,6 +639,15 @@ mod test {
     #[test]
     fn test_parse_ellipsis() {
         test_parse_ok!("...", sym!("..."));
+    }
+
+    #[test]
+    fn test_parse_bracket() {
+        test_parse_ok!("[a b (c [d] e) f]",
+                    list!(sym!("a"), sym!("b"),
+                        list!(sym!("c"), list!(sym!("d")), sym!("e")),
+                        sym!("f")
+                    ));
     }
 
     #[test]
