@@ -430,19 +430,16 @@ impl <R: Read + Sized> Lexer<R> {
         }
     }
 
-    fn consume_whitespace(&mut self) -> Result<bool, ParserError> {
-        let mut consumed = false;
+    fn consume_whitespace(&mut self) -> Result<(), ParserError> {
         loop {
-            let whitespace = try!(self.read_while(is_whitespace));
-            consumed = consumed || whitespace.len() > 0;
+            try!(self.read_while(is_whitespace));
             if let Some(';') = try!(self.lookahead()) {
-                consumed = true;
                 try!(self.read_while(|c| c != '\n'));
                 if self.lookahead_buf.is_some() {
                     self.lookahead_buf = None;
                 }
             } else {
-                return Ok(consumed);
+                return Ok(());
             }
         }
     }
