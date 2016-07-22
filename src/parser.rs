@@ -636,6 +636,11 @@ mod test {
     }
 
     #[test]
+    fn test_parse_ellipsis() {
+        test_parse_ok!("...", sym!("..."));
+    }
+
+    #[test]
     fn test_parse_trailing_input() {
         let mut parser = Parser::new("(1 2 3) (4 5)".as_bytes());
         let res: Result<Datum<()>, ParserError> = parser.parse_full();

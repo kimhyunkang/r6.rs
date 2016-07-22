@@ -197,8 +197,22 @@ impl <R: Read + Sized> Lexer<R> {
             Ok(Token::OpenParen)
         } else if c == ')' {
             Ok(Token::CloseParen)
-        } else if c == '.' && end_of_token {
-            Ok(Token::Dot)
+        } else if c == '.' {
+            if end_of_token {
+                Ok(Token::Dot)
+            } else {
+                try!(self.expect('.'));
+                try!(self.expect('.'));
+                if try!(self.is_end_of_token()) {
+                    Ok(Token::Identifier(Cow::Borrowed("...")))
+                } else {
+                    Err(ParserError {
+                        line: self.line,
+                        column: self.column,
+                        kind: ParserErrorKind::InvalidCharacter(try_consume!(self))
+                    })
+                }
+            }
         } else if c == '\'' {
             Ok(Token::Quote)
         } else if c == '`' {
@@ -349,6 +363,19 @@ impl <R: Read + Sized> Lexer<R> {
                     }
                 }
             }
+        }
+    }
+
+    fn expect(&mut self, expected: char) -> Result<(), ParserError> {
+        let c = try_consume!(self);
+        if c == expected {
+            Ok(())
+        } else {
+            Err(ParserError {
+                line: self.line,
+                column: self.column,
+                kind: ParserErrorKind::InvalidCharacter(c)
+            })
         }
     }
 
