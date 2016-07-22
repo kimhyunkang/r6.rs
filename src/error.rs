@@ -25,6 +25,8 @@ pub enum ParserErrorKind {
     InvalidStringLiteral,
     /// Parser met un-parseable token
     InvalidToken(String),
+    /// Token did not end with a delimiter
+    ExpectedDelimiter,
     /// Non-byte datum found in byte vector representation
     ByteVectorElement,
     /// Parser met CharsError while reading the underlying stream

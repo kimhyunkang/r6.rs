@@ -253,8 +253,14 @@ impl <R: Read + Sized> Lexer<R> {
         } else if c == '#' {
             let c0 = try!(self.consume());
             match c0 {
-                't' | 'T' => Ok(Token::True),
-                'f' | 'F' => Ok(Token::False),
+                't' | 'T' => {
+                    try!(self.expect_delimiter());
+                    Ok(Token::True)
+                },
+                'f' | 'F' => {
+                    try!(self.expect_delimiter());
+                    Ok(Token::False)
+                },
                 'b' | 'B' | 'o' | 'O' | 'd' | 'D' | 'x' | 'X' | 'i' | 'I' | 'e' | 'E' => {
                     let s = format!("{}{}", c, c0);
                     self.lex_numeric(s).map(Token::Numeric)
@@ -308,8 +314,9 @@ impl <R: Read + Sized> Lexer<R> {
     fn lex_ident(&mut self, initial: String) -> Result<String, ParserError> {
         let mut s = initial;
         let sub = try!(self.read_while(is_subsequent));
+        try!(self.expect_delimiter());
         s.push_str(sub.as_ref());
-        return Ok(s);
+        Ok(s)
     }
 
     fn lex_char(&mut self) -> Result<String, ParserError> {
@@ -317,6 +324,7 @@ impl <R: Read + Sized> Lexer<R> {
         let mut s = String::new();
         s.push(c);
         let sub = try!(self.read_while(|c| c.is_alphanumeric()));
+        try!(self.expect_delimiter());
         s.push_str(sub.as_ref());
         return Ok(s);
     }
@@ -445,6 +453,14 @@ impl <R: Read + Sized> Lexer<R> {
                     return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
                 None => return Ok(s)
             }
+        }
+    }
+
+    fn expect_delimiter(&mut self) -> Result<(), ParserError> {
+        if try!(self.is_end_of_token()) {
+            Ok(())
+        } else {
+            Err(self.make_error(ParserErrorKind::ExpectedDelimiter))
         }
     }
 
