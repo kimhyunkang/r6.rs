@@ -242,6 +242,11 @@ impl <R: Read + Sized> Lexer<R> {
                 },
                 '\\' => self.lex_char().map(Token::Character),
                 '(' => Ok(Token::OpenVectorParen),
+                '|' => {
+                    try!(self.consume_nested_comment());
+                    try!(self.consume_whitespace());
+                    self.lex()
+                },
                 _ => Err(self.make_error(ParserErrorKind::InvalidToken(format!("#{}", c))))
             }
         } else if c == '"' {
@@ -440,6 +445,20 @@ impl <R: Read + Sized> Lexer<R> {
                 }
             } else {
                 return Ok(());
+            }
+        }
+    }
+
+    fn consume_nested_comment(&mut self) -> Result<(), ParserError> {
+        loop {
+            match try!(self.consume()) {
+                '|' => if '#' == try!(self.consume()) {
+                    return Ok(());
+                },
+                '#' => if '|' == try!(self.consume()) {
+                    try!(self.consume_nested_comment());
+                },
+                _ => ()
             }
         }
     }
