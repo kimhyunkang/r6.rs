@@ -52,6 +52,11 @@ pub fn libbase() -> HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>> {
         Inst::Return
     ];
 
+    let eq: Vec<Inst> = vec![
+        Inst::Eqv,
+        Inst::Return
+    ];
+
     let equal: Vec<Inst> = vec![
         Inst::Equal,
         Inst::Return
@@ -59,6 +64,7 @@ pub fn libbase() -> HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>> {
 
     lib.insert(Cow::Borrowed("apply"), static_closure(apply));
     lib.insert(Cow::Borrowed("eqv?"), static_closure(eqv));
+    lib.insert(Cow::Borrowed("eq?"), static_closure(eq));
     lib.insert(Cow::Borrowed("equal?"), static_closure(equal));
 
     return lib;

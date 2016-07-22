@@ -380,6 +380,15 @@ fn equal_test() {
 }
 
 #[test]
+fn eq_test() {
+    assert_evaluates_to!("(eq? 'a 'a)", "#t");
+    assert_evaluates_to!("(eq? (list 'a) (list 'a))", "#f");
+    assert_evaluates_to!("(eq? '() '())", "#t");
+    assert_evaluates_to!("(eq? car car)", "#t");
+    assert_evaluates_to!("(let ((x '(a))) (eq? x x))", "#t");
+}
+
+#[test]
 fn first_class_function() {
     assert_evaluates_to!("(let ((h (lambda (op x y) (op x y)))) (h + 23 42))", "65");
     assert_evaluates_to!("(let ((h (lambda (op x y) (op x y)))) (h * 23 42))", "966");
