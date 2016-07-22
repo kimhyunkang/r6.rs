@@ -88,8 +88,8 @@ fn wrap(line: usize, column: usize, t: Token) -> TokenWrapper {
 
 fn is_whitespace(c: char) -> bool {
     match c {
-        '\t' | '\n' | '\x0b' | '\x0c' | '\r' | ' ' => true,
-        _ => false
+        '\t' | '\n' | '\x0b' | '\x0c' | '\r' | ' ' | '\u{0085}' => true,
+        _ => c.is_whitespace()
     }
 }
 
