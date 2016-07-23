@@ -252,6 +252,8 @@ pub enum Inst {
     Type(DatumType),
     /// call the function in (stack_top - n)
     Call(usize),
+    /// call the function in (stack_top - n)
+    TailCall,
     /// call the function at the bottom of the current frame
     CallSplicing,
     /// pop the call stack frame, and return to the call site
@@ -428,7 +430,7 @@ impl Runtime {
         self.frame = StackFrame {
             closure: Closure { code: Rc::new(code), static_link: None, source: source.map(Rc::new) },
             pc: 0,
-            stack_bottom: 0,
+            stack_bottom: 1,
             arg_size: 0,
             self_link: Rc::new(RefCell::new(ScopePtr::Stack(0)))
         }
@@ -646,6 +648,63 @@ impl Runtime {
         Ok(())
     }
 
+    fn tail_call(&mut self) -> Result<(), RuntimeError> {
+        let n = self.frame.arg_size;
+        let cur_bottom = self.frame.stack_bottom;
+        let new_bottom = cur_bottom + n;
+        let mut args = if new_bottom+1 == self.arg_stack.len() {
+            Vec::new()
+        } else {
+            self.arg_stack.split_off(new_bottom+1)
+        };
+        let datum = try!(self.pop_stack());
+
+        match datum {
+            Datum::Ext(RuntimeData::PrimFunc(ref fptr)) => {
+                let res = try!(fptr.function.call(args));
+                self.push_stack(res);
+                self.frame.pc += 1;
+            },
+            Datum::Ext(RuntimeData::Closure(ref closure)) => {
+                let heap = HeapClosure {
+                    args: self.arg_stack[cur_bottom .. new_bottom].to_vec(),
+                    static_link: self.frame.closure.static_link.clone()
+                };
+                *self.frame.self_link.borrow_mut() = ScopePtr::Heap(heap);
+
+                self.arg_stack.split_off(cur_bottom-1);
+                self.frame.closure = closure.clone();
+                self.frame.pc = 0;
+                self.frame.arg_size = args.len();
+                let idx = self.call_stack.len();
+                self.frame.self_link = Rc::new(RefCell::new(ScopePtr::Stack(idx+1)));
+                self.arg_stack.push(datum.clone());
+                self.arg_stack.append(&mut args);
+            },
+            _ => {
+                return Err(runtime_panic(format!("{:?} is not callable", datum)))
+            }
+        }
+
+        Ok(())
+    }
+
+    fn return_value(&mut self) -> Result<bool, RuntimeError> {
+        let n = self.frame.arg_size;
+        let top = self.arg_stack.len();
+        let res = self.pop_call_stack();
+        let retval = try!(self.pop_stack());
+        if top < n+2 {
+            return Err(runtime_panic("stack too low".to_string()));
+        }
+        self.arg_stack.truncate(top - n - 2);
+        self.push_stack(retval);
+        if res {
+            self.frame.pc += 1;
+        }
+        return Ok(res)
+    }
+
     fn step(&mut self) -> Result<bool, RuntimeError> {
         let inst = self.fetch();
 
@@ -674,9 +733,8 @@ impl Runtime {
                 self.arg_stack.push(Datum::Bool(val));
                 self.frame.pc += 1;
             },
-            Inst::Call(n) => {
-                try!(self.call(n));
-            }
+            Inst::Call(n) => try!(self.call(n)),
+            Inst::TailCall => try!(self.tail_call()),
             Inst::CallSplicing => {
                 let n_args = self.arg_stack.len() - self.frame.stack_bottom;
                 if n_args == 0 {
@@ -803,21 +861,7 @@ impl Runtime {
                     return Err(runtime_panic("top of the stack is not a pair".to_string()));
                 }
             },
-            Inst::Return => {
-                let n = self.frame.arg_size;
-                let top = self.arg_stack.len();
-                let res = self.pop_call_stack();
-                let retval = try!(self.pop_stack());
-                if top < n+2 {
-                    return Err(runtime_panic("stack too low".to_string()));
-                }
-                self.arg_stack.truncate(top - n - 2);
-                self.push_stack(retval);
-                if res {
-                    self.frame.pc += 1;
-                }
-                return Ok(res)
-            }
+            Inst::Return => return self.return_value()
         }
 
         Ok(true)

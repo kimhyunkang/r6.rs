@@ -144,12 +144,16 @@ impl Compiler {
             static_scope: Vec::new(),
             args: Vec::new()
         };
-        try!(self.compile_expr(&env, &mut ctx, datum));
+        try!(self.compile_expr(&env, &mut ctx, true, datum));
         ctx.code.push(Inst::Return);
         return Ok(ctx.code);
     }
 
-    fn compile_app<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &Datum<T>)
+    fn compile_app<T>(&self,
+                      env: &LexicalContext,
+                      ctx: &mut CodeGenContext,
+                      tail_ctx: bool,
+                      datum: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -167,7 +171,7 @@ impl Compiler {
                             Syntax::Lambda =>
                                 self.compile_lambda(env, ctx, &c_args),
                             Syntax::If =>
-                                self.compile_if(env, ctx, &c_args),
+                                self.compile_if(env, ctx, tail_ctx, &c_args),
                             Syntax::Let =>
                                 self.compile_let(env, ctx, &c_args),
                             Syntax::LetStar =>
@@ -187,34 +191,38 @@ impl Compiler {
                                     kind: CompileErrorKind::UnquoteContext
                                 }),
                             Syntax::Cond =>
-                                self.compile_cond(env, ctx, &c_args),
+                                self.compile_cond(env, ctx, tail_ctx, &c_args),
                             Syntax::Case =>
-                                self.compile_case(env, ctx, &c_args),
+                                self.compile_case(env, ctx, tail_ctx, &c_args),
                             Syntax::And =>
-                                self.compile_and(env, ctx, &c_args),
+                                self.compile_and(env, ctx, tail_ctx, &c_args),
                             Syntax::Or =>
-                                self.compile_or(env, ctx, &c_args)
+                                self.compile_or(env, ctx, tail_ctx, &c_args)
                         };
                     },
                     _ => return Err(e)
                 }
             }
         } else {
-            try!(self.compile_expr(env, ctx, &callee));
+            try!(self.compile_expr(env, ctx, false, &callee));
         }
 
         let mut arg_count = 0;
         for d in c_args.iter() {
             match d {
                 Ok(d) => {
-                    try!(self.compile_expr(env, ctx, &d));
+                    try!(self.compile_expr(env, ctx, false, &d));
                     arg_count += 1;
                 },
                 Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedEval })
             }
         }
 
-        ctx.code.push(Inst::Call(arg_count));
+        if tail_ctx {
+            ctx.code.push(Inst::TailCall);
+        } else {
+            ctx.code.push(Inst::Call(arg_count));
+        }
         Ok(())
     }
 
@@ -253,7 +261,7 @@ impl Compiler {
                     )));
                 },
                 Def::Expr(expr) => {
-                    try!(self.compile_expr(&new_env, ctx, &expr));
+                    try!(self.compile_expr(&new_env, ctx, false, &expr));
                 },
                 Def::Void => {
                     ctx.code.push(Inst::PushArg(MemRef::Undefined));
@@ -314,14 +322,18 @@ impl Compiler {
     {
         let res: Result<Vec<Datum<T>>, ()> = body.iter().collect();
         match res {
-            Ok(exprs) => self.compile_exprs(env, ctx, exprs.as_ref()),
+            Ok(exprs) => self.compile_exprs(env, ctx, false, exprs.as_ref()),
             Err(_) => Err(CompileError {
                 kind: CompileErrorKind::DottedBody
             })
         }
     }
 
-    fn compile_exprs<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, body: &[Datum<T>])
+    fn compile_exprs<T>(&self,
+                        env: &LexicalContext,
+                        ctx: &mut CodeGenContext,
+                        tail_ctx: bool,
+                        body: &[Datum<T>])
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -362,7 +374,7 @@ impl Compiler {
                     ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
                 },
                 &Def::Expr(ref expr) => {
-                    try!(self.compile_expr(&mod_env, ctx, expr));
+                    try!(self.compile_expr(&mod_env, ctx, false, expr));
                     ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
                 },
                 &Def::Void => ()
@@ -377,22 +389,23 @@ impl Compiler {
             });
         }
 
-        let mut first = true;
-
-        for expr in body[def_vars.len() ..].iter() {
-            if first {
-                first = false;
-            } else {
+        for idx in def_vars.len() .. body.len() {
+            if idx != def_vars.len() {
                 ctx.code.push(Inst::DropArg);
             }
 
-            try!(self.compile_expr(&mod_env, ctx, &expr));
+            let tail_expr = tail_ctx && idx == body.len() - 1;
+            try!(self.compile_expr(&mod_env, ctx, tail_expr, &body[idx]));
         }
 
         Ok(())
     }
 
-    fn compile_if<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, tail: &Datum<T>)
+    fn compile_if<T>(&self,
+                     env: &LexicalContext,
+                     ctx: &mut CodeGenContext,
+                     tail_ctx: bool,
+                     tail: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -405,14 +418,14 @@ impl Compiler {
             let cond = &exprs[0];
             let then_expr = &exprs[1];
 
-            try!(self.compile_expr(env, ctx, cond));
+            try!(self.compile_expr(env, ctx, false, cond));
 
             let cond_jump_pc = ctx.code.len();
             // placeholder to replace with JumpIfFalse
             ctx.code.push(Inst::Nop);
             ctx.code.push(Inst::DropArg);
 
-            try!(self.compile_expr(env, ctx, then_expr));
+            try!(self.compile_expr(env, ctx, tail_ctx, then_expr));
 
             let jump_pc = ctx.code.len();
             // push placeholder to replace with Jump
@@ -424,7 +437,7 @@ impl Compiler {
             if exprs.len() == 3 {
                 let else_expr = &exprs[2];
 
-                try!(self.compile_expr(env, ctx, else_expr));
+                try!(self.compile_expr(env, ctx, tail_ctx, else_expr));
             } else {
                 ctx.code.push(Inst::PushArg(MemRef::Undefined));
             }
@@ -477,7 +490,7 @@ impl Compiler {
     {
         let (syms, exprs, body) = try!(self.get_form(tail));
         for expr in exprs.iter() {
-            try!(self.compile_expr(env, ctx, expr));
+            try!(self.compile_expr(env, ctx, false, expr));
         }
         ctx.code.push(Inst::PushFrame(syms.len()));
 
@@ -502,7 +515,7 @@ impl Compiler {
 
         for (i, expr) in exprs.iter().enumerate() {
             new_env.args = syms[0..i].to_vec();
-            try!(self.compile_expr(&new_env, ctx, expr));
+            try!(self.compile_expr(&new_env, ctx, false, expr));
         }
 
         new_env.args = syms;
@@ -528,7 +541,7 @@ impl Compiler {
         let new_env = env.update_arg(syms);
 
         for (i, expr) in exprs.iter().enumerate() {
-            try!(self.compile_expr(&new_env, ctx, expr));
+            try!(self.compile_expr(&new_env, ctx, false, expr));
             ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
 
@@ -613,7 +626,7 @@ impl Compiler {
 
         let new_env = env.update_arg(new_args);
 
-        try!(self.compile_exprs(&new_env, &mut ctx, body));
+        try!(self.compile_exprs(&new_env, &mut ctx, true, body));
 
         ctx.code.push(Inst::Return);
 
@@ -677,7 +690,7 @@ impl Compiler {
             Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
         };
         if let &[Datum::Sym(ref sym), ref expr] = assignment.as_slice() {
-            try!(self.compile_expr(env, ctx, expr));
+            try!(self.compile_expr(env, ctx, false, expr));
             let ptr = try!(self.compile_ref(env, ctx, sym));
             ctx.code.push(Inst::PopArg(ptr));
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
@@ -793,7 +806,7 @@ impl Compiler {
             },
             Some((Syntax::Unquote, arg)) => {
                 if qq_level == 0 {
-                    try!(self.compile_expr(env, ctx, &arg));
+                    try!(self.compile_expr(env, ctx, false, &arg));
                 } else {
                     ctx.code.push(
                         Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST)))
@@ -813,7 +826,7 @@ impl Compiler {
                                 ctx.code.push(Inst::PushArg(
                                     MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))
                                 ));
-                                try!(self.compile_expr(env, ctx, &arg));
+                                try!(self.compile_expr(env, ctx, false, &arg));
                             } else {
                                 ctx.code.push(Inst::PushArg(
                                     MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))
@@ -888,7 +901,11 @@ impl Compiler {
         Ok(else_exprs)
     }
 
-    fn compile_cond<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
+    fn compile_cond<T>(&self,
+                       env: &LexicalContext,
+                       ctx: &mut CodeGenContext,
+                       tail_ctx: bool,
+                       preds: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -910,7 +927,7 @@ impl Compiler {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
-            try!(self.compile_expr(env, ctx, &terms[0]));
+            try!(self.compile_expr(env, ctx, false, &terms[0]));
 
             // placeholder for JumpIfFalse
             let jump_inst = ctx.code.len();
@@ -921,12 +938,16 @@ impl Compiler {
                     return Err(CompileError { kind: CompileErrorKind::BadSyntax });
                 }
 
-                try!(self.compile_expr(env, ctx, &terms[2]));
+                try!(self.compile_expr(env, ctx, false, &terms[2]));
                 ctx.code.push(Inst::SwapArg);
-                ctx.code.push(Inst::Call(1));
+                if tail_ctx {
+                    ctx.code.push(Inst::TailCall);
+                } else {
+                    ctx.code.push(Inst::Call(1));
+                }
             } else {
                 ctx.code.push(Inst::DropArg);
-                try!(self.compile_exprs(env, ctx, &terms[1..]));
+                try!(self.compile_exprs(env, ctx, tail_ctx, &terms[1..]));
             }
 
             // placeholder for Jump: this jumps to the end of cond expr
@@ -941,7 +962,7 @@ impl Compiler {
         }
 
         if let Some(exprs) = else_exprs {
-            try!(self.compile_exprs(env, ctx, &exprs));
+            try!(self.compile_exprs(env, ctx, tail_ctx, &exprs));
         }
 
         let pos = ctx.code.len();
@@ -952,7 +973,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_case<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
+    fn compile_case<T>(&self,
+                       env: &LexicalContext,
+                       ctx: &mut CodeGenContext,
+                       tail_ctx: bool,
+                       preds: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -968,7 +993,7 @@ impl Compiler {
 
         let expr = clauses.remove(0);
 
-        try!(self.compile_expr(env, ctx, &expr));
+        try!(self.compile_expr(env, ctx, false, &expr));
 
         let else_exprs = try!(self.get_else_clause(&mut clauses));
 
@@ -1016,7 +1041,7 @@ impl Compiler {
             ctx.code.push(Inst::DropArg);
             ctx.code.push(Inst::DropArg);
 
-            try!(self.compile_exprs(env, ctx, &terms[1..]));
+            try!(self.compile_exprs(env, ctx, tail_ctx, &terms[1..]));
 
             // placeholder for Jump: to the end of case expression
             placeholders.push(ctx.code.len());
@@ -1028,7 +1053,7 @@ impl Compiler {
         }
 
         if let Some(exprs) = else_exprs {
-            try!(self.compile_exprs(env, ctx, &exprs));
+            try!(self.compile_exprs(env, ctx, tail_ctx, &exprs));
         }
 
         let pos = ctx.code.len();
@@ -1039,7 +1064,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_and<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
+    fn compile_and<T>(&self,
+                      env: &LexicalContext,
+                      ctx: &mut CodeGenContext,
+                      tail_ctx: bool,
+                      preds: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -1053,7 +1082,7 @@ impl Compiler {
             return Ok(());
         }
 
-        try!(self.compile_expr(env, ctx, &exprs[0]));
+        try!(self.compile_expr(env, ctx, false, &exprs[0]));
 
         for expr in exprs[1..].iter() {
             placeholders.push(ctx.code.len());
@@ -1061,7 +1090,7 @@ impl Compiler {
             ctx.code.push(Inst::Nop);
             // Drop the value if the test fails
             ctx.code.push(Inst::DropArg);
-            try!(self.compile_expr(env, ctx, &expr));
+            try!(self.compile_expr(env, ctx, tail_ctx, &expr));
         }
 
         let jump_pc = ctx.code.len();
@@ -1072,7 +1101,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_or<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, preds: &Datum<T>)
+    fn compile_or<T>(&self,
+                     env: &LexicalContext,
+                     ctx: &mut CodeGenContext,
+                     tail_ctx: bool,
+                     preds: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
@@ -1086,7 +1119,7 @@ impl Compiler {
             return Ok(());
         }
 
-        try!(self.compile_expr(env, ctx, &exprs[0]));
+        try!(self.compile_expr(env, ctx, false, &exprs[0]));
 
         for expr in exprs[1..].iter() {
             placeholders.push(ctx.code.len());
@@ -1094,7 +1127,7 @@ impl Compiler {
             ctx.code.push(Inst::Nop);
             // Drop the value if the test fails
             ctx.code.push(Inst::DropArg);
-            try!(self.compile_expr(env, ctx, &expr));
+            try!(self.compile_expr(env, ctx, tail_ctx, &expr));
         }
 
         let jump_pc = ctx.code.len();
@@ -1105,13 +1138,17 @@ impl Compiler {
         Ok(())
     }
 
-    fn compile_expr<T>(&self, env: &LexicalContext, ctx: &mut CodeGenContext, datum: &Datum<T>)
+    fn compile_expr<T>(&self,
+                       env: &LexicalContext,
+                       ctx: &mut CodeGenContext,
+                       tail_ctx: bool,
+                       datum: &Datum<T>)
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         match datum {
             &Datum::Cons(_) =>
-                self.compile_app(env, ctx, datum),
+                self.compile_app(env, ctx, tail_ctx, datum),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
                 let ptr = try!(self.compile_ref(env, ctx, sym));
@@ -1167,7 +1204,7 @@ mod test {
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1 ,0)))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2 ,0)))),
-            Inst::Call(2),
+            Inst::TailCall,
             Inst::Return
         ]);
         let code = compiler.compile::<()>(&global, &list![sym!("+"), num!(1), num!(2)]);
@@ -1186,7 +1223,7 @@ mod test {
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(2),
-            Inst::Call(2),
+            Inst::TailCall,
             Inst::Return
         ]);
         let code = compiler.compile::<()>(&global,
@@ -1209,13 +1246,13 @@ mod test {
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
-            Inst::Call(2),
+            Inst::TailCall,
             Inst::Return
         ];
         let expected = Ok(vec![
             Inst::PushArg(MemRef::Closure(Rc::new(f), 0, Some(lambda.clone()))),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(1, 0)))),
-            Inst::Call(1),
+            Inst::TailCall,
             Inst::Return
         ]);
 
@@ -1235,7 +1272,7 @@ mod test {
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
-            Inst::Call(2),
+            Inst::TailCall,
             Inst::Return
         ];
         let g = vec![
@@ -1248,7 +1285,7 @@ mod test {
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
             Inst::Call(1),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(3, 0)))),
-            Inst::Call(1),
+            Inst::TailCall,
             Inst::Return
         ]);
 
