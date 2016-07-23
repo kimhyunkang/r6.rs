@@ -246,8 +246,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         if let Some((var, def)) = try!(self.parse_define(env, &expr)) {
-            ctx.code.push(Inst::PushFrame(0));
-            ctx.code.push(Inst::SetArgSize(1));
+            ctx.code.push(Inst::PushFrame(1));
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
             let new_env = env.update_arg(vec![var.clone()]);
 
@@ -380,8 +379,6 @@ impl Compiler {
                 &Def::Void => ()
             }
         }
-
-        ctx.code.push(Inst::SetArgSize(mod_env.args.len()));
 
         if def_vars.len() == body.len() {
             return Err(CompileError {
@@ -1242,7 +1239,6 @@ mod test {
         let lambda: Datum<()> = list![sym!("lambda"), list![sym!("x")], list![sym!("+"), sym!("x"), num!(2)]];
 
         let f = vec![
-            Inst::SetArgSize(1),
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::Arg(0)),
             Inst::PushArg(MemRef::Const(SimpleDatum::Num(Number::new_int(2, 0)))),
@@ -1268,7 +1264,6 @@ mod test {
         let f_src: Datum<()> = list![sym!("lambda"), list![sym!("y")], list![sym!("+"), sym!("x"), sym!("y")]];
         let g_src: Datum<()> = list![sym!("lambda"), list![sym!("x")], f_src.clone()];
         let f = vec![
-            Inst::SetArgSize(1),
             Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("+", &PRIM_ADD))),
             Inst::PushArg(MemRef::UpValue(0, 0)),
             Inst::PushArg(MemRef::Arg(0)),
@@ -1276,7 +1271,6 @@ mod test {
             Inst::Return
         ];
         let g = vec![
-            Inst::SetArgSize(1),
             Inst::PushArg(MemRef::Closure(Rc::new(f), 1, Some(f_src))),
             Inst::Return
         ];

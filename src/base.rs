@@ -43,7 +43,6 @@ pub fn libbase() -> HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>> {
         Inst::DropArg,
         Inst::DropArg,
         Inst::CallSplicing,
-        Inst::SetArgSize(0),
         Inst::Return
     ];
 
