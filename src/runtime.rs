@@ -237,7 +237,7 @@ pub enum Inst {
     /// pop value from the stack and push to the new global variable
     PopGlobal(Cow<'static, str>),
     /// pop value from the stack and remove it
-    DropArg,
+    DropArg(usize),
     /// swap two top values of the stack
     SwapArg,
     /// roll args [n..] into a list
@@ -799,8 +799,12 @@ impl Runtime {
                 self.global.insert(sym, Rc::new(RefCell::new(val)));
                 self.frame.pc += 1;
             },
-            Inst::DropArg => {
-                try!(self.pop_stack());
+            Inst::DropArg(n) => {
+                if n > self.arg_stack.len() {
+                    return Err(runtime_panic("arg_stack too low".to_string()));
+                }
+                let new_size = self.arg_stack.len() - n;
+                self.arg_stack.truncate(new_size);
                 self.frame.pc += 1;
             },
             Inst::SwapArg => {

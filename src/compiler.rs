@@ -388,7 +388,7 @@ impl Compiler {
 
         for idx in def_vars.len() .. body.len() {
             if idx != def_vars.len() {
-                ctx.code.push(Inst::DropArg);
+                ctx.code.push(Inst::DropArg(1));
             }
 
             let tail_expr = tail_ctx && idx == body.len() - 1;
@@ -420,7 +420,7 @@ impl Compiler {
             let cond_jump_pc = ctx.code.len();
             // placeholder to replace with JumpIfFalse
             ctx.code.push(Inst::Nop);
-            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg(1));
 
             try!(self.compile_expr(env, ctx, tail_ctx, then_expr));
 
@@ -429,7 +429,7 @@ impl Compiler {
             ctx.code.push(Inst::Nop);
 
             ctx.code[cond_jump_pc] = Inst::JumpIfFalse(ctx.code.len());
-            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg(1));
 
             if exprs.len() == 3 {
                 let else_expr = &exprs[2];
@@ -943,7 +943,7 @@ impl Compiler {
                     ctx.code.push(Inst::Call(1));
                 }
             } else {
-                ctx.code.push(Inst::DropArg);
+                ctx.code.push(Inst::DropArg(1));
                 try!(self.compile_exprs(env, ctx, tail_ctx, &terms[1..]));
             }
 
@@ -955,7 +955,7 @@ impl Compiler {
             let jump_pos = ctx.code.len();
             ctx.code[jump_inst] = Inst::JumpIfFalse(jump_pos);
 
-            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg(1));
         }
 
         if let Some(exprs) = else_exprs {
@@ -1020,8 +1020,7 @@ impl Compiler {
                 case_placeholders.push(ctx.code.len());
                 ctx.code.push(Inst::Nop);
 
-                ctx.code.push(Inst::DropArg);
-                ctx.code.push(Inst::DropArg);
+                ctx.code.push(Inst::DropArg(2));
             }
 
             // Case not matches: Jump to next case
@@ -1034,9 +1033,7 @@ impl Compiler {
                 ctx.code[pos] = Inst::JumpIfNotFalse(match_case);
             }
 
-            ctx.code.push(Inst::DropArg);
-            ctx.code.push(Inst::DropArg);
-            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg(3));
 
             try!(self.compile_exprs(env, ctx, tail_ctx, &terms[1..]));
 
@@ -1086,7 +1083,7 @@ impl Compiler {
             // placeholder for JumpIfFalse
             ctx.code.push(Inst::Nop);
             // Drop the value if the test fails
-            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg(1));
             try!(self.compile_expr(env, ctx, tail_ctx, &expr));
         }
 
@@ -1123,7 +1120,7 @@ impl Compiler {
             // placeholder for JumpIfNotFalse
             ctx.code.push(Inst::Nop);
             // Drop the value if the test fails
-            ctx.code.push(Inst::DropArg);
+            ctx.code.push(Inst::DropArg(1));
             try!(self.compile_expr(env, ctx, tail_ctx, &expr));
         }
 

@@ -33,15 +33,14 @@ pub fn libbase() -> HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>> {
         // 0
         Inst::Type(DatumType::Pair),
         Inst::JumpIfFalse(5),
-        Inst::DropArg,
+        Inst::DropArg(1),
         Inst::Uncons,
         Inst::Jump(0),
         // 5
-        Inst::DropArg,
+        Inst::DropArg(1),
         Inst::Type(DatumType::Null),
         Inst::ThrowIfFalse("apply: non-list argument"),
-        Inst::DropArg,
-        Inst::DropArg,
+        Inst::DropArg(2),
         Inst::CallSplicing,
         Inst::Return
     ];
