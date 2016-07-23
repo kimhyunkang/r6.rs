@@ -400,10 +400,6 @@ impl Runtime {
     pub fn new(base: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>, base_syntax: HashMap<Cow<'static, str>, Syntax>) -> Runtime {
         Runtime {
             ret_val: Datum::Nil,
-            // Return instruction removes current closure with the args
-            // However, there isn't a calling closure at the top program because we directly inject
-            // the code here.
-            // That's why we inject a dummy value at the bottom of the arg stack
             arg_stack: Vec::new(),
             call_stack: Vec::new(),
             frame: StackFrame {
@@ -419,14 +415,16 @@ impl Runtime {
     }
 
     pub fn load_main(&mut self, code: Vec<Inst>, source: Option<Datum<()>>) {
-        // Return instruction removes current closure with the args
-        // However, there isn't a calling closure at the top program because we directly inject
-        // the code here.
-        // That's why we inject a dummy value at the bottom of the arg stack
-        self.arg_stack = vec![Datum::Ext(RuntimeData::Undefined)];
+        let closure = Closure {
+            code: Rc::new(code),
+            static_link: None,
+            source: source.map(Rc::new)
+        };
+
+        self.arg_stack = vec![Datum::Ext(RuntimeData::Closure(closure.clone()))];
         self.call_stack = Vec::new();
         self.frame = StackFrame {
-            closure: Closure { code: Rc::new(code), static_link: None, source: source.map(Rc::new) },
+            closure: closure,
             pc: 0,
             stack_bottom: 1,
             arg_size: 0,
