@@ -485,3 +485,44 @@ fn test_selection_sort() {
         "(3 3 4 5 6 9)"
     );
 }
+
+#[test]
+fn test_merge_sort() {
+    assert_evaluates_to!(
+        "(define merge-lists
+            (lambda (l1 l2)
+                (if (null? l1)
+                    l2
+                    (if (null? l2)
+                        l1
+                        (if (< (car l1) (car l2))
+                            (cons (car l1) (merge-lists (cdr l1) l2))
+                            (cons (car l2) (merge-lists (cdr l2) l1)))))))",
+        "(define even-numbers
+            (lambda (l)
+            (if (null? l)
+                '()
+                (if (null? (cdr l))
+                    '()
+                    (cons (car (cdr l)) (even-numbers (cdr (cdr l))))))))",
+        "(define odd-numbers
+            (lambda (l)
+            (if (null? l)
+                '()
+                (if (null? (cdr l))
+                    (list (car l))
+                    (cons (car l) (odd-numbers (cdr (cdr l))))))))",
+        "(define merge-sort
+            (lambda (l)
+            (if (null? l)
+                l
+                (if (null? (cdr l))
+                    l
+                    (merge-lists
+                        (merge-sort (odd-numbers l))
+                        (merge-sort (even-numbers l)))))))",
+        "(merge-sort '(3 4 5 2 3 8 9 70 34 23 12 3 45 34))"
+        =>
+        "(2 3 3 3 4 5 8 9 12 23 34 34 45 70)"
+    );
+}
