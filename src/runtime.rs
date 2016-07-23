@@ -673,7 +673,7 @@ impl Runtime {
                 self.frame.pc = 0;
                 self.frame.arg_size = args.len();
                 let idx = self.call_stack.len();
-                self.frame.self_link = Rc::new(RefCell::new(ScopePtr::Stack(idx+1)));
+                self.frame.self_link = Rc::new(RefCell::new(ScopePtr::Stack(idx)));
                 self.arg_stack.push(datum.clone());
                 self.arg_stack.append(&mut args);
             },
