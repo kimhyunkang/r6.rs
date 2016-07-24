@@ -145,6 +145,15 @@ fn let_star_test() {
 }
 
 #[test]
+fn let_star_value_test() {
+    assert_evaluates_to!("(let ((x 2) (y 3))
+                                (-
+                                    (let* ((x 7) (z (+ x y))) (* z x))
+                                    2)
+                            )" => "68");
+}
+
+#[test]
 fn letrec_test() {
     assert_evaluates_to!("(letrec ((even? (lambda (n) (if (zero? n) #t (odd? (- n 1))))) (odd? (lambda (n) (if (zero? n) #f (even? (- n 1)))))) (even? 8))" => "#t");
 }
@@ -158,6 +167,20 @@ fn letrec_undefined_test() {
         "(letrec ((quicksand quicksand)) quicksand)",
         Datum::Ext(RuntimeData::Undefined)
     );
+}
+
+#[test]
+fn letrec_value_test() {
+    assert_evaluates_to!("
+        (+
+            (letrec ((fact4 (lambda (n)
+                        (if (= n 0)
+                            1
+                            (* n (fact4 (- n 1)))))))
+                (fact4 4))
+            3)"
+        =>
+        "27");
 }
 
 #[test]
