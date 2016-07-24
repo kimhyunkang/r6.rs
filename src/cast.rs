@@ -4,11 +4,11 @@ use std::rc::Rc;
 use num::{BigInt, FromPrimitive};
 use num::rational::Ratio;
 
-use datum::Datum;
+use datum::{Datum, SimpleDatum};
 use error::{RuntimeError, RuntimeErrorKind};
 use number::Number;
 use real::Real;
-use runtime::{DatumType, SimpleDatum, RDatum};
+use runtime::{DatumType, RDatum};
 
 /// Types with implementing DatumCast trait can cast from/to Datum
 pub trait DatumCast: Sized {

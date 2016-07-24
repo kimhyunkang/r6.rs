@@ -246,6 +246,32 @@ pub fn concat<T: Clone>(x: Datum<T>, y: Datum<T>) -> Result<Datum<T>, ()> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum SimpleDatum {
+    Sym(Cow<'static, str>),
+    Bool(bool),
+    Char(char),
+    String(Rc<String>),
+    Bytes(Rc<Vec<u8>>),
+    Num(Number),
+    Nil
+}
+
+impl SimpleDatum {
+    pub fn from_datum<T>(datum: Datum<T>) -> Option<SimpleDatum> {
+        match datum {
+            Datum::Sym(s) => Some(SimpleDatum::Sym(s)),
+            Datum::Bool(b) => Some(SimpleDatum::Bool(b)),
+            Datum::Char(c) => Some(SimpleDatum::Char(c)),
+            Datum::String(s) => Some(SimpleDatum::String(s)),
+            Datum::Bytes(v) => Some(SimpleDatum::Bytes(v)),
+            Datum::Num(n) => Some(SimpleDatum::Num(n)),
+            Datum::Nil => Some(SimpleDatum::Nil),
+            _ => None
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{Datum, cons};

@@ -9,10 +9,9 @@ use std::ops::{Deref, DerefMut};
 
 use cast::DatumCast;
 use compiler::{Compiler, Syntax};
-use datum::TryConv;
+use datum::{SimpleDatum, TryConv};
 use eqv::DatumEqv;
 use error::{CompileError, CompileErrorKind, RuntimeError, RuntimeErrorKind};
-use number::Number;
 use datum::Datum;
 use primitive::PrimFunc;
 
@@ -197,32 +196,6 @@ pub enum MemRef {
     Undefined,
     PrimFunc(PrimFuncPtr),
     Closure(Rc<Vec<Inst>>, usize, Option<Datum<()>>)
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum SimpleDatum {
-    Sym(Cow<'static, str>),
-    Bool(bool),
-    Char(char),
-    String(Rc<String>),
-    Bytes(Rc<Vec<u8>>),
-    Num(Number),
-    Nil
-}
-
-impl SimpleDatum {
-    pub fn from_datum<T>(datum: Datum<T>) -> Option<SimpleDatum> {
-        match datum {
-            Datum::Sym(s) => Some(SimpleDatum::Sym(s)),
-            Datum::Bool(b) => Some(SimpleDatum::Bool(b)),
-            Datum::Char(c) => Some(SimpleDatum::Char(c)),
-            Datum::String(s) => Some(SimpleDatum::String(s)),
-            Datum::Bytes(v) => Some(SimpleDatum::Bytes(v)),
-            Datum::Num(n) => Some(SimpleDatum::Num(n)),
-            Datum::Nil => Some(SimpleDatum::Nil),
-            _ => None
-        }
-    }
 }
 
 /// The instruction of the bytecode
@@ -893,9 +866,9 @@ impl Runtime {
 mod test {
     use std::collections::HashMap;
     use std::rc::Rc;
-    use super::{Inst, MemRef, PrimFuncPtr, Runtime, SimpleDatum};
+    use super::{Inst, MemRef, PrimFuncPtr, Runtime};
     use base::libbase;
-    use datum::Datum;
+    use datum::{Datum, SimpleDatum};
     use primitive::PRIM_ADD;
     use number::Number;
 

@@ -9,9 +9,9 @@ use std::rc::Rc;
 use num::FromPrimitive;
 
 use error::{CompileError, CompileErrorKind};
-use datum::{cons, Datum, TryConv};
+use datum::{cons, Datum, TryConv, SimpleDatum};
 use primitive::{PRIM_APPEND, PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
-use runtime::{SimpleDatum, Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
+use runtime::{Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
 
 /// Syntax variables
 enum_from_primitive! {
@@ -1186,8 +1186,8 @@ impl Debug for Syntax {
 mod test {
     use std::borrow::Cow;
     use std::rc::Rc;
-    use datum::Datum;
-    use runtime::{Inst, MemRef, PrimFuncPtr, SimpleDatum};
+    use datum::{Datum, SimpleDatum};
+    use runtime::{Inst, MemRef, PrimFuncPtr};
     use base::{base_syntax, libbase};
     use primitive::{PRIM_ADD, PRIM_CONS};
     use number::Number;
