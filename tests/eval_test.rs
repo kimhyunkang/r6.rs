@@ -130,6 +130,11 @@ fn nested_let_test() {
 }
 
 #[test]
+fn let_result_test() {
+    assert_evaluates_to!("(+ (let ((x 23)) (let ((y 42)) (+ x y))) 13)" => "78");
+}
+
+#[test]
 fn override_syntax_test() {
     assert_evaluates_to!("(let ((if (lambda (x) x))) (if 3))" => "3");
 }

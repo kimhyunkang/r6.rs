@@ -760,7 +760,15 @@ impl Runtime {
             },
             Inst::PopFrame => {
                 let pc = self.frame.pc;
+                let n = self.frame.arg_size;
+                let top = self.arg_stack.len();
                 self.pop_call_stack();
+                let retval = try!(self.pop_stack());
+                if top < n+1 {
+                    return Err(runtime_panic("stack too low".to_string()));
+                }
+                self.arg_stack.truncate(top - n - 1);
+                self.push_stack(retval);
                 self.frame.pc = pc+1;
             },
             Inst::Jump(pc) => {
