@@ -66,3 +66,5 @@ pub mod real;
 pub mod number;
 /// Cast Datum into rust types
 pub mod cast;
+/// Macro implementations
+pub mod syntax;

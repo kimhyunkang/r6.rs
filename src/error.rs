@@ -105,13 +105,39 @@ pub enum CompileErrorKind {
     /// Trying to refer an unbound variable
     UnboundVariable(Cow<'static, str>),
     /// Trying to compile invalid datum
-    InvalidDatum(String)
+    InvalidDatum(String),
+    /// Macro compilation error
+    MacroError(MacroError),
 }
 
 /// Compiler error
 #[derive(Debug, PartialEq, Clone)]
 pub struct CompileError {
     pub kind: CompileErrorKind
+}
+
+/// Possible macro errors
+#[derive(Debug, PartialEq, Clone)]
+pub enum MacroErrorKind {
+    /// Syntax not implemented
+    NotImplemented,
+    /// Pattern is not a list
+    EmptyPattern,
+    /// Pattern is not a list
+    InvalidHead,
+    /// Multiple ellipses in a list
+    MultipleEllipses,
+    /// Datum not allowed in macro
+    InvalidDatum,
+    /// Duplicate variables in pattern
+    DuplicateVars
+}
+
+/// Macro error
+#[derive(Debug, PartialEq, Clone)]
+pub struct MacroError {
+    pub kind: MacroErrorKind,
+    pub desc: String
 }
 
 /// Errors raised in runtime

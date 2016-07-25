@@ -287,6 +287,53 @@ impl SimpleDatum {
             _ => None
         }
     }
+
+    pub fn equals<T>(&self, datum: &Datum<T>) -> bool {
+        match self {
+            &SimpleDatum::Sym(ref lhs) =>
+                if let &Datum::Sym(ref rhs) = datum {
+                    lhs == rhs
+                } else {
+                    false
+                },
+            &SimpleDatum::Bool(lhs) =>
+                if let &Datum::Bool(rhs) = datum {
+                    lhs == rhs
+                } else {
+                    false
+                },
+            &SimpleDatum::Char(lhs) =>
+                if let &Datum::Char(rhs) = datum {
+                    lhs == rhs
+                } else {
+                    false
+                },
+            &SimpleDatum::String(ref lhs) =>
+                if let &Datum::String(ref rhs) = datum {
+                    lhs == rhs
+                } else {
+                    false
+                },
+            &SimpleDatum::Bytes(ref lhs) =>
+                if let &Datum::Bytes(ref rhs) = datum {
+                    lhs == rhs
+                } else {
+                    false
+                },
+            &SimpleDatum::Num(ref lhs) =>
+                if let &Datum::Num(ref rhs) = datum {
+                    lhs == rhs
+                } else {
+                    false
+                },
+            &SimpleDatum::Nil =>
+                if let &Datum::Nil = datum {
+                    true
+                } else {
+                    false
+                },
+        }
+    }
 }
 
 #[cfg(test)]
