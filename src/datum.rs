@@ -160,6 +160,23 @@ impl<T: Clone> Datum<T> {
     pub fn iter(&self) -> DatumIter<T> {
         DatumIter { ptr: self.clone() }
     }
+
+    pub fn improper_list(&self) -> (Vec<Datum<T>>, Option<Datum<T>>) {
+        let mut list = Vec::new();
+        let mut iter = self.clone();
+
+        loop {
+            let next = match iter {
+                Datum::Cons(ref pair) => {
+                    list.push(pair.0.clone());
+                    pair.1.clone()
+                },
+                Datum::Nil => return (list, None),
+                _ => return (list, Some(iter))
+            };
+            iter = next;
+        }
+    }
 }
 
 pub trait TryConv<T, E> {
@@ -328,5 +345,15 @@ mod test {
         let list: Datum<()> = list!(num!(1), num!(2));
 
         assert_eq!(Ok(vec![Datum::Num(n1), Datum::Num(n2)]), list.iter().collect());
+    }
+
+    #[test]
+    fn test_improper_list() {
+        let data: Datum<()> = Datum::Cons(Rc::new((
+            sym!("a"),
+            Datum::Cons(Rc::new((sym!("b"), sym!("c"))))
+        )));
+
+        assert_eq!((vec![sym!("a"), sym!("b")], Some(sym!("c"))), data.improper_list());
     }
 }
