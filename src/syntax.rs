@@ -5,9 +5,19 @@ use std::fmt::Debug;
 use datum::{Datum, SimpleDatum};
 use error::{MacroError, MacroErrorKind};
 
+type Vars = HashSet<Cow<'static, str>>;
+
+macro_rules! hashset {
+    ($($e:expr),*) => ({
+        let mut s = HashSet::new();
+        $( s.insert($e); )*
+        s
+    })
+}
+
 #[derive(Debug)]
 struct CompiledPattern {
-    vars: HashSet<Cow<'static, str>>,
+    vars: Vars,
     pattern: Pattern
 }
 
@@ -30,11 +40,11 @@ type PatternMatch<T> = Vec<MatchData<T>>;
 #[derive(Debug, PartialEq)]
 enum MatchData<T> {
     Var(Cow<'static, str>, Datum<T>),
-    Repeated(HashSet<Cow<'static, str>>, Vec<PatternMatch<T>>)
+    Repeated(Vars, Vec<PatternMatch<T>>)
 }
 
 impl CompiledPattern {
-    fn compile<T>(literals: &HashSet<Cow<'static, str>>, datum: &Datum<T>)
+    fn compile<T>(literals: &Vars, datum: &Datum<T>)
             -> Result<CompiledPattern, MacroError>
         where T: Clone + PartialEq + Debug
     {
@@ -140,7 +150,7 @@ impl CompiledPattern {
     }
 }
 
-fn union_vars(lhs: &mut HashSet<Cow<'static, str>>, rhs: HashSet<Cow<'static, str>>)
+fn union_vars(lhs: &mut Vars, rhs: Vars)
         -> Result<(), MacroError>
 {
     for var in rhs.into_iter() {
@@ -156,11 +166,11 @@ fn union_vars(lhs: &mut HashSet<Cow<'static, str>>, rhs: HashSet<Cow<'static, st
 }
 
 impl Pattern {
-    fn compile_subpatterns<T>(literals: &HashSet<Cow<'static, str>>, data: &[Datum<T>])
-            -> Result<(HashSet<Cow<'static, str>>, Vec<SubPattern>), MacroError>
+    fn compile_subpatterns<T>(literals: &Vars, data: &[Datum<T>])
+            -> Result<(Vars, Vec<SubPattern>), MacroError>
         where T: Clone + PartialEq + Debug
     {
-        let subpats: Result<Vec<(HashSet<Cow<'static, str>>, SubPattern)>, MacroError> =
+        let subpats: Result<Vec<(Vars, SubPattern)>, MacroError> =
                 data.iter().map(|sp| SubPattern::compile(literals, sp)).collect();
         let mut var_set = HashSet::new();
         let mut pattern = Vec::new();
@@ -174,8 +184,8 @@ impl Pattern {
 }
 
 impl SubPattern {
-    fn compile<T>(literals: &HashSet<Cow<'static, str>>, datum: &Datum<T>)
-            -> Result<(HashSet<Cow<'static, str>>, SubPattern), MacroError>
+    fn compile<T>(literals: &Vars, datum: &Datum<T>)
+            -> Result<(Vars, SubPattern), MacroError>
         where T: Clone + PartialEq + Debug
     {
         match datum {
@@ -188,9 +198,7 @@ impl SubPattern {
                 } else if literals.contains(sym) {
                     Ok((HashSet::new(), SubPattern::Const(SimpleDatum::Sym(sym.clone()))))
                 } else {
-                    let mut set = HashSet::new();
-                    set.insert(sym.clone());
-                    Ok((set, SubPattern::Var(sym.clone())))
+                    Ok((hashset!{sym.clone()}, SubPattern::Var(sym.clone())))
                 },
             _ =>
                 if let Some(c) = SimpleDatum::from_datum(datum.clone()) {
@@ -219,13 +227,9 @@ impl SubPattern {
         }
     }
 
-    fn vars(&self) -> HashSet<Cow<'static, str>> {
+    fn vars(&self) -> Vars {
         match self {
-            &SubPattern::Var(ref sym) => {
-                let mut set = HashSet::new();
-                set.insert(sym.clone());
-                set
-            },
+            &SubPattern::Var(ref sym) => hashset!{ sym.clone() },
             &SubPattern::Pattern(ref pat) => pat.vars.clone(),
             _ => HashSet::new()
         }
@@ -235,40 +239,87 @@ impl SubPattern {
 enum Template {
     Var(Cow<'static, str>),
     Const(SimpleDatum),
-    List(Vec<Template>, Option<Box<Template>>),
-    Vector(Vec<Template>)
+    List(Vec<TemplateElement>, Option<Box<Template>>),
+    Vector(Vec<TemplateElement>)
 }
 
-impl Template {
-    fn compile<T>(vars: &HashSet<Cow<'static, str>>, datum: &Datum<T>)
-            -> Result<Template, MacroError>
+enum TemplateElement {
+    Template(Template),
+    Repeat(Vars, Template, usize)
+}
+
+struct TemplateCompiler<'a> {
+    global_vars: &'a Vars
+}
+
+impl<'a> TemplateCompiler<'a> {
+    fn compile_list<T>(&self, data: &[Datum<T>])
+            -> Result<(Vars, Vec<TemplateElement>), MacroError>
+        where T: Clone
+    {
+        if data.is_empty() {
+            return Ok((HashSet::new(), Vec::new()));
+        }
+
+        let mut res = Vec::new();
+        let (mut last_vars, mut last_elem) = try!(self.compile(&data[0]));
+        let mut vars = last_vars.clone();
+        let mut repeat_count = 0;
+        for elem in data[1 .. ].iter() {
+            if let &Datum::Sym(Cow::Borrowed("...")) = elem {
+                repeat_count += 1;
+            } else {
+                if repeat_count == 0 {
+                    res.push(TemplateElement::Template(last_elem));
+                } else {
+                    res.push(TemplateElement::Repeat(last_vars, last_elem, repeat_count));
+                }
+
+                let (cur_vars, cur_elem) = try!(self.compile(elem));
+                for v in cur_vars.iter() {
+                    vars.insert(v.clone());
+                }
+                last_vars = cur_vars;
+                last_elem = cur_elem;
+                repeat_count = 0;
+            }
+        }
+
+        Ok((vars, res))
+    }
+
+    fn compile<T>(&self, datum: &Datum<T>)
+            -> Result<(Vars, Template), MacroError>
         where T: Clone
     {
         match datum {
             &Datum::Sym(ref sym) =>
-                if vars.contains(sym) {
-                    Ok(Template::Var(sym.clone()))
+                if self.global_vars.contains(sym) {
+                    Ok((hashset!{ sym.clone() }, Template::Var(sym.clone())))
                 } else {
-                    Ok(Template::Const(SimpleDatum::Sym(sym.clone())))
+                    Ok((HashSet::new(), Template::Const(SimpleDatum::Sym(sym.clone()))))
                 },
             &Datum::Cons(_) => {
                 let (list, tail) = datum.improper_list();
-                let res: Result<Vec<Template>, MacroError> =
-                        list.iter().map(|x| Template::compile(vars, x)).collect();
+                let (mut vars, res) = try!(self.compile_list(&list));
+
                 let tail_template = match tail {
-                    Some(t) => Some(Box::new(try!(Template::compile(vars, &t)))),
+                    Some(t) => {
+                        let (tail_vars, tail_res) = try!(self.compile(&t));
+                        for v in tail_vars.into_iter() {
+                            vars.insert(v);
+                        }
+                        Some(Box::new(tail_res))
+                    },
                     None => None
                 };
-                Ok(Template::List(try!(res), tail_template))
+                Ok((vars, Template::List(res, tail_template)))
             },
-            &Datum::Vector(ref ptr) => {
-                let res: Result<Vec<Template>, MacroError> =
-                        ptr.iter().map(|x| Template::compile(vars, x)).collect();
-                res.map(Template::Vector)
-            },
+            &Datum::Vector(ref ptr) =>
+                self.compile_list(ptr).map(|(vars, list)| (vars, Template::Vector(list))),
             _ =>
                 if let Some(c) = SimpleDatum::from_datum(datum.clone()) {
-                    Ok(Template::Const(c))
+                    Ok((HashSet::new(), Template::Const(c)))
                 } else {
                     Err(MacroError {
                         kind: MacroErrorKind::InvalidDatum,
@@ -351,8 +402,7 @@ mod test_matches {
 
     #[test]
     fn test_repeated_variable() {
-        let mut vars = HashSet::new();
-        vars.insert(Cow::Borrowed("b"));
+        let vars = hashset! { Cow::Borrowed("b") };
 
         let expected = vec![
             MatchData::Var(Cow::Borrowed("a"), num!(1)),
@@ -369,9 +419,7 @@ mod test_matches {
 
     #[test]
     fn test_repeated_pattern() {
-        let mut vars = HashSet::new();
-        vars.insert(Cow::Borrowed("b"));
-        vars.insert(Cow::Borrowed("c"));
+        let vars = hashset! { Cow::Borrowed("b"), Cow::Borrowed("c") };
 
         let expected = vec![
             MatchData::Var(Cow::Borrowed("a"), num!(1)),
