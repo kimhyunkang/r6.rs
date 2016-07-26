@@ -232,6 +232,53 @@ impl SubPattern {
     }
 }
 
+enum Template {
+    Var(Cow<'static, str>),
+    Const(SimpleDatum),
+    List(Vec<Template>, Option<Box<Template>>),
+    Vector(Vec<Template>)
+}
+
+impl Template {
+    fn compile<T>(vars: &HashSet<Cow<'static, str>>, datum: &Datum<T>)
+            -> Result<Template, MacroError>
+        where T: Clone
+    {
+        match datum {
+            &Datum::Sym(ref sym) =>
+                if vars.contains(sym) {
+                    Ok(Template::Var(sym.clone()))
+                } else {
+                    Ok(Template::Const(SimpleDatum::Sym(sym.clone())))
+                },
+            &Datum::Cons(_) => {
+                let (list, tail) = datum.improper_list();
+                let res: Result<Vec<Template>, MacroError> =
+                        list.iter().map(|x| Template::compile(vars, x)).collect();
+                let tail_template = match tail {
+                    Some(t) => Some(Box::new(try!(Template::compile(vars, &t)))),
+                    None => None
+                };
+                Ok(Template::List(try!(res), tail_template))
+            },
+            &Datum::Vector(ref ptr) => {
+                let res: Result<Vec<Template>, MacroError> =
+                        ptr.iter().map(|x| Template::compile(vars, x)).collect();
+                res.map(Template::Vector)
+            },
+            _ =>
+                if let Some(c) = SimpleDatum::from_datum(datum.clone()) {
+                    Ok(Template::Const(c))
+                } else {
+                    Err(MacroError {
+                        kind: MacroErrorKind::InvalidDatum,
+                        desc: format!("Invalid datum in macro template")
+                    })
+                }
+        }
+    }
+}
+
 #[cfg(test)]
 mod test_matches {
     use std::borrow::Cow;
@@ -263,7 +310,10 @@ mod test_matches {
 
     #[test]
     fn test_simple_pattern() {
-        let expected = vec![MatchData::Var(Cow::Borrowed("a"), num!(1)), MatchData::Var(Cow::Borrowed("b"), num!(2))];
+        let expected = vec![
+                MatchData::Var(Cow::Borrowed("a"), num!(1)),
+                MatchData::Var(Cow::Borrowed("b"), num!(2))
+        ];
 
         assert_matches!([] "(a b)", "(1 2)" => expected);
     }
