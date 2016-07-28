@@ -245,7 +245,7 @@ enum Template {
 
 enum TemplateElement {
     Template(Template),
-    Repeat(Vars, Template, usize)
+    Repeat(Vars, Box<TemplateElement>)
 }
 
 struct TemplateCompiler<'a> {
@@ -262,26 +262,21 @@ impl<'a> TemplateCompiler<'a> {
         }
 
         let mut res = Vec::new();
-        let (mut last_vars, mut last_elem) = try!(self.compile(&data[0]));
+        let (mut last_vars, elem) = try!(self.compile(&data[0]));
         let mut vars = last_vars.clone();
-        let mut repeat_count = 0;
+        let mut last_elem = TemplateElement::Template(elem);
         for elem in data[1 .. ].iter() {
             if let &Datum::Sym(Cow::Borrowed("...")) = elem {
-                repeat_count += 1;
+                last_elem = TemplateElement::Repeat(last_vars.clone(), Box::new(last_elem));
             } else {
-                if repeat_count == 0 {
-                    res.push(TemplateElement::Template(last_elem));
-                } else {
-                    res.push(TemplateElement::Repeat(last_vars, last_elem, repeat_count));
-                }
+                res.push(last_elem);
 
                 let (cur_vars, cur_elem) = try!(self.compile(elem));
                 for v in cur_vars.iter() {
                     vars.insert(v.clone());
                 }
                 last_vars = cur_vars;
-                last_elem = cur_elem;
-                repeat_count = 0;
+                last_elem = TemplateElement::Template(cur_elem);
             }
         }
 
