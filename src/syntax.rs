@@ -417,6 +417,8 @@ impl<'a> TemplateCompiler<'a> {
             }
         }
 
+        res.push(last_elem);
+
         Ok((vars, res))
     }
 
@@ -575,6 +577,7 @@ mod test_template {
     use std::borrow::Cow;
     use std::collections::HashSet;
 
+    use datum::SimpleDatum;
     use parser::Parser;
     use super::{Template, TemplateCompiler, TemplateElement};
 
@@ -597,12 +600,66 @@ mod test_template {
     fn test_template_compilation() {
         assert_compiles!(["a", "b", "c"] "(a b c)" =>
             Template::List(
-                hashset!{ Cow::Borrowed("a"), Cow::Borrowed("b"), Cow::Borrowed("c") },
                 vec![
                     TemplateElement::Template(Template::Var(Cow::Borrowed("a"))),
                     TemplateElement::Template(Template::Var(Cow::Borrowed("b"))),
                     TemplateElement::Template(Template::Var(Cow::Borrowed("c")))
-                ]
+                ],
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_free_variable() {
+        assert_compiles!(["a", "b"] "(a b c)" =>
+            Template::List(
+                vec![
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("a"))),
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("b"))),
+                    TemplateElement::Template(Template::Const(SimpleDatum::Sym(Cow::Borrowed("c"))))
+                ],
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_repeating_pattern() {
+        assert_compiles!(["a", "b", "c"] "(a b ... c)" =>
+            Template::List(
+                vec![
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("a"))),
+                    TemplateElement::Repeat(
+                        hashset!{Cow::Borrowed("b")},
+                        Box::new(TemplateElement::Template(Template::Var(Cow::Borrowed("b"))))
+                    ),
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("c")))
+                ],
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn test_nested_repeating_pattern() {
+        assert_compiles!(["a", "b", "c", "d"] "(a (b c ...) ... d)" =>
+            Template::List(
+                vec![
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("a"))),
+                    TemplateElement::Repeat(
+                        hashset!{Cow::Borrowed("b"), Cow::Borrowed("c")},
+                        Box::new(TemplateElement::Template(Template::List(vec![
+                            TemplateElement::Template(Template::Var(Cow::Borrowed("b"))),
+                            TemplateElement::Repeat(
+                                hashset!{Cow::Borrowed("c")},
+                                Box::new(TemplateElement::Template(Template::Var(Cow::Borrowed("c"))))
+                            )
+                        ], None)))
+                    ),
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("d")))
+                ],
+                None
             )
         );
     }
