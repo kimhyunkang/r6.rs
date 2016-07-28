@@ -314,6 +314,7 @@ impl SubPattern {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum Template {
     Var(Cow<'static, str>),
     Const(SimpleDatum),
@@ -321,6 +322,7 @@ enum Template {
     Vector(Vec<TemplateElement>)
 }
 
+#[derive(Debug, PartialEq)]
 enum TemplateElement {
     Template(Template),
     Repeat(Vars, Box<TemplateElement>)
@@ -382,6 +384,12 @@ impl TemplateElement {
 }
 
 impl<'a> TemplateCompiler<'a> {
+    fn new(vars: &'a HashSet<Cow<'static, str>>) -> TemplateCompiler<'a> {
+        TemplateCompiler {
+            global_vars: vars
+        }
+    }
+
     fn compile_list<T>(&self, data: &[Datum<T>])
             -> Result<(Vars, Vec<TemplateElement>), MacroError>
         where T: Clone
@@ -477,8 +485,6 @@ mod test_matches {
             let compiled_pattern = CompiledPattern::compile(&literals, &pattern)
                     .expect("Failed to compile pattern");
 
-            println!("compiled_pattern: {:?}", compiled_pattern);
-
             assert_eq!(Ok($result), compiled_pattern.compute_match(&datum));
         )
     }
@@ -561,5 +567,43 @@ mod test_matches {
         ];
 
         assert_matches!([] "(a (b c) ... d)", "(1 (2 3) (4 5) (6 7))" => expected);
+    }
+}
+
+#[cfg(test)]
+mod test_template {
+    use std::borrow::Cow;
+    use std::collections::HashSet;
+
+    use parser::Parser;
+    use super::{Template, TemplateCompiler, TemplateElement};
+
+    macro_rules! assert_compiles {
+        ([$($lits:expr),*] $template:expr => $result:expr) => (
+            let literals = vec![$($lits),*].into_iter().map(Cow::Borrowed).collect();
+
+            let mut parser = Parser::new($template.as_bytes());
+            let template = parser.parse_full::<()>().expect("Failed to parse template");
+
+            let compiler = TemplateCompiler::new(&literals);
+            let (_, compiled_template) = compiler.compile(&template)
+                    .expect("Failed to compile pattern");
+
+            assert_eq!($result, compiled_template);
+        )
+    }
+
+    #[test]
+    fn test_template_compilation() {
+        assert_compiles!(["a", "b", "c"] "(a b c)" =>
+            Template::List(
+                hashset!{ Cow::Borrowed("a"), Cow::Borrowed("b"), Cow::Borrowed("c") },
+                vec![
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("a"))),
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("b"))),
+                    TemplateElement::Template(Template::Var(Cow::Borrowed("c")))
+                ]
+            )
+        );
     }
 }
