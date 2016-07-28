@@ -130,7 +130,9 @@ pub enum MacroErrorKind {
     /// Datum not allowed in macro
     InvalidDatum,
     /// Duplicate variables in pattern
-    DuplicateVars
+    DuplicateVars,
+    /// Repeating sub-template includes non-matching variable
+    BadRepeatingTemplate
 }
 
 /// Macro error

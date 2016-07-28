@@ -181,6 +181,76 @@ impl Pattern {
 
         Ok((var_set, pattern))
     }
+
+    fn contains_var(&self, var: &str) -> bool {
+        match self {
+            &Pattern::List(ref list) => {
+                for sp in list.iter() {
+                    if sp.contains_var(var) {
+                        return true;
+                    }
+                }
+
+                false
+            },
+            &Pattern::DelimitedList(ref prefix, _, ref suffix) => {
+                for sp in prefix.iter() {
+                    if sp.contains_var(var) {
+                        return true;
+                    }
+                }
+
+                for sp in suffix.iter() {
+                    if sp.contains_var(var) {
+                        return true;
+                    }
+                }
+
+                false
+            }
+        }
+    }
+
+    fn find_repeats(&self, vars: &Vars) -> Option<&Pattern> {
+        match self {
+            &Pattern::List(ref list) => {
+                for sp in list.iter() {
+                    if let &SubPattern::Pattern(ref cp) = sp {
+                        if cp.vars.is_superset(vars) {
+                            return cp.pattern.find_repeats(vars);
+                        }
+                    }
+                }
+
+                None
+            },
+            &Pattern::DelimitedList(ref prefix, ref repeat, ref suffix) => {
+                for sp in prefix.iter() {
+                    if let &SubPattern::Pattern(ref cp) = sp {
+                        if cp.vars.is_superset(vars) {
+                            return cp.pattern.find_repeats(vars);
+                        }
+                    }
+                }
+
+                if let &SubPattern::Pattern(ref cp) = repeat.as_ref() {
+                    if cp.vars.is_subset(vars) {
+                        return Some(&cp.pattern);
+                    }
+                }
+
+                for sp in suffix.iter() {
+                    if let &SubPattern::Pattern(ref cp) = sp {
+                        if cp.vars.is_superset(vars) {
+                            return cp.pattern.find_repeats(vars);
+                        }
+                    }
+                }
+
+                None
+            }
+        }
+    }
 }
 
 impl SubPattern {
@@ -234,6 +304,14 @@ impl SubPattern {
             _ => HashSet::new()
         }
     }
+
+    fn contains_var(&self, var: &str) -> bool {
+        match self {
+            &SubPattern::Var(ref sym) => sym == var,
+            &SubPattern::Pattern(ref cp) => cp.pattern.contains_var(var),
+            _ => false
+        }
+    }
 }
 
 enum Template {
@@ -250,6 +328,57 @@ enum TemplateElement {
 
 struct TemplateCompiler<'a> {
     global_vars: &'a Vars
+}
+
+impl Template {
+    fn validate(&self, pattern: &Pattern) -> Result<(), MacroError>
+    {
+        match self {
+            &Template::Const(_) => Ok(()),
+            &Template::Var(ref var) => if pattern.contains_var(var) {
+                Ok(())
+            } else {
+                Err(MacroError {
+                    kind: MacroErrorKind::BadRepeatingTemplate,
+                    desc: format!("Template var `{}` not found in pattern", var)
+                })
+            },
+            &Template::List(ref init, ref tail) => {
+                for elem in init.iter() {
+                    try!(elem.validate(pattern));
+                }
+                if let &Some(ref elem) = tail {
+                    try!(elem.validate(pattern));
+                }
+                Ok(())
+            },
+            &Template::Vector(ref v) => {
+                for elem in v.iter() {
+                    try!(elem.validate(pattern));
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl TemplateElement {
+    fn validate(&self, pattern: &Pattern) -> Result<(), MacroError>
+    {
+        match self {
+            &TemplateElement::Template(ref template) =>
+                template.validate(pattern),
+            &TemplateElement::Repeat(ref vars, ref template) =>
+                if let Some(repeat) = pattern.find_repeats(vars) {
+                    template.validate(repeat)
+                } else {
+                    Err(MacroError {
+                        kind: MacroErrorKind::BadRepeatingTemplate,
+                        desc: "Template pattern not found".to_string()
+                    })
+                }
+        }
+    }
 }
 
 impl<'a> TemplateCompiler<'a> {
