@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use datum::{Datum, SimpleDatum};
 use error::{MacroError, MacroErrorKind};
 
-type Vars = HashSet<Cow<'static, str>>;
+pub type Vars = HashSet<Cow<'static, str>>;
 
 macro_rules! hashset {
     ($($e:expr),*) => ({
@@ -13,6 +13,54 @@ macro_rules! hashset {
         $( s.insert($e); )*
         s
     })
+}
+
+pub struct CompiledMacro {
+    patterns: Vec<MacroPattern>
+}
+
+struct MacroPattern {
+    pattern: Pattern,
+    template: Template
+}
+
+impl CompiledMacro {
+    pub fn compile<T>(literals: &Vars, rules: &[(Datum<T>, Datum<T>)])
+            -> Result<CompiledMacro, MacroError>
+        where T: Clone + Debug
+    {
+        let res: Result<Vec<MacroPattern>, MacroError> = rules.iter()
+            .map(|&(ref pattern, ref template)|
+                MacroPattern::compile(literals, &pattern, &template)
+            )
+            .collect();
+
+        res.map(|pat| CompiledMacro { patterns: pat })
+    }
+
+    pub fn transform<T>(&self, datum: &Datum<T>) -> Result<Datum<T>, MacroError>
+    {
+        for &MacroPattern { ref pattern, ref template } in self.patterns.iter() {
+        }
+    }
+}
+
+impl MacroPattern {
+    fn compile<T>(literals: &Vars, pattern_src: &Datum<T>, template_src: &Datum<T>)
+            -> Result<MacroPattern, MacroError>
+        where T: Clone + Debug
+    {
+        let cp = try!(CompiledPattern::compile(literals, pattern_src));
+        let compiler = TemplateCompiler::new(&cp.vars);
+        let (_, template) = try!(compiler.compile(template_src));
+
+        try!(template.validate(&cp.pattern));
+
+        Ok(MacroPattern {
+            pattern: cp.pattern,
+            template: template
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -46,19 +94,24 @@ enum MatchData<T> {
 impl CompiledPattern {
     fn compile<T>(literals: &Vars, datum: &Datum<T>)
             -> Result<CompiledPattern, MacroError>
-        where T: Clone + PartialEq + Debug
+        where T: Clone
     {
         let (form, tail) = datum.improper_list();
         if tail.is_some() {
-            println!("form: {:?}, tail: {:?}", form, tail);
             return Err(MacroError {
                 kind: MacroErrorKind::NotImplemented,
                 desc: "Dotted list pattern is not implemented yet".to_string()
             });
         }
 
-        let patts: Vec<&[Datum<T>]> = form.split(|s| s == &Datum::Sym(Cow::Borrowed("...")))
-                                          .collect();
+        let patts: Vec<&[Datum<T>]> = form.split(|s|
+            if let &Datum::Sym(ref sym) = s {
+                sym == "..."
+            } else {
+                false
+            }
+        ).collect();
+
         match patts.as_slice() {
             &[] => Ok(CompiledPattern {
                     vars: HashSet::new(),
@@ -98,31 +151,40 @@ impl CompiledPattern {
         }
     }
 
-    fn compute_match<T>(&self, datum: &Datum<T>) -> Result<PatternMatch<T>, ()>
+    fn compute_match<T>(&self, datum: &Datum<T>) -> Option<PatternMatch<T>>
         where T: Clone
     {
         if let &Datum::Cons(_) = datum {
-            let list: Vec<Datum<T>> = try!(datum.iter().collect());
+            let list: Vec<Datum<T>> = match datum.iter().collect() {
+                Ok(l) => l,
+                Err(_) => return None
+            };
             match self.pattern {
                 Pattern::List(ref pat) => {
                     if list.len() != pat.len() {
-                        return Err(());
+                        return None;
                     }
                     let mut matches = Vec::new();
                     for (sp, elem) in pat.iter().zip(list) {
-                        let mut m = try!(sp.compute_match(&elem));
+                        let mut m = match sp.compute_match(&elem) {
+                            Some(m) => m,
+                            None => return None
+                        };
                         matches.append(&mut m);
                     }
-                    Ok(matches)
+                    Some(matches)
                 },
                 Pattern::DelimitedList(ref prefix, ref repeat, ref suffix) => {
                     if list.len() < prefix.len() + suffix.len() {
-                        return Err(());
+                        return None;
                     }
                     let mut matches = Vec::new();
 
                     for (sp, elem) in prefix.iter().zip(list.iter()) {
-                        let mut m = try!(sp.compute_match(&elem));
+                        let mut m = match sp.compute_match(&elem) {
+                            Some(m) => m,
+                            None => return None
+                        };
                         matches.append(&mut m);
                     }
 
@@ -131,21 +193,27 @@ impl CompiledPattern {
 
                     let mut repeats = Vec::new();
                     for elem in list[rep_start .. rep_end].iter() {
-                        let m = try!(repeat.compute_match(elem));
+                        let m = match repeat.compute_match(elem) {
+                            Some(m) => m,
+                            None => return None
+                        };
                         repeats.push(m);
                     }
                     matches.push(MatchData::Repeated(repeat.vars(), repeats));
 
                     for (sp, elem) in suffix.iter().zip(list[rep_end ..].iter()) {
-                        let mut m = try!(sp.compute_match(&elem));
+                        let mut m = match sp.compute_match(&elem) {
+                            Some(m) => m,
+                            None => return None
+                        };
                         matches.append(&mut m);
                     }
 
-                    Ok(matches)
+                    Some(matches)
                 }
             }
         } else {
-            Err(())
+            None
         }
     }
 }
@@ -168,7 +236,7 @@ fn union_vars(lhs: &mut Vars, rhs: Vars)
 impl Pattern {
     fn compile_subpatterns<T>(literals: &Vars, data: &[Datum<T>])
             -> Result<(Vars, Vec<SubPattern>), MacroError>
-        where T: Clone + PartialEq + Debug
+        where T: Clone
     {
         let subpats: Result<Vec<(Vars, SubPattern)>, MacroError> =
                 data.iter().map(|sp| SubPattern::compile(literals, sp)).collect();
@@ -256,7 +324,7 @@ impl Pattern {
 impl SubPattern {
     fn compile<T>(literals: &Vars, datum: &Datum<T>)
             -> Result<(Vars, SubPattern), MacroError>
-        where T: Clone + PartialEq + Debug
+        where T: Clone
     {
         match datum {
             &Datum::Cons(_) | &Datum::Vector(_) =>
@@ -282,16 +350,16 @@ impl SubPattern {
         }
     }
 
-    fn compute_match<T>(&self, datum: &Datum<T>) -> Result<Vec<MatchData<T>>, ()>
+    fn compute_match<T>(&self, datum: &Datum<T>) -> Option<Vec<MatchData<T>>>
         where T: Clone
     {
         match self {
-            &SubPattern::Underscore => Ok(Vec::new()),
-            &SubPattern::Var(ref sym) => Ok(vec![MatchData::Var(sym.clone(), datum.clone())]),
+            &SubPattern::Underscore => Some(Vec::new()),
+            &SubPattern::Var(ref sym) => Some(vec![MatchData::Var(sym.clone(), datum.clone())]),
             &SubPattern::Const(ref c) => if c.equals(datum) {
-                    Ok(Vec::new())
+                    Some(Vec::new())
                 } else {
-                    Err(())
+                    None
                 },
             &SubPattern::Pattern(ref pat) => pat.compute_match(datum)
         }

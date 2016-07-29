@@ -132,7 +132,9 @@ pub enum MacroErrorKind {
     /// Duplicate variables in pattern
     DuplicateVars,
     /// Repeating sub-template includes non-matching variable
-    BadRepeatingTemplate
+    BadRepeatingTemplate,
+    /// Repeating sub-template includes non-matching variable
+    UnknownVariable
 }
 
 /// Macro error

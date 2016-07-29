@@ -288,6 +288,18 @@ impl SimpleDatum {
         }
     }
 
+    pub fn to_datum<T>(self) -> Datum<T> {
+        match self {
+            SimpleDatum::Sym(v) => Datum::Sym(v),
+            SimpleDatum::Bool(v) => Datum::Bool(v),
+            SimpleDatum::Char(v) => Datum::Char(v),
+            SimpleDatum::String(v) => Datum::String(v),
+            SimpleDatum::Bytes(v) => Datum::Bytes(v),
+            SimpleDatum::Num(v) => Datum::Num(v),
+            SimpleDatum::Nil => Datum::Nil
+        }
+    }
+
     pub fn equals<T>(&self, datum: &Datum<T>) -> bool {
         match self {
             &SimpleDatum::Sym(ref lhs) =>
