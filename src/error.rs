@@ -134,7 +134,9 @@ pub enum MacroErrorKind {
     /// Repeating sub-template includes non-matching variable
     BadRepeatingTemplate,
     /// Repeating sub-template includes non-matching variable
-    UnknownVariable
+    UnknownVariable,
+    /// Matching pattern not found
+    MatchNotFound
 }
 
 /// Macro error

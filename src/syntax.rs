@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use datum::{Datum, SimpleDatum};
+use datum::{cons, Datum, SimpleDatum};
 use error::{MacroError, MacroErrorKind};
 
 pub type Vars = HashSet<Cow<'static, str>>;
@@ -20,7 +20,7 @@ pub struct CompiledMacro {
 }
 
 struct MacroPattern {
-    pattern: Pattern,
+    pattern: CompiledPattern,
     template: Template
 }
 
@@ -39,9 +39,18 @@ impl CompiledMacro {
     }
 
     pub fn transform<T>(&self, datum: &Datum<T>) -> Result<Datum<T>, MacroError>
+        where T: Clone
     {
         for &MacroPattern { ref pattern, ref template } in self.patterns.iter() {
+            if let Some(m) = pattern.compute_match(datum) {
+                return Ok(template.transform(&m));
+            }
         }
+
+        Err(MacroError {
+            kind: MacroErrorKind::MatchNotFound,
+            desc: "Matching pattern not found".to_string()
+        })
     }
 }
 
@@ -51,13 +60,18 @@ impl MacroPattern {
         where T: Clone + Debug
     {
         let cp = try!(CompiledPattern::compile(literals, pattern_src));
-        let compiler = TemplateCompiler::new(&cp.vars);
-        let (_, template) = try!(compiler.compile(template_src));
 
-        try!(template.validate(&cp.pattern));
+        let template = {
+            let compiler = TemplateCompiler::new(&cp.vars);
+            let (_, template) = try!(compiler.compile(template_src));
+
+            try!(template.validate(&cp.pattern));
+
+            template
+        };
 
         Ok(MacroPattern {
-            pattern: cp.pattern,
+            pattern: cp,
             template: template
         })
     }
@@ -83,7 +97,10 @@ enum SubPattern {
     Pattern(CompiledPattern)
 }
 
-type PatternMatch<T> = Vec<MatchData<T>>;
+#[derive(Debug, PartialEq)]
+struct PatternMatch<T> {
+    matches: Vec<MatchData<T>>
+}
 
 #[derive(Debug, PartialEq)]
 enum MatchData<T> {
@@ -172,7 +189,7 @@ impl CompiledPattern {
                         };
                         matches.append(&mut m);
                     }
-                    Some(matches)
+                    Some(PatternMatch::new(matches))
                 },
                 Pattern::DelimitedList(ref prefix, ref repeat, ref suffix) => {
                     if list.len() < prefix.len() + suffix.len() {
@@ -194,12 +211,13 @@ impl CompiledPattern {
                     let mut repeats = Vec::new();
                     for elem in list[rep_start .. rep_end].iter() {
                         let m = match repeat.compute_match(elem) {
-                            Some(m) => m,
+                            Some(m) => PatternMatch::new(m),
                             None => return None
                         };
                         repeats.push(m);
                     }
-                    matches.push(MatchData::Repeated(repeat.vars(), repeats));
+                    let rep = MatchData::Repeated(repeat.vars(), repeats);
+                    matches.push(rep);
 
                     for (sp, elem) in suffix.iter().zip(list[rep_end ..].iter()) {
                         let mut m = match sp.compute_match(&elem) {
@@ -209,7 +227,7 @@ impl CompiledPattern {
                         matches.append(&mut m);
                     }
 
-                    Some(matches)
+                    Some(PatternMatch::new(matches))
                 }
             }
         } else {
@@ -278,47 +296,6 @@ impl Pattern {
             }
         }
     }
-
-    fn find_repeats(&self, vars: &Vars) -> Option<&Pattern> {
-        match self {
-            &Pattern::List(ref list) => {
-                for sp in list.iter() {
-                    if let &SubPattern::Pattern(ref cp) = sp {
-                        if cp.vars.is_superset(vars) {
-                            return cp.pattern.find_repeats(vars);
-                        }
-                    }
-                }
-
-                None
-            },
-            &Pattern::DelimitedList(ref prefix, ref repeat, ref suffix) => {
-                for sp in prefix.iter() {
-                    if let &SubPattern::Pattern(ref cp) = sp {
-                        if cp.vars.is_superset(vars) {
-                            return cp.pattern.find_repeats(vars);
-                        }
-                    }
-                }
-
-                if let &SubPattern::Pattern(ref cp) = repeat.as_ref() {
-                    if cp.vars.is_subset(vars) {
-                        return Some(&cp.pattern);
-                    }
-                }
-
-                for sp in suffix.iter() {
-                    if let &SubPattern::Pattern(ref cp) = sp {
-                        if cp.vars.is_superset(vars) {
-                            return cp.pattern.find_repeats(vars);
-                        }
-                    }
-                }
-
-                None
-            }
-        }
-    }
 }
 
 impl SubPattern {
@@ -361,7 +338,7 @@ impl SubPattern {
                 } else {
                     None
                 },
-            &SubPattern::Pattern(ref pat) => pat.compute_match(datum)
+            &SubPattern::Pattern(ref pat) => pat.compute_match(datum).map(|m| m.matches)
         }
     }
 
@@ -379,6 +356,38 @@ impl SubPattern {
             &SubPattern::Pattern(ref cp) => cp.pattern.contains_var(var),
             _ => false
         }
+    }
+}
+
+impl<T> PatternMatch<T> {
+    fn new(matches: Vec<MatchData<T>>) -> PatternMatch<T> {
+        PatternMatch { matches: matches }
+    }
+
+    fn find_var(&self, var: &str) -> Option<&Datum<T>>
+    {
+        for m in self.matches.iter() {
+            if let &MatchData::Var(ref v, ref val) = m {
+                if v == var {
+                    return Some(val);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn find_var_repeat(&self, vars: &Vars) -> Option<&[PatternMatch<T>]>
+    {
+        for m in self.matches.iter() {
+            if let &MatchData::Repeated(ref vs, ref matches) = m {
+                if vars.is_subset(vs) {
+                    return Some(matches);
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -430,6 +439,63 @@ impl Template {
             }
         }
     }
+
+    fn transform<T>(&self, data: &PatternMatch<T>) -> Datum<T>
+        where T: Clone
+    {
+        match self {
+            &Template::Const(ref c) =>
+                c.clone().to_datum(),
+            &Template::Var(ref sym) => {
+                if let Some(val) = data.find_var(sym) {
+                    val.clone()
+                } else {
+                    panic!("Unknown variable `{}`", sym)
+                }
+            },
+            &Template::List(ref list, ref tail) => {
+                let mut res = match tail {
+                    &Some(ref t) => t.transform(data),
+                    &None => Datum::Nil
+                };
+
+                for elem in list.iter().rev() {
+                    match elem {
+                        &TemplateElement::Template(ref t) => {
+                            res = cons(t.transform(data), res);
+                        },
+                        &TemplateElement::Repeat(ref vars, ref t) => {
+                            let matches = data.find_var_repeat(vars).expect("Unknown pattern");
+                            for m in matches.iter().rev() {
+                                res = cons(t.transform_repeat(m), res);
+                            }
+                        }
+                    }
+                }
+
+                res
+            },
+            &Template::Vector(ref vec) => {
+                let mut res = Datum::Nil;
+
+                for elem in vec.iter().rev() {
+                    match elem {
+                        &TemplateElement::Template(ref t) => {
+                            res = cons(t.transform(data), res);
+                        },
+                        &TemplateElement::Repeat(ref vars, ref t) => {
+                            let matches = data.find_var_repeat(vars).expect("Unknown pattern");
+                            for m in matches.iter().rev() {
+                                res = cons(t.transform_repeat(m), res);
+                            }
+                        }
+                    }
+                }
+
+                res
+            }
+        }
+    }
 }
 
 impl TemplateElement {
@@ -439,14 +505,80 @@ impl TemplateElement {
             &TemplateElement::Template(ref template) =>
                 template.validate(pattern),
             &TemplateElement::Repeat(ref vars, ref template) =>
-                if let Some(repeat) = pattern.find_repeats(vars) {
-                    template.validate(repeat)
-                } else {
-                    Err(MacroError {
-                        kind: MacroErrorKind::BadRepeatingTemplate,
-                        desc: "Template pattern not found".to_string()
-                    })
+                template.validate_repeat(vars, pattern)
+        }
+    }
+
+    fn validate_repeat(&self, vars: &Vars, pattern: &Pattern) -> Result<(), MacroError>
+    {
+        match pattern {
+            &Pattern::List(ref vec) => {
+                for elem in vec.iter() {
+                    if let &SubPattern::Pattern(ref cp) = elem {
+                        if cp.vars.is_superset(vars) {
+                            try!(self.validate_repeat(vars, &cp.pattern));
+                        }
+                    }
                 }
+
+                Ok(())
+            },
+            &Pattern::DelimitedList(ref prefix, ref repeat, ref suffix) => {
+                for elem in prefix.iter() {
+                    if let &SubPattern::Pattern(ref cp) = elem {
+                        if cp.vars.is_superset(vars) {
+                            try!(self.validate_repeat(vars, &cp.pattern));
+                        }
+                    }
+                }
+
+                match repeat.as_ref() {
+                    &SubPattern::Var(ref sym) =>
+                        if vars.len() == 1 && vars.contains(sym) {
+                            if let &TemplateElement::Template(Template::Var(ref v)) = self {
+                                if v == sym {
+                                    return Ok(());
+                                } else {
+                                    panic!("Invalid template");
+                                }
+                            } else {
+                                return Err(MacroError {
+                                    kind: MacroErrorKind::BadRepeatingTemplate,
+                                    desc: format!("Invalid template variable level")
+                                })
+                            }
+                        },
+                    &SubPattern::Pattern(ref cp) =>
+                        if cp.vars.is_superset(vars) {
+                            try!(self.validate(&cp.pattern));
+                        },
+                    _ =>
+                        ()
+                }
+
+                for elem in suffix.iter() {
+                    if let &SubPattern::Pattern(ref cp) = elem {
+                        if cp.vars.is_superset(vars) {
+                            try!(self.validate_repeat(vars, &cp.pattern));
+                        }
+                    }
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    fn transform_repeat<T>(&self, data: &PatternMatch<T>) -> Datum<T>
+        where T: Clone
+    {
+        match self {
+            &TemplateElement::Template(ref tmpl) =>
+                tmpl.transform(data),
+            &TemplateElement::Repeat(ref vars, ref tmpl) => {
+                let matches = data.find_var_repeat(vars).expect("Template pattern not found");
+                matches.iter().map(|m| tmpl.transform_repeat(m)).collect()
+            }
         }
     }
 }
@@ -537,7 +669,7 @@ mod test_matches {
     use std::borrow::Cow;
     use std::collections::HashSet;
 
-    use super::{CompiledPattern, MatchData};
+    use super::{CompiledPattern, MatchData, PatternMatch};
     use datum::Datum;
     use number::Number;
     use parser::Parser;
@@ -555,7 +687,11 @@ mod test_matches {
             let compiled_pattern = CompiledPattern::compile(&literals, &pattern)
                     .expect("Failed to compile pattern");
 
-            assert_eq!(Ok($result), compiled_pattern.compute_match(&datum));
+            if let Some(PatternMatch { matches: result }) = compiled_pattern.compute_match(&datum) {
+                assert_eq!($result, result);
+            } else {
+                panic!("compute_match returned None");
+            }
         )
     }
 
@@ -607,10 +743,10 @@ mod test_matches {
         let expected = vec![
             MatchData::Var(Cow::Borrowed("a"), num!(1)),
             MatchData::Repeated(vars, vec![
-                                vec![MatchData::Var(Cow::Borrowed("b"), num!(2))],
-                                vec![MatchData::Var(Cow::Borrowed("b"), num!(3))],
-                                vec![MatchData::Var(Cow::Borrowed("b"), num!(4))]
-                                ]),
+                PatternMatch::new(vec![MatchData::Var(Cow::Borrowed("b"), num!(2))]),
+                PatternMatch::new(vec![MatchData::Var(Cow::Borrowed("b"), num!(3))]),
+                PatternMatch::new(vec![MatchData::Var(Cow::Borrowed("b"), num!(4))])
+            ]),
             MatchData::Var(Cow::Borrowed("c"), num!(5)),
         ];
 
@@ -624,14 +760,14 @@ mod test_matches {
         let expected = vec![
             MatchData::Var(Cow::Borrowed("a"), num!(1)),
             MatchData::Repeated(vars, vec![
-                                    vec![
+                                    PatternMatch::new(vec![
                                         MatchData::Var(Cow::Borrowed("b"), num!(2)),
                                         MatchData::Var(Cow::Borrowed("c"), num!(3))
-                                    ],
-                                    vec![
+                                    ]),
+                                    PatternMatch::new(vec![
                                         MatchData::Var(Cow::Borrowed("b"), num!(4)),
                                         MatchData::Var(Cow::Borrowed("c"), num!(5))
-                                    ]
+                                    ])
                                 ]),
             MatchData::Var(Cow::Borrowed("d"), list!(num!(6), num!(7))),
         ];
@@ -729,6 +865,73 @@ mod test_template {
                 ],
                 None
             )
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_syntax_transform {
+    use std::borrow::Cow;
+
+    use parser::Parser;
+
+    use super::CompiledMacro;
+
+    macro_rules! assert_transforms {
+        ([$($lits:expr),*] [$($pat:expr => $tmpl:expr),+] , $datum:expr => $result:expr) => (
+            let literals = vec![$($lits),*].into_iter().map(Cow::Borrowed).collect();
+            let mut rules = Vec::new();
+            $(
+                {
+                    let mut parser = Parser::new($pat.as_bytes());
+                    let pat = parser.parse_full::<()>().expect("Failed to parse pattern");
+
+                    parser = Parser::new($tmpl.as_bytes());
+                    let tmpl = parser.parse_full::<()>().expect("Failed to parse template");
+
+                    rules.push((pat, tmpl));
+                }
+            )+
+
+            let syntax = CompiledMacro::compile(&literals, &rules).expect("Failed to compile");
+
+            let mut parser = Parser::new($datum.as_bytes());
+            let datum = parser.parse_full::<()>().expect("Failed to parse datum");
+
+            parser = Parser::new($result.as_bytes());
+            let result = parser.parse_full::<()>().expect("Failed to parse result");
+
+            assert_eq!(Ok(result), syntax.transform(&datum));
+        )
+    }
+
+    #[test]
+    fn test_transform() {
+        assert_transforms!([] ["(id)" => "(define id 0)"], "(x)" => "(define x 0)");
+    }
+
+    #[test]
+    fn test_repeat() {
+        assert_transforms!(
+            []
+            ["(test stmt1 stmt2 ...)" => "(if test (begin stmt1 stmt2 ...))"],
+            "(x (set! x 0) (set! x 1) (set! x 2))"
+            =>
+            "(if x (begin (set! x 0) (set! x 1) (set! x 2)))"
+        );
+    }
+
+    #[test]
+    fn test_nested_repeat() {
+        assert_transforms!(
+            []
+            [
+                "(() body1 body2 ...)" => "(let () body1 body2 ...)",
+                "(((name1 val1) (name2 val2) ...) body1 body2 ...)" => "(let ((name1 val1)) (let* ((name2 val2) ...) body1 body2 ...))"
+            ],
+            "(((x 0) (y 1)) (+ x y) (* x y))"
+            =>
+            "(let ((x 0)) (let* ((y 1)) (+ x y) (* x y)))"
         );
     }
 }
