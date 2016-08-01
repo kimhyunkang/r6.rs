@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use std::borrow::Cow;
 use std::rc::Rc;
 
-use compiler::Syntax;
+use compiler::PrimitiveSyntax;
 use datum::Datum;
 use primitive::libprimitive;
 use runtime::{DatumType, Inst, PrimFuncPtr, RuntimeData, Closure, RDatum};
 
 /// Compiles the global env from `base`
-pub fn base_syntax() -> HashMap<Cow<'static, str>, Syntax> {
+pub fn base_syntax() -> HashMap<Cow<'static, str>, PrimitiveSyntax> {
     let mut lib = HashMap::new();
 
-    for syn in Syntax::iter() {
+    for syn in PrimitiveSyntax::iter() {
         lib.insert(Cow::Borrowed(syn.name()), syn);
     }
 

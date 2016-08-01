@@ -16,7 +16,7 @@ use runtime::{Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
 /// Syntax variables
 enum_from_primitive! {
     #[derive(Copy, Clone, PartialEq)]
-    pub enum Syntax {
+    pub enum PrimitiveSyntax {
         Lambda = 0, // `lambda`
         If = 1, // `if`
         Let = 2, // `let`
@@ -37,43 +37,43 @@ enum_from_primitive! {
 }
 
 #[derive(Clone, Copy)]
-pub struct SyntaxIter {
+pub struct PrimitiveSyntaxIter {
     index: usize
 }
 
-impl Iterator for SyntaxIter {
-    type Item = Syntax;
+impl Iterator for PrimitiveSyntaxIter {
+    type Item = PrimitiveSyntax;
 
-    fn next(&mut self) -> Option<Syntax> {
-        let res = Syntax::from_usize(self.index);
+    fn next(&mut self) -> Option<PrimitiveSyntax> {
+        let res = PrimitiveSyntax::from_usize(self.index);
         self.index += 1;
         res
     }
 }
 
-impl Syntax {
-    pub fn iter() -> SyntaxIter {
-        SyntaxIter { index: 0 }
+impl PrimitiveSyntax {
+    pub fn iter() -> PrimitiveSyntaxIter {
+        PrimitiveSyntaxIter { index: 0 }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            &Syntax::Lambda => "lambda",
-            &Syntax::If => "if",
-            &Syntax::Let => "let",
-            &Syntax::LetStar => "let*",
-            &Syntax::LetRec => "letrec",
-            &Syntax::LetRecStar => "letrec*",
-            &Syntax::Define => "define",
-            &Syntax::Set => "set!",
-            &Syntax::Quote => "quote",
-            &Syntax::Quasiquote => "quasiquote",
-            &Syntax::Unquote => "unquote",
-            &Syntax::UnquoteSplicing => "unquote-splicing",
-            &Syntax::Cond => "cond",
-            &Syntax::Case => "case",
-            &Syntax::And => "and",
-            &Syntax::Or => "or"
+            &PrimitiveSyntax::Lambda => "lambda",
+            &PrimitiveSyntax::If => "if",
+            &PrimitiveSyntax::Let => "let",
+            &PrimitiveSyntax::LetStar => "let*",
+            &PrimitiveSyntax::LetRec => "letrec",
+            &PrimitiveSyntax::LetRecStar => "letrec*",
+            &PrimitiveSyntax::Define => "define",
+            &PrimitiveSyntax::Set => "set!",
+            &PrimitiveSyntax::Quote => "quote",
+            &PrimitiveSyntax::Quasiquote => "quasiquote",
+            &PrimitiveSyntax::Unquote => "unquote",
+            &PrimitiveSyntax::UnquoteSplicing => "unquote-splicing",
+            &PrimitiveSyntax::Cond => "cond",
+            &PrimitiveSyntax::Case => "case",
+            &PrimitiveSyntax::And => "and",
+            &PrimitiveSyntax::Or => "or"
         }
     }
 }
@@ -81,7 +81,7 @@ impl Syntax {
 /// Compiler compiles Datum into a bytecode evaluates it
 pub struct Compiler {
     /// Syntax environment
-    syntax_env: HashMap<Cow<'static, str>, Syntax>,
+    syntax_env: HashMap<Cow<'static, str>, PrimitiveSyntax>,
 }
 
 struct CodeGenContext {
@@ -122,7 +122,7 @@ enum Def<T> {
 
 impl Compiler {
     /// Creates a new compiler with given environment
-    pub fn new(syntax_env: HashMap<Cow<'static, str>, Syntax>) -> Compiler {
+    pub fn new(syntax_env: HashMap<Cow<'static, str>, PrimitiveSyntax>) -> Compiler {
         Compiler {
             syntax_env: syntax_env
         }
@@ -168,35 +168,35 @@ impl Compiler {
                 Err(e) => match e.kind {
                     CompileErrorKind::SyntaxReference(syn) => {
                         return match syn {
-                            Syntax::Lambda =>
+                            PrimitiveSyntax::Lambda =>
                                 self.compile_lambda(env, ctx, &c_args),
-                            Syntax::If =>
+                            PrimitiveSyntax::If =>
                                 self.compile_if(env, ctx, tail_ctx, &c_args),
-                            Syntax::Let =>
+                            PrimitiveSyntax::Let =>
                                 self.compile_let(env, ctx, &c_args),
-                            Syntax::LetStar =>
+                            PrimitiveSyntax::LetStar =>
                                 self.compile_let_star(env, ctx, &c_args),
-                            Syntax::LetRec | Syntax::LetRecStar =>
+                            PrimitiveSyntax::LetRec | PrimitiveSyntax::LetRecStar =>
                                 self.compile_letrec(env, ctx, &c_args),
-                            Syntax::Define =>
+                            PrimitiveSyntax::Define =>
                                 self.compile_define_toplevel(env, ctx, &datum),
-                            Syntax::Set =>
+                            PrimitiveSyntax::Set =>
                                 self.compile_set(env, ctx, &c_args),
-                            Syntax::Quote =>
+                            PrimitiveSyntax::Quote =>
                                 self.compile_quote(ctx, &c_args),
-                            Syntax::Quasiquote =>
+                            PrimitiveSyntax::Quasiquote =>
                                 self.compile_quasiquote(env, ctx, &c_args),
-                            Syntax::Unquote | Syntax::UnquoteSplicing =>
+                            PrimitiveSyntax::Unquote | PrimitiveSyntax::UnquoteSplicing =>
                                 return Err(CompileError {
                                     kind: CompileErrorKind::UnquoteContext
                                 }),
-                            Syntax::Cond =>
+                            PrimitiveSyntax::Cond =>
                                 self.compile_cond(env, ctx, tail_ctx, &c_args),
-                            Syntax::Case =>
+                            PrimitiveSyntax::Case =>
                                 self.compile_case(env, ctx, tail_ctx, &c_args),
-                            Syntax::And =>
+                            PrimitiveSyntax::And =>
                                 self.compile_and(env, ctx, tail_ctx, &c_args),
-                            Syntax::Or =>
+                            PrimitiveSyntax::Or =>
                                 self.compile_or(env, ctx, tail_ctx, &c_args)
                         };
                     },
@@ -226,7 +226,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn get_syntax_name<T>(&self, env: &LexicalContext, item: &Datum<T>) -> Option<Syntax> {
+    fn get_syntax_name<T>(&self, env: &LexicalContext, item: &Datum<T>) -> Option<PrimitiveSyntax> {
         if let &Datum::Sym(ref sym) = item {
             if let Err(e) = self.find_var(env, sym) {
                 if let CompileErrorKind::SyntaxReference(syntax) = e.kind {
@@ -290,7 +290,7 @@ impl Compiler {
             return Ok(None);
         }
 
-        if let Some(Syntax::Define) = self.get_syntax_name(env, &list[0]) {
+        if let Some(PrimitiveSyntax::Define) = self.get_syntax_name(env, &list[0]) {
             match &list[1..] {
                 &[Datum::Sym(ref v)] =>
                     Ok(Some((v.clone(), Def::Void))),
@@ -767,7 +767,7 @@ impl Compiler {
         }
     }
 
-    fn get_syntax1<T: Clone+Debug>(&self, v: &Datum<T>) -> Option<(Syntax, Datum<T>)> {
+    fn get_syntax1<T: Clone+Debug>(&self, v: &Datum<T>) -> Option<(PrimitiveSyntax, Datum<T>)> {
         let res: Result<Vec<Datum<T>>, ()> = v.iter().collect();
         let list = match res {
             Ok(list) => list,
@@ -776,9 +776,9 @@ impl Compiler {
 
         if let &[Datum::Sym(ref ptr), ref arg] = list.as_slice() {
             match ptr.as_ref() {
-                "quasiquote" => Some((Syntax::Quasiquote, arg.clone())),
-                "unquote" => Some((Syntax::Unquote, arg.clone())),
-                "unquote-splicing" => Some((Syntax::UnquoteSplicing, arg.clone())),
+                "quasiquote" => Some((PrimitiveSyntax::Quasiquote, arg.clone())),
+                "unquote" => Some((PrimitiveSyntax::Unquote, arg.clone())),
+                "unquote-splicing" => Some((PrimitiveSyntax::UnquoteSplicing, arg.clone())),
                 _ => None
             }
         } else {
@@ -795,7 +795,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         match self.get_syntax1(v) {
-            Some((Syntax::Quasiquote, arg)) => {
+            Some((PrimitiveSyntax::Quasiquote, arg)) => {
                 ctx.code.push(
                     Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST)))
                 );
@@ -805,7 +805,7 @@ impl Compiler {
                 try!(self.rec_quasiquote(qq_level+1, env, ctx, &arg));
                 ctx.code.push(Inst::Call(2));
             },
-            Some((Syntax::Unquote, arg)) => {
+            Some((PrimitiveSyntax::Unquote, arg)) => {
                 if qq_level == 0 {
                     try!(self.compile_expr(env, ctx, false, &arg));
                 } else {
@@ -822,7 +822,7 @@ impl Compiler {
             _ => {
                 match v {
                     &Datum::Cons(ref pair) => {
-                        if let Some((Syntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
+                        if let Some((PrimitiveSyntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
                             if qq_level == 0 {
                                 ctx.code.push(Inst::PushArg(
                                     MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))
@@ -1176,7 +1176,7 @@ impl Compiler {
     }
 }
 
-impl Debug for Syntax {
+impl Debug for PrimitiveSyntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())
     }

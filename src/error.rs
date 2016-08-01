@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fmt;
 use std::io::CharsError;
 
-use compiler::Syntax;
+use compiler::PrimitiveSyntax;
 
 /// Possible parser errors
 #[derive(Debug, PartialEq)]
@@ -97,7 +97,7 @@ pub enum CompileErrorKind {
     /// Trying to apply non-function constant
     NotCallable,
     /// Trying to refer a syntax variable
-    SyntaxReference(Syntax),
+    SyntaxReference(PrimitiveSyntax),
     /// `define` is not allowed in this context
     DefineContext,
     /// `unquote` or its variants are not allowed in this context
