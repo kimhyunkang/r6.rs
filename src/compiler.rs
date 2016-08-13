@@ -41,6 +41,17 @@ pub struct PrimitiveSyntaxIter {
     index: usize
 }
 
+struct Binding<T> {
+    sym: Cow<'static, str>,
+    expr: Datum<T>
+}
+
+impl<T> Binding<T> {
+    fn new(sym: Cow<'static, str>, expr: Datum<T>) -> Binding<T> {
+        Binding { sym: sym, expr: expr }
+    }
+}
+
 impl Iterator for PrimitiveSyntaxIter {
     type Item = PrimitiveSyntax;
 
@@ -450,12 +461,11 @@ impl Compiler {
     }
 
     fn get_form<T: Clone+Debug>(&self, form: &Datum<T>)
-            -> Result<(Vec<Cow<'static, str>>, Vec<Datum<T>>, Datum<T>), CompileError>
+            -> Result<(Vec<Binding<T>>, Datum<T>), CompileError>
     {
         if let &Datum::Cons(ref ptr) = form {
             let (ref binding_form, ref body) = *ptr.as_ref();
-            let mut syms = Vec::new();
-            let mut exprs = Vec::new();
+            let mut bindings = Vec::new();
             for b in binding_form.iter() {
                 match b {
                     Ok(datum) => {
@@ -466,8 +476,7 @@ impl Compiler {
                             })
                         };
                         if let &[Datum::Sym(ref sym), ref expr] = binding.as_slice() {
-                            syms.push(sym.clone());
-                            exprs.push(expr.clone());
+                            bindings.push(Binding::new(sym.clone(), expr.clone()));
                         } else {
                             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
                         }
@@ -475,7 +484,7 @@ impl Compiler {
                     Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 }
             }
-            Ok((syms, exprs, body.clone()))
+            Ok((bindings, body.clone()))
         } else {
             Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
@@ -485,12 +494,13 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (syms, exprs, body) = try!(self.get_form(tail));
-        for expr in exprs.iter() {
-            try!(self.compile_expr(env, ctx, false, expr));
+        let (bindings, body) = try!(self.get_form(tail));
+        for binding in &bindings {
+            try!(self.compile_expr(env, ctx, false, &binding.expr));
         }
-        ctx.code.push(Inst::PushFrame(syms.len()));
+        ctx.code.push(Inst::PushFrame(bindings.len()));
 
+        let syms = bindings.into_iter().map(|b| b.sym).collect();
         let new_env = env.update_arg(syms);
 
         try!(self.compile_body(&new_env, ctx, &body));
@@ -504,15 +514,16 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (syms, exprs, body) = try!(self.get_form(tail));
+        let (bindings, body) = try!(self.get_form(tail));
 
         ctx.code.push(Inst::PushFrame(0));
 
         let mut new_env = env.update_arg(Vec::new());
 
-        for (i, expr) in exprs.iter().enumerate() {
+        let syms: Vec<Cow<'static, str>> = bindings.iter().map(|b| b.sym.clone()).collect();
+        for (i, binding) in bindings.iter().enumerate() {
             new_env.args = syms[0..i].to_vec();
-            try!(self.compile_expr(&new_env, ctx, false, expr));
+            try!(self.compile_expr(&new_env, ctx, false, &binding.expr));
         }
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
@@ -529,22 +540,23 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (syms, exprs, body) = try!(self.get_form(tail));
+        let (bindings, body) = try!(self.get_form(tail));
+        let syms = bindings.iter().map(|b| b.sym.clone()).collect();
 
         ctx.code.push(Inst::PushFrame(0));
 
-        for _ in 0..exprs.len() {
+        for _ in 0..bindings.len() {
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
         }
 
         let new_env = env.update_arg(syms);
 
-        for (i, expr) in exprs.iter().enumerate() {
-            try!(self.compile_expr(&new_env, ctx, false, expr));
+        for (i, binding) in bindings.iter().enumerate() {
+            try!(self.compile_expr(&new_env, ctx, false, &binding.expr));
             ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
 
-        ctx.code.push(Inst::SetArgSize(exprs.len()));
+        ctx.code.push(Inst::SetArgSize(bindings.len()));
 
         try!(self.compile_body(&new_env, ctx, &body));
 
