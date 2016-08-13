@@ -19,6 +19,7 @@ extern crate phf;
 extern crate regex;
 extern crate num;
 extern crate unicode_categories;
+extern crate immutable_map;
 
 macro_rules! list{
     ($($x:expr),*) => (

@@ -104,6 +104,8 @@ pub enum CompileErrorKind {
     UnquoteContext,
     /// Trying to refer an unbound variable
     UnboundVariable(Cow<'static, str>),
+    /// Duplicate variables in binding form
+    DuplicateVars,
     /// Trying to compile invalid datum
     InvalidDatum(String),
     /// Macro compilation error
@@ -184,5 +186,13 @@ impl From<CompileError> for RuntimeError {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}: {}", self.kind, self.desc)
+    }
+}
+
+impl From<MacroError> for CompileError {
+    fn from(err: MacroError) -> CompileError {
+        CompileError {
+            kind: CompileErrorKind::MacroError(err)
+        }
     }
 }

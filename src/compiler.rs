@@ -1,17 +1,19 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
 use num::FromPrimitive;
+use immutable_map::TreeMap;
 
 use error::{CompileError, CompileErrorKind};
 use datum::{cons, Datum, TryConv, SimpleDatum};
 use primitive::{PRIM_APPEND, PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
 use runtime::{Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
+use syntax::CompiledMacro;
 
 /// Syntax variables
 enum_from_primitive! {
@@ -33,6 +35,7 @@ enum_from_primitive! {
         Case = 13, // `case`
         And = 14, // `and`
         Or = 15, // `or`
+        LetSyntax = 16, // `let-syntax`
     }
 }
 
@@ -84,7 +87,8 @@ impl PrimitiveSyntax {
             &PrimitiveSyntax::Cond => "cond",
             &PrimitiveSyntax::Case => "case",
             &PrimitiveSyntax::And => "and",
-            &PrimitiveSyntax::Or => "or"
+            &PrimitiveSyntax::Or => "or",
+            &PrimitiveSyntax::LetSyntax => "let-syntax"
         }
     }
 }
@@ -104,6 +108,7 @@ struct CodeGenContext {
 struct LexicalContext<'g> {
     /// Current global environment
     global_env: &'g HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
+    syntax_env: TreeMap<Cow<'static, str>, Rc<CompiledMacro>>,
     static_scope: Vec<Vec<Cow<'static, str>>>,
     args: Vec<Cow<'static, str>>
 }
@@ -115,6 +120,7 @@ impl<'g> LexicalContext<'g> {
 
         LexicalContext {
             global_env: self.global_env,
+            syntax_env: self.syntax_env.clone(),
             static_scope: scope,
             args: args
         }
@@ -133,6 +139,10 @@ enum Def<T> {
 
 fn to_list<T: Clone>(datum: &Datum<T>) -> Result<Vec<Datum<T>>, CompileError> {
     datum.iter().collect::<Result<Vec<Datum<T>>, ()>>().map_err(|_| CompileError { kind: CompileErrorKind::BadSyntax })
+}
+
+fn to_exprs<T: Clone>(datum: &Datum<T>) -> Result<Vec<Datum<T>>, CompileError> {
+    datum.iter().collect::<Result<Vec<Datum<T>>, ()>>().map_err(|_| CompileError { kind: CompileErrorKind::DottedBody })
 }
 
 impl Compiler {
@@ -156,6 +166,7 @@ impl Compiler {
         };
         let env = LexicalContext {
             global_env: global_env,
+            syntax_env: TreeMap::new(),
             static_scope: Vec::new(),
             args: Vec::new()
         };
@@ -212,7 +223,9 @@ impl Compiler {
                             PrimitiveSyntax::And =>
                                 self.compile_and(env, ctx, tail_ctx, &c_args),
                             PrimitiveSyntax::Or =>
-                                self.compile_or(env, ctx, tail_ctx, &c_args)
+                                self.compile_or(env, ctx, tail_ctx, &c_args),
+                            PrimitiveSyntax::LetSyntax =>
+                                self.compile_let_syntax(env, ctx, tail_ctx, &c_args)
                         };
                     },
                     _ => return Err(e)
@@ -1120,6 +1133,60 @@ impl Compiler {
         }
 
         Ok(())
+    }
+
+    fn compile_let_syntax<T>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             tail_ctx: bool,
+                             datum: &Datum<T>)
+            -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
+    {
+        let (bindings, body) = try!(self.get_form(datum));
+        let mut new_env = env.clone();
+
+        for binding in bindings {
+            let syntax_rules = try!(self.compile_syntax_rules(&binding.expr));
+            new_env.syntax_env = new_env.syntax_env.insert(binding.sym, Rc::new(syntax_rules));
+        }
+
+        let exprs = try!(to_exprs(&body));
+        self.compile_exprs(&new_env, ctx, tail_ctx, &exprs)
+    }
+
+    fn compile_syntax_rules<T>(&self, datum: &Datum<T>) -> Result<CompiledMacro, CompileError>
+        where T: Clone + Debug
+    {
+        let rules = try!(to_list(datum));
+        if rules.is_empty() {
+            return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+        }
+
+        let literals = try!(to_list(&rules[0]));
+        let mut vars = HashSet::new();
+        for literal in literals {
+            if let Datum::Sym(sym) = literal {
+                if vars.contains(&sym) {
+                    return Err(CompileError { kind: CompileErrorKind::DuplicateVars })
+                }
+
+                vars.insert(sym);
+            } else {
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+            }
+        }
+
+        let mut syntax_rules = Vec::new();
+        for rule in &rules[1..] {
+            let form = try!(to_list(rule));
+            if form.len() != 2 {
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+            }
+            syntax_rules.push((form[0].clone(), form[1].clone()));
+        }
+
+        CompiledMacro::compile(&vars, &syntax_rules).map_err(|e| e.into())
     }
 
     fn compile_expr<T>(&self,

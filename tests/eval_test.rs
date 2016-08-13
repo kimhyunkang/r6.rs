@@ -526,3 +526,10 @@ fn test_merge_sort() {
         "(2 3 3 3 4 5 8 9 12 23 34 34 45 70)"
     );
 }
+
+#[test]
+fn test_macro() {
+    assert_evaluates_to!(
+        "(let-syntax ((bind-to-zero (syntax-rules () ((bind-to-zero id) (define id 0))))) (bind-to-zero x) x)" => "0"
+    );
+}
