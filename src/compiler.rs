@@ -131,6 +131,10 @@ enum Def<T> {
     Void
 }
 
+fn to_list<T: Clone>(datum: &Datum<T>) -> Result<Vec<Datum<T>>, CompileError> {
+    datum.iter().collect::<Result<Vec<Datum<T>>, ()>>().map_err(|_| CompileError { kind: CompileErrorKind::BadSyntax })
+}
+
 impl Compiler {
     /// Creates a new compiler with given environment
     pub fn new(syntax_env: HashMap<Cow<'static, str>, PrimitiveSyntax>) -> Compiler {
@@ -417,10 +421,7 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let exprs:Vec<Datum<T>> = match tail.iter().collect() {
-            Ok(e) => e,
-            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let exprs = try!(to_list(tail));
 
         if exprs.len() == 2 || exprs.len() == 3 {
             let cond = &exprs[0];
@@ -698,10 +699,7 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let assignment:Vec<Datum<T>> = match formal.iter().collect() {
-            Ok(v) => v,
-            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let assignment = try!(to_list(formal));
         if let &[Datum::Sym(ref sym), ref expr] = assignment.as_slice() {
             try!(self.compile_expr(env, ctx, false, expr));
             let ptr = try!(self.compile_ref(env, ctx, sym));
@@ -894,10 +892,7 @@ impl Compiler {
             Some(last_clause) => match last_clause {
                 &Datum::Cons(ref pair) =>  {
                     if self.is_sym(&pair.0, "else") {
-                        let exprs: Vec<Datum<T>> = match pair.1.iter().collect() {
-                            Ok(v) => v,
-                            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                        };
+                        let exprs = try!(to_list(&pair.1));
                         Some(exprs)
                     } else {
                         None
@@ -923,18 +918,12 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let mut clauses = try!(to_list(preds));
 
         let else_exprs = try!(self.get_else_clause(&mut clauses));
 
-        for clause in clauses.into_iter() {
-            let terms: Vec<Datum<T>> = match clause.iter().collect() {
-                Ok(v) => v,
-                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-            };
+        for clause in &clauses {
+            let terms = try!(to_list(&clause));
 
             if terms.len() < 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
@@ -995,10 +984,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let mut clauses = try!(to_list(preds));
 
         if clauses.len() < 2 {
             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
@@ -1010,22 +996,16 @@ impl Compiler {
 
         let else_exprs = try!(self.get_else_clause(&mut clauses));
 
-        for clause in clauses.into_iter() {
+        for clause in &clauses {
             let mut case_placeholders = Vec::new();
 
-            let terms: Vec<Datum<T>> = match clause.iter().collect() {
-                Ok(v) => v,
-                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-            };
+            let terms = try!(to_list(clause));
 
             if terms.len() < 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
-            let cases: Vec<Datum<T>> = match terms[0].iter().collect() {
-                Ok(v) => v,
-                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-            };
+            let cases = try!(to_list(&terms[0]));
 
             for case in cases.iter() {
                 try!(self.rec_quote(ctx, case));
@@ -1083,10 +1063,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let exprs = try!(to_list(preds));
         if exprs.is_empty() {
             ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(true))));
             return Ok(());
@@ -1120,10 +1097,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let exprs = try!(to_list(preds));
         if exprs.is_empty() {
             ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(false))));
             return Ok(());
