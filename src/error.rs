@@ -102,16 +102,52 @@ pub enum CompileErrorKind {
     DefineContext,
     /// `unquote` or its variants are not allowed in this context
     UnquoteContext,
+    /// `syntax-rules` is not allowed in this context
+    SyntaxRulesContext,
     /// Trying to refer an unbound variable
     UnboundVariable(Cow<'static, str>),
+    /// Duplicate variables in binding form
+    DuplicateVars,
     /// Trying to compile invalid datum
-    InvalidDatum(String)
+    InvalidDatum(String),
+    /// Macro compilation error
+    MacroError(MacroError),
 }
 
 /// Compiler error
 #[derive(Debug, PartialEq, Clone)]
 pub struct CompileError {
     pub kind: CompileErrorKind
+}
+
+/// Possible macro errors
+#[derive(Debug, PartialEq, Clone)]
+pub enum MacroErrorKind {
+    /// Syntax not implemented
+    NotImplemented,
+    /// Pattern is not a list
+    EmptyPattern,
+    /// Pattern is not a list
+    InvalidHead,
+    /// Multiple ellipses in a list
+    MultipleEllipses,
+    /// Datum not allowed in macro
+    InvalidDatum,
+    /// Duplicate variables in pattern
+    DuplicateVars,
+    /// Repeating sub-template includes non-matching variable
+    BadRepeatingTemplate,
+    /// Repeating sub-template includes non-matching variable
+    UnknownVariable,
+    /// Matching pattern not found
+    MatchNotFound
+}
+
+/// Macro error
+#[derive(Debug, PartialEq, Clone)]
+pub struct MacroError {
+    pub kind: MacroErrorKind,
+    pub desc: String
 }
 
 /// Errors raised in runtime
@@ -152,5 +188,13 @@ impl From<CompileError> for RuntimeError {
 impl fmt::Display for RuntimeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}: {}", self.kind, self.desc)
+    }
+}
+
+impl From<MacroError> for CompileError {
+    fn from(err: MacroError) -> CompileError {
+        CompileError {
+            kind: CompileErrorKind::MacroError(err)
+        }
     }
 }

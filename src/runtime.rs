@@ -8,7 +8,7 @@ use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 
 use cast::DatumCast;
-use compiler::{Compiler, Syntax};
+use compiler::{Compiler, PrimitiveSyntax};
 use datum::{SimpleDatum, TryConv};
 use eqv::DatumEqv;
 use error::{CompileError, CompileErrorKind, RuntimeError, RuntimeErrorKind};
@@ -373,7 +373,10 @@ fn runtime_panic(msg: String) -> RuntimeError {
 
 impl Runtime {
     /// Create the new virtual machine with given code
-    pub fn new(base: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>, base_syntax: HashMap<Cow<'static, str>, Syntax>) -> Runtime {
+    pub fn new(base: HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
+               base_syntax: HashMap<Cow<'static, str>, PrimitiveSyntax>)
+            -> Runtime
+    {
         Runtime {
             ret_val: Datum::Nil,
             arg_stack: Vec::new(),

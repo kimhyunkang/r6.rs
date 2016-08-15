@@ -526,3 +526,18 @@ fn test_merge_sort() {
         "(2 3 3 3 4 5 8 9 12 23 34 34 45 70)"
     );
 }
+
+#[test]
+fn test_macro() {
+    assert_evaluates_to!(
+        "(let-syntax
+            ((when (syntax-rules ()
+                ((when test stmt1)
+                (if test stmt1)))))
+            (let ((x #t))
+            (when x (set! x 'now))
+            x))"
+        =>
+        "now"
+    );
+}

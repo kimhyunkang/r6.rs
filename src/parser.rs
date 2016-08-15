@@ -683,4 +683,9 @@ mod test {
             }
         }
     }
+
+    #[test]
+    fn test_parse_ellipsis_list() {
+        test_parse_ok!("(a b ... c)", list!(sym!("a"), sym!("b"), sym!("..."), sym!("c")));
+    }
 }

@@ -1,22 +1,24 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::rc::Rc;
 
 use num::FromPrimitive;
+use immutable_map::TreeMap;
 
 use error::{CompileError, CompileErrorKind};
 use datum::{cons, Datum, TryConv, SimpleDatum};
 use primitive::{PRIM_APPEND, PRIM_CONS, PRIM_LIST, PRIM_VECTOR};
 use runtime::{Inst, MemRef, PrimFuncPtr, RDatum, RuntimeData};
+use syntax::CompiledMacro;
 
 /// Syntax variables
 enum_from_primitive! {
     #[derive(Copy, Clone, PartialEq)]
-    pub enum Syntax {
+    pub enum PrimitiveSyntax {
         Lambda = 0, // `lambda`
         If = 1, // `if`
         Let = 2, // `let`
@@ -33,47 +35,68 @@ enum_from_primitive! {
         Case = 13, // `case`
         And = 14, // `and`
         Or = 15, // `or`
+        SyntaxRules = 16, // `syntax-rules`
+        LetSyntax = 17, // `let-syntax`
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct SyntaxIter {
+pub struct PrimitiveSyntaxIter {
     index: usize
 }
 
-impl Iterator for SyntaxIter {
-    type Item = Syntax;
+#[derive(Debug, Clone, PartialEq)]
+pub enum Syntax {
+    Primitive(PrimitiveSyntax),
+    Macro(Rc<CompiledMacro>)
+}
 
-    fn next(&mut self) -> Option<Syntax> {
-        let res = Syntax::from_usize(self.index);
+struct Binding<T> {
+    sym: Cow<'static, str>,
+    expr: Datum<T>
+}
+
+impl<T> Binding<T> {
+    fn new(sym: Cow<'static, str>, expr: Datum<T>) -> Binding<T> {
+        Binding { sym: sym, expr: expr }
+    }
+}
+
+impl Iterator for PrimitiveSyntaxIter {
+    type Item = PrimitiveSyntax;
+
+    fn next(&mut self) -> Option<PrimitiveSyntax> {
+        let res = PrimitiveSyntax::from_usize(self.index);
         self.index += 1;
         res
     }
 }
 
-impl Syntax {
-    pub fn iter() -> SyntaxIter {
-        SyntaxIter { index: 0 }
+impl PrimitiveSyntax {
+    pub fn iter() -> PrimitiveSyntaxIter {
+        PrimitiveSyntaxIter { index: 0 }
     }
 
     pub fn name(&self) -> &'static str {
         match self {
-            &Syntax::Lambda => "lambda",
-            &Syntax::If => "if",
-            &Syntax::Let => "let",
-            &Syntax::LetStar => "let*",
-            &Syntax::LetRec => "letrec",
-            &Syntax::LetRecStar => "letrec*",
-            &Syntax::Define => "define",
-            &Syntax::Set => "set!",
-            &Syntax::Quote => "quote",
-            &Syntax::Quasiquote => "quasiquote",
-            &Syntax::Unquote => "unquote",
-            &Syntax::UnquoteSplicing => "unquote-splicing",
-            &Syntax::Cond => "cond",
-            &Syntax::Case => "case",
-            &Syntax::And => "and",
-            &Syntax::Or => "or"
+            &PrimitiveSyntax::Lambda => "lambda",
+            &PrimitiveSyntax::If => "if",
+            &PrimitiveSyntax::Let => "let",
+            &PrimitiveSyntax::LetStar => "let*",
+            &PrimitiveSyntax::LetRec => "letrec",
+            &PrimitiveSyntax::LetRecStar => "letrec*",
+            &PrimitiveSyntax::Define => "define",
+            &PrimitiveSyntax::Set => "set!",
+            &PrimitiveSyntax::Quote => "quote",
+            &PrimitiveSyntax::Quasiquote => "quasiquote",
+            &PrimitiveSyntax::Unquote => "unquote",
+            &PrimitiveSyntax::UnquoteSplicing => "unquote-splicing",
+            &PrimitiveSyntax::Cond => "cond",
+            &PrimitiveSyntax::Case => "case",
+            &PrimitiveSyntax::And => "and",
+            &PrimitiveSyntax::Or => "or",
+            &PrimitiveSyntax::SyntaxRules => "syntax-rules",
+            &PrimitiveSyntax::LetSyntax => "let-syntax"
         }
     }
 }
@@ -81,7 +104,7 @@ impl Syntax {
 /// Compiler compiles Datum into a bytecode evaluates it
 pub struct Compiler {
     /// Syntax environment
-    syntax_env: HashMap<Cow<'static, str>, Syntax>,
+    syntax_env: HashMap<Cow<'static, str>, PrimitiveSyntax>,
 }
 
 struct CodeGenContext {
@@ -93,6 +116,7 @@ struct CodeGenContext {
 struct LexicalContext<'g> {
     /// Current global environment
     global_env: &'g HashMap<Cow<'static, str>, Rc<RefCell<RDatum>>>,
+    syntax_env: TreeMap<Cow<'static, str>, Rc<CompiledMacro>>,
     static_scope: Vec<Vec<Cow<'static, str>>>,
     args: Vec<Cow<'static, str>>
 }
@@ -104,6 +128,7 @@ impl<'g> LexicalContext<'g> {
 
         LexicalContext {
             global_env: self.global_env,
+            syntax_env: self.syntax_env.clone(),
             static_scope: scope,
             args: args
         }
@@ -120,9 +145,17 @@ enum Def<T> {
     Void
 }
 
+fn to_list<T: Clone>(datum: &Datum<T>) -> Result<Vec<Datum<T>>, CompileError> {
+    datum.iter().collect::<Result<Vec<Datum<T>>, ()>>().map_err(|_| CompileError { kind: CompileErrorKind::BadSyntax })
+}
+
+fn to_exprs<T: Clone>(datum: &Datum<T>) -> Result<Vec<Datum<T>>, CompileError> {
+    datum.iter().collect::<Result<Vec<Datum<T>>, ()>>().map_err(|_| CompileError { kind: CompileErrorKind::DottedBody })
+}
+
 impl Compiler {
     /// Creates a new compiler with given environment
-    pub fn new(syntax_env: HashMap<Cow<'static, str>, Syntax>) -> Compiler {
+    pub fn new(syntax_env: HashMap<Cow<'static, str>, PrimitiveSyntax>) -> Compiler {
         Compiler {
             syntax_env: syntax_env
         }
@@ -141,6 +174,7 @@ impl Compiler {
         };
         let env = LexicalContext {
             global_env: global_env,
+            syntax_env: TreeMap::new(),
             static_scope: Vec::new(),
             args: Vec::new()
         };
@@ -166,39 +200,49 @@ impl Compiler {
             match self.compile_ref(env, ctx, s) {
                 Ok(ptr) => ctx.code.push(Inst::PushArg(ptr)),
                 Err(e) => match e.kind {
-                    CompileErrorKind::SyntaxReference(syn) => {
+                    CompileErrorKind::SyntaxReference(Syntax::Primitive(syn)) => {
                         return match syn {
-                            Syntax::Lambda =>
+                            PrimitiveSyntax::Lambda =>
                                 self.compile_lambda(env, ctx, &c_args),
-                            Syntax::If =>
+                            PrimitiveSyntax::If =>
                                 self.compile_if(env, ctx, tail_ctx, &c_args),
-                            Syntax::Let =>
+                            PrimitiveSyntax::Let =>
                                 self.compile_let(env, ctx, &c_args),
-                            Syntax::LetStar =>
+                            PrimitiveSyntax::LetStar =>
                                 self.compile_let_star(env, ctx, &c_args),
-                            Syntax::LetRec | Syntax::LetRecStar =>
+                            PrimitiveSyntax::LetRec | PrimitiveSyntax::LetRecStar =>
                                 self.compile_letrec(env, ctx, &c_args),
-                            Syntax::Define =>
+                            PrimitiveSyntax::Define =>
                                 self.compile_define_toplevel(env, ctx, &datum),
-                            Syntax::Set =>
+                            PrimitiveSyntax::Set =>
                                 self.compile_set(env, ctx, &c_args),
-                            Syntax::Quote =>
+                            PrimitiveSyntax::Quote =>
                                 self.compile_quote(ctx, &c_args),
-                            Syntax::Quasiquote =>
+                            PrimitiveSyntax::Quasiquote =>
                                 self.compile_quasiquote(env, ctx, &c_args),
-                            Syntax::Unquote | Syntax::UnquoteSplicing =>
+                            PrimitiveSyntax::Unquote | PrimitiveSyntax::UnquoteSplicing =>
                                 return Err(CompileError {
                                     kind: CompileErrorKind::UnquoteContext
                                 }),
-                            Syntax::Cond =>
+                            PrimitiveSyntax::Cond =>
                                 self.compile_cond(env, ctx, tail_ctx, &c_args),
-                            Syntax::Case =>
+                            PrimitiveSyntax::Case =>
                                 self.compile_case(env, ctx, tail_ctx, &c_args),
-                            Syntax::And =>
+                            PrimitiveSyntax::And =>
                                 self.compile_and(env, ctx, tail_ctx, &c_args),
-                            Syntax::Or =>
-                                self.compile_or(env, ctx, tail_ctx, &c_args)
+                            PrimitiveSyntax::Or =>
+                                self.compile_or(env, ctx, tail_ctx, &c_args),
+                            PrimitiveSyntax::SyntaxRules =>
+                                return Err(CompileError {
+                                    kind: CompileErrorKind::SyntaxRulesContext
+                                }),
+                            PrimitiveSyntax::LetSyntax =>
+                                self.compile_let_syntax(env, ctx, tail_ctx, &c_args),
                         };
+                    },
+                    CompileErrorKind::SyntaxReference(Syntax::Macro(syn)) => {
+                        let expanded = try!(syn.transform(&datum));
+                        return self.compile_expr(env, ctx, tail_ctx, &expanded);
                     },
                     _ => return Err(e)
                 }
@@ -226,10 +270,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn get_syntax_name<T>(&self, env: &LexicalContext, item: &Datum<T>) -> Option<Syntax> {
+    fn get_syntax_name<T>(&self, env: &LexicalContext, item: &Datum<T>) -> Option<PrimitiveSyntax> {
         if let &Datum::Sym(ref sym) = item {
             if let Err(e) = self.find_var(env, sym) {
-                if let CompileErrorKind::SyntaxReference(syntax) = e.kind {
+                if let CompileErrorKind::SyntaxReference(Syntax::Primitive(syntax)) = e.kind {
                     return Some(syntax);
                 }
             }
@@ -290,7 +334,7 @@ impl Compiler {
             return Ok(None);
         }
 
-        if let Some(Syntax::Define) = self.get_syntax_name(env, &list[0]) {
+        if let Some(PrimitiveSyntax::Define) = self.get_syntax_name(env, &list[0]) {
             match &list[1..] {
                 &[Datum::Sym(ref v)] =>
                     Ok(Some((v.clone(), Def::Void))),
@@ -406,10 +450,7 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let exprs:Vec<Datum<T>> = match tail.iter().collect() {
-            Ok(e) => e,
-            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let exprs = try!(to_list(tail));
 
         if exprs.len() == 2 || exprs.len() == 3 {
             let cond = &exprs[0];
@@ -450,12 +491,11 @@ impl Compiler {
     }
 
     fn get_form<T: Clone+Debug>(&self, form: &Datum<T>)
-            -> Result<(Vec<Cow<'static, str>>, Vec<Datum<T>>, Datum<T>), CompileError>
+            -> Result<(Vec<Binding<T>>, Datum<T>), CompileError>
     {
         if let &Datum::Cons(ref ptr) = form {
             let (ref binding_form, ref body) = *ptr.as_ref();
-            let mut syms = Vec::new();
-            let mut exprs = Vec::new();
+            let mut bindings = Vec::new();
             for b in binding_form.iter() {
                 match b {
                     Ok(datum) => {
@@ -466,8 +506,7 @@ impl Compiler {
                             })
                         };
                         if let &[Datum::Sym(ref sym), ref expr] = binding.as_slice() {
-                            syms.push(sym.clone());
-                            exprs.push(expr.clone());
+                            bindings.push(Binding::new(sym.clone(), expr.clone()));
                         } else {
                             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
                         }
@@ -475,7 +514,7 @@ impl Compiler {
                     Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
                 }
             }
-            Ok((syms, exprs, body.clone()))
+            Ok((bindings, body.clone()))
         } else {
             Err(CompileError { kind: CompileErrorKind::BadSyntax })
         }
@@ -485,12 +524,13 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (syms, exprs, body) = try!(self.get_form(tail));
-        for expr in exprs.iter() {
-            try!(self.compile_expr(env, ctx, false, expr));
+        let (bindings, body) = try!(self.get_form(tail));
+        for binding in &bindings {
+            try!(self.compile_expr(env, ctx, false, &binding.expr));
         }
-        ctx.code.push(Inst::PushFrame(syms.len()));
+        ctx.code.push(Inst::PushFrame(bindings.len()));
 
+        let syms = bindings.into_iter().map(|b| b.sym).collect();
         let new_env = env.update_arg(syms);
 
         try!(self.compile_body(&new_env, ctx, &body));
@@ -504,15 +544,16 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (syms, exprs, body) = try!(self.get_form(tail));
+        let (bindings, body) = try!(self.get_form(tail));
 
         ctx.code.push(Inst::PushFrame(0));
 
         let mut new_env = env.update_arg(Vec::new());
 
-        for (i, expr) in exprs.iter().enumerate() {
+        let syms: Vec<Cow<'static, str>> = bindings.iter().map(|b| b.sym.clone()).collect();
+        for (i, binding) in bindings.iter().enumerate() {
             new_env.args = syms[0..i].to_vec();
-            try!(self.compile_expr(&new_env, ctx, false, expr));
+            try!(self.compile_expr(&new_env, ctx, false, &binding.expr));
         }
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
@@ -529,22 +570,23 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (syms, exprs, body) = try!(self.get_form(tail));
+        let (bindings, body) = try!(self.get_form(tail));
+        let syms = bindings.iter().map(|b| b.sym.clone()).collect();
 
         ctx.code.push(Inst::PushFrame(0));
 
-        for _ in 0..exprs.len() {
+        for _ in 0..bindings.len() {
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
         }
 
         let new_env = env.update_arg(syms);
 
-        for (i, expr) in exprs.iter().enumerate() {
-            try!(self.compile_expr(&new_env, ctx, false, expr));
+        for (i, binding) in bindings.iter().enumerate() {
+            try!(self.compile_expr(&new_env, ctx, false, &binding.expr));
             ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
 
-        ctx.code.push(Inst::SetArgSize(exprs.len()));
+        ctx.code.push(Inst::SetArgSize(bindings.len()));
 
         try!(self.compile_body(&new_env, ctx, &body));
 
@@ -673,8 +715,10 @@ impl Compiler {
                     Ok(MemRef::Global(data.clone()))
             },
             None => {
-                if let Some(syntax) = self.syntax_env.get(sym) {
-                    Err(CompileError { kind: CompileErrorKind::SyntaxReference(syntax.clone()) })
+                if let Some(syntax) = env.syntax_env.get(sym) {
+                    Err(CompileError { kind: CompileErrorKind::SyntaxReference(Syntax::Macro(syntax.clone())) })
+                } else if let Some(syntax) = self.syntax_env.get(sym) {
+                    Err(CompileError { kind: CompileErrorKind::SyntaxReference(Syntax::Primitive(syntax.clone())) })
                 } else {
                     Err(CompileError { kind: CompileErrorKind::UnboundVariable(sym.clone()) })
                 }
@@ -686,10 +730,7 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let assignment:Vec<Datum<T>> = match formal.iter().collect() {
-            Ok(v) => v,
-            Err(()) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let assignment = try!(to_list(formal));
         if let &[Datum::Sym(ref sym), ref expr] = assignment.as_slice() {
             try!(self.compile_expr(env, ctx, false, expr));
             let ptr = try!(self.compile_ref(env, ctx, sym));
@@ -767,7 +808,7 @@ impl Compiler {
         }
     }
 
-    fn get_syntax1<T: Clone+Debug>(&self, v: &Datum<T>) -> Option<(Syntax, Datum<T>)> {
+    fn get_syntax1<T: Clone+Debug>(&self, v: &Datum<T>) -> Option<(PrimitiveSyntax, Datum<T>)> {
         let res: Result<Vec<Datum<T>>, ()> = v.iter().collect();
         let list = match res {
             Ok(list) => list,
@@ -776,9 +817,9 @@ impl Compiler {
 
         if let &[Datum::Sym(ref ptr), ref arg] = list.as_slice() {
             match ptr.as_ref() {
-                "quasiquote" => Some((Syntax::Quasiquote, arg.clone())),
-                "unquote" => Some((Syntax::Unquote, arg.clone())),
-                "unquote-splicing" => Some((Syntax::UnquoteSplicing, arg.clone())),
+                "quasiquote" => Some((PrimitiveSyntax::Quasiquote, arg.clone())),
+                "unquote" => Some((PrimitiveSyntax::Unquote, arg.clone())),
+                "unquote-splicing" => Some((PrimitiveSyntax::UnquoteSplicing, arg.clone())),
                 _ => None
             }
         } else {
@@ -795,7 +836,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         match self.get_syntax1(v) {
-            Some((Syntax::Quasiquote, arg)) => {
+            Some((PrimitiveSyntax::Quasiquote, arg)) => {
                 ctx.code.push(
                     Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST)))
                 );
@@ -805,7 +846,7 @@ impl Compiler {
                 try!(self.rec_quasiquote(qq_level+1, env, ctx, &arg));
                 ctx.code.push(Inst::Call(2));
             },
-            Some((Syntax::Unquote, arg)) => {
+            Some((PrimitiveSyntax::Unquote, arg)) => {
                 if qq_level == 0 {
                     try!(self.compile_expr(env, ctx, false, &arg));
                 } else {
@@ -822,7 +863,7 @@ impl Compiler {
             _ => {
                 match v {
                     &Datum::Cons(ref pair) => {
-                        if let Some((Syntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
+                        if let Some((PrimitiveSyntax::UnquoteSplicing, arg)) = self.get_syntax1(&pair.0) {
                             if qq_level == 0 {
                                 ctx.code.push(Inst::PushArg(
                                     MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))
@@ -882,10 +923,7 @@ impl Compiler {
             Some(last_clause) => match last_clause {
                 &Datum::Cons(ref pair) =>  {
                     if self.is_sym(&pair.0, "else") {
-                        let exprs: Vec<Datum<T>> = match pair.1.iter().collect() {
-                            Ok(v) => v,
-                            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-                        };
+                        let exprs = try!(to_list(&pair.1));
                         Some(exprs)
                     } else {
                         None
@@ -911,18 +949,12 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let mut clauses = try!(to_list(preds));
 
         let else_exprs = try!(self.get_else_clause(&mut clauses));
 
-        for clause in clauses.into_iter() {
-            let terms: Vec<Datum<T>> = match clause.iter().collect() {
-                Ok(v) => v,
-                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-            };
+        for clause in &clauses {
+            let terms = try!(to_list(&clause));
 
             if terms.len() < 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
@@ -983,10 +1015,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let mut clauses = try!(to_list(preds));
 
         if clauses.len() < 2 {
             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
@@ -998,22 +1027,16 @@ impl Compiler {
 
         let else_exprs = try!(self.get_else_clause(&mut clauses));
 
-        for clause in clauses.into_iter() {
+        for clause in &clauses {
             let mut case_placeholders = Vec::new();
 
-            let terms: Vec<Datum<T>> = match clause.iter().collect() {
-                Ok(v) => v,
-                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-            };
+            let terms = try!(to_list(clause));
 
             if terms.len() < 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
-            let cases: Vec<Datum<T>> = match terms[0].iter().collect() {
-                Ok(v) => v,
-                Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-            };
+            let cases = try!(to_list(&terms[0]));
 
             for case in cases.iter() {
                 try!(self.rec_quote(ctx, case));
@@ -1071,10 +1094,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let exprs = try!(to_list(preds));
         if exprs.is_empty() {
             ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(true))));
             return Ok(());
@@ -1108,10 +1128,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs: Vec<Datum<T>> = match preds.iter().collect() {
-            Ok(v) => v,
-            Err(_) => return Err(CompileError { kind: CompileErrorKind::BadSyntax })
-        };
+        let exprs = try!(to_list(preds));
         if exprs.is_empty() {
             ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(false))));
             return Ok(());
@@ -1134,6 +1151,66 @@ impl Compiler {
         }
 
         Ok(())
+    }
+
+    fn compile_let_syntax<T>(&self,
+                             env: &LexicalContext,
+                             ctx: &mut CodeGenContext,
+                             tail_ctx: bool,
+                             datum: &Datum<T>)
+            -> Result<(), CompileError>
+        where T: Clone + Debug + TryConv<(), CompileError>
+    {
+        let (bindings, body) = try!(self.get_form(datum));
+        let mut new_env = env.clone();
+
+        for binding in bindings {
+            let syntax_rules = try!(self.compile_syntax_rules(env, &binding.expr));
+            new_env.syntax_env = new_env.syntax_env.insert(binding.sym, Rc::new(syntax_rules));
+        }
+
+        let exprs = try!(to_exprs(&body));
+        self.compile_exprs(&new_env, ctx, tail_ctx, &exprs)
+    }
+
+    fn compile_syntax_rules<T>(&self, env: &LexicalContext, datum: &Datum<T>)
+            -> Result<CompiledMacro, CompileError>
+        where T: Clone + Debug
+    {
+        let rules = try!(to_list(datum));
+        if rules.len() < 2 {
+            return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+        }
+
+        if let Some(PrimitiveSyntax::SyntaxRules) = self.get_syntax_name(env, &rules[0]) {
+        } else {
+            return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+        }
+
+        let literals = try!(to_list(&rules[1]));
+        let mut vars = HashSet::new();
+        for literal in literals {
+            if let Datum::Sym(sym) = literal {
+                if vars.contains(&sym) {
+                    return Err(CompileError { kind: CompileErrorKind::DuplicateVars })
+                }
+
+                vars.insert(sym);
+            } else {
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+            }
+        }
+
+        let mut syntax_rules = Vec::new();
+        for rule in &rules[2..] {
+            let form = try!(to_list(rule));
+            if form.len() != 2 {
+                return Err(CompileError { kind: CompileErrorKind::BadSyntax });
+            }
+            syntax_rules.push((form[0].clone(), form[1].clone()));
+        }
+
+        CompiledMacro::compile(&vars, &syntax_rules).map_err(|e| e.into())
     }
 
     fn compile_expr<T>(&self,
@@ -1176,7 +1253,7 @@ impl Compiler {
     }
 }
 
-impl Debug for Syntax {
+impl Debug for PrimitiveSyntax {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.name())
     }
