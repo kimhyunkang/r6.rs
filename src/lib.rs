@@ -2,9 +2,6 @@
 
 //! r6.rs is an attempt to implement R6RS Scheme in Rust language
 
-#![feature(plugin)]
-#![feature(box_syntax)]
-
 #![feature(slice_patterns)]
 #![feature(io)]
 
