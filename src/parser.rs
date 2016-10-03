@@ -18,6 +18,8 @@ use num::bigint::BigInt;
 use num::rational::{Ratio, BigRational};
 use num::complex::Complex;
 
+include!(concat!(env!("OUT_DIR"), "/char_map.rs"));
+
 /// Parser parses character stream into a Datum
 pub struct Parser<R> {
     lexer: Lexer<R>,
@@ -40,32 +42,6 @@ fn invalid_token(tok: &TokenWrapper) -> ParserError {
         kind: ParserErrorKind::InvalidToken(format!("{:?}", tok.token))
     }
 }
-
-static CHAR_MAP: phf::Map<&'static str, char> = phf_map! {
-    "nul" => '\0',
-    "alarm" => '\x07',
-    "backspace" => '\x08',
-    "tab" => '\t',
-    "newline" => '\n',
-    "linefeed" => '\n',
-    "vtab" => '\x0b',
-    "page" => '\x0c',
-    "return" => '\r',
-    "esc" => '\x1b',
-    "space" => ' ',
-    "delete" => '\x7f'
-};
-
-pub static SPECIAL_TOKEN_MAP: phf::Map<&'static str, &'static str> = phf_map! {
-    "quote" => "'",
-    "quasiquote" => "`",
-    "unquote" => ",",
-    "unquote-splicing" => ",@",
-    "syntax" => "#'",
-    "quasisyntax" => "#`",
-    "unsyntax" => "#,",
-    "unsyntax-splicing" => "#,@"
-};
 
 fn parse_char(ch: &str) -> Option<char> {
     match CHAR_MAP.get(ch) {

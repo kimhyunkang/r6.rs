@@ -2,17 +2,20 @@
 name = "r6"
 version = "0.0.1"
 authors = [ "kimhyunkang@gmail.com" ]
+build = "build.rs"
 
 [dependencies]
 num = "0.1"
 phf = "0.7"
-phf_macros = "0.7"
 regex = "0.1"
 log = "0.3"
 enum_primitive = "0.1"
 copperline = "0.3"
 unicode_categories = "0.1"
 immutable-map = "0.1"
+
+[build-dependencies]
+phf_codegen = "0.7"
 
 [dev-dependencies]
 env_logger = "0.3"

@@ -8,8 +8,6 @@
 #![feature(slice_patterns)]
 #![feature(io)]
 
-#![plugin(phf_macros)]
-
 // This line should be at the top of the extern link list,
 // because some weird compiler bug lets log imported from rustc, not crates.io log
 #[macro_use] extern crate log;

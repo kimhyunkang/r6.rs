@@ -4,7 +4,9 @@ use std::iter::{FromIterator, IntoIterator};
 use std::rc::Rc;
 
 use number::Number;
-use parser::SPECIAL_TOKEN_MAP;
+use phf;
+
+include!(concat!(env!("OUT_DIR"), "/special_token_map.rs"));
 
 /// Datum is the primary data type of Scheme
 /// Datum is a generic type here to make parser somewhat independent from runtime
