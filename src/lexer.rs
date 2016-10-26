@@ -1,4 +1,5 @@
 use std::io::{Read, Chars, CharsError};
+use std::iter::Peekable;
 use std::borrow::Cow;
 use std::fmt;
 use std::char;
@@ -149,11 +150,10 @@ fn is_delim(c: char) -> bool {
 }
 
 /// Lexer transforms character stream into a token stream
-pub struct Lexer<R> {
+pub struct Lexer<R: Read> {
     line: usize,
     column: usize,
-    stream: Chars<R>,
-    lookahead_buf: Option<char>,
+    stream: Peekable<Chars<R>>
 }
 
 macro_rules! try_consume {
@@ -172,8 +172,7 @@ impl <R: Read + Sized> Lexer<R> {
         Lexer {
             line: 1,
             column: 1,
-            stream: stream.chars(),
-            lookahead_buf: None,
+            stream: stream.chars().peekable()
         }
     }
 
@@ -396,26 +395,14 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     fn lookahead(&mut self) -> Result<Option<char>, CharsError> {
-        match self.lookahead_buf {
-            Some(c) => Ok(Some(c)),
-            None => {
-                match self.stream.next() {
-                    Some(Ok(ch)) => {
-                        self.lookahead_buf = Some(ch);
-                        Ok(Some(ch))
-                    },
-                    Some(Err(e)) => {
-                        Err(e)
-                    },
-                    None => {
-                        Ok(None)
-                    }
-                }
-            }
+        match self.stream.peek() {
+            Some(&Ok(c)) => Ok(Some(c)),
+            Some(&Err(_)) => Err(self.stream.next().unwrap().unwrap_err()),
+            None => Ok(None)
         }
     }
 
-    fn advance(&mut self, c: char) {
+    fn line_count(&mut self, c: char) {
         if c == '\n' {
             self.line += 1;
             self.column = 1;
@@ -427,30 +414,21 @@ impl <R: Read + Sized> Lexer<R> {
     fn read_while<F>(&mut self, f: F) -> Result<String, ParserError> where
         F: Fn(char) -> bool
     {
-        let mut s = match self.lookahead_buf {
-            None => String::new(),
-            Some(c) => if f(c) {
-                self.lookahead_buf = None;
-                self.advance(c);
-                let mut s = String::new();
-                s.push(c);
-                s
-            } else {
-                return Ok(String::new());
-            }
-        };
+        let mut s = String::new();
 
         loop {
-            match self.stream.next() {
-                Some(Ok(c)) => if f(c) {
-                    self.advance(c);
+            match self.stream.peek() {
+                Some(&Ok(c)) => if f(c) {
+                    self.line_count(c);
                     s.push(c);
+                    self.stream.next();
                 } else {
-                    self.lookahead_buf = Some(c);
                     return Ok(s);
                 },
-                Some(Err(e)) =>
-                    return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
+                Some(&Err(_)) => {
+                    let e = self.stream.next().unwrap().unwrap_err();
+                    return Err(self.make_error(ParserErrorKind::UnderlyingError(StreamError(e))));
+                },
                 None => return Ok(s)
             }
         }
@@ -465,20 +443,13 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     fn consume_eof(&mut self) -> Result<Option<char>, CharsError> {
-        let c = match self.lookahead_buf {
-            Some(c) => {
-                self.lookahead_buf = None;
-                Some(Ok(c))
-            },
-            None => self.stream.next()
-        };
-
-        match c {
-            Some(Ok(ch)) => {
-                self.advance(ch);
+        match self.stream.peek() {
+            Some(&Ok(ch)) => {
+                self.line_count(ch);
+                self.stream.next();
                 Ok(Some(ch))
             },
-            Some(Err(e)) => Err(e),
+            Some(&Err(_)) => Err(self.stream.next().unwrap().unwrap_err()),
             None => Ok(None)
         }
     }
@@ -495,9 +466,6 @@ impl <R: Read + Sized> Lexer<R> {
             try!(self.read_while(is_whitespace));
             if let Some(';') = try!(self.lookahead()) {
                 try!(self.read_while(|c| c != '\n'));
-                if self.lookahead_buf.is_some() {
-                    self.lookahead_buf = None;
-                }
             } else {
                 return Ok(());
             }

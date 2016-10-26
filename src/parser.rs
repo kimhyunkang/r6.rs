@@ -21,7 +21,7 @@ use num::complex::Complex;
 include!(concat!(env!("OUT_DIR"), "/char_map.rs"));
 
 /// Parser parses character stream into a Datum
-pub struct Parser<R> {
+pub struct Parser<R: Read> {
     lexer: Lexer<R>,
     token_buf: Option<TokenWrapper>,
     number_parser: NumberParser
