@@ -31,7 +31,7 @@ impl PrimFuncPtr {
 
 impl PartialEq for PrimFuncPtr {
     fn eq(&self, other: &PrimFuncPtr) -> bool {
-        (self.function as *const PrimFunc) == (other.function as *const PrimFunc)
+        self.name == other.name
     }
 }
 
