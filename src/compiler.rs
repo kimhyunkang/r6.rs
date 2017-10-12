@@ -58,7 +58,7 @@ struct Binding<T> {
 
 impl<T> Binding<T> {
     fn new(sym: Cow<'static, str>, expr: Datum<T>) -> Binding<T> {
-        Binding { sym: sym, expr: expr }
+        Binding { sym, expr }
     }
 }
 
@@ -130,7 +130,7 @@ impl<'g> LexicalContext<'g> {
             global_env: self.global_env,
             syntax_env: self.syntax_env.clone(),
             static_scope: scope,
-            args: args
+            args
         }
     }
 
@@ -156,9 +156,7 @@ fn to_exprs<T: Clone>(datum: &Datum<T>) -> Result<Vec<Datum<T>>, CompileError> {
 impl Compiler {
     /// Creates a new compiler with given environment
     pub fn new(syntax_env: HashMap<Cow<'static, str>, PrimitiveSyntax>) -> Compiler {
-        Compiler {
-            syntax_env: syntax_env
-        }
+        Compiler { syntax_env }
     }
 
     /// Compiles the datum into a bytecode evaluates it
@@ -173,12 +171,12 @@ impl Compiler {
             link_size: 0
         };
         let env = LexicalContext {
-            global_env: global_env,
+            global_env,
             syntax_env: TreeMap::new(),
             static_scope: Vec::new(),
             args: Vec::new()
         };
-        try!(self.compile_expr(&env, &mut ctx, true, datum));
+        self.compile_expr(&env, &mut ctx, true, datum)?;
         ctx.code.push(Inst::Return);
         return Ok(ctx.code);
     }
@@ -241,21 +239,21 @@ impl Compiler {
                         };
                     },
                     CompileErrorKind::SyntaxReference(Syntax::Macro(syn)) => {
-                        let expanded = try!(syn.transform(&datum));
+                        let expanded = syn.transform(&datum)?;
                         return self.compile_expr(env, ctx, tail_ctx, &expanded);
                     },
                     _ => return Err(e)
                 }
             }
         } else {
-            try!(self.compile_expr(env, ctx, false, &callee));
+            self.compile_expr(env, ctx, false, &callee)?;
         }
 
         let mut arg_count = 0;
         for d in c_args.iter() {
             match d {
                 Ok(d) => {
-                    try!(self.compile_expr(env, ctx, false, &d));
+                    self.compile_expr(env, ctx, false, &d)?;
                     arg_count += 1;
                 },
                 Err(()) => return Err(CompileError { kind: CompileErrorKind::DottedEval })
@@ -289,22 +287,22 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        if let Some((var, def)) = try!(self.parse_define(env, &expr)) {
+        if let Some((var, def)) = self.parse_define(env, &expr)? {
             ctx.code.push(Inst::PushFrame(1));
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
             let new_env = env.update_arg(vec![var.clone()]);
 
             match def {
                 Def::Proc(formals, body) => {
-                    let proc_ctx = try!(self.compile_proc(&new_env, &formals, &body));
+                    let proc_ctx = self.compile_proc(&new_env, &formals, &body)?;
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                         Rc::new(proc_ctx.code),
                         proc_ctx.link_size,
-                        Some(try!(expr.try_conv()))
+                        Some(expr.try_conv()?)
                     )));
                 },
                 Def::Expr(expr) => {
-                    try!(self.compile_expr(&new_env, ctx, false, &expr));
+                    self.compile_expr(&new_env, ctx, false, &expr)?;
                 },
                 Def::Void => {
                     ctx.code.push(Inst::PushArg(MemRef::Undefined));
@@ -389,7 +387,7 @@ impl Compiler {
         let mut srcs = Vec::new();
 
         for expr in body.iter() {
-            match try!(self.parse_define(env, &expr)) {
+            match self.parse_define(env, &expr)? {
                 Some((var, def)) => {
                     def_vars.push(var);
                     defs.push(def);
@@ -408,16 +406,16 @@ impl Compiler {
         for (i, def) in defs.iter().enumerate() {
             match def {
                 &Def::Proc(ref formals, ref body) => {
-                    let proc_ctx = try!(self.compile_proc(&mod_env, formals, body));
+                    let proc_ctx = self.compile_proc(&mod_env, formals, body)?;
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                             Rc::new(proc_ctx.code),
                             proc_ctx.link_size,
-                            Some(try!(srcs[i].try_conv()))
+                            Some(srcs[i].try_conv()?)
                     )));
                     ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
                 },
                 &Def::Expr(ref expr) => {
-                    try!(self.compile_expr(&mod_env, ctx, false, expr));
+                    self.compile_expr(&mod_env, ctx, false, expr)?;
                     ctx.code.push(Inst::PopArg(MemRef::Arg(env.args.len() + i)));
                 },
                 &Def::Void => ()
@@ -436,7 +434,7 @@ impl Compiler {
             }
 
             let tail_expr = tail_ctx && idx == body.len() - 1;
-            try!(self.compile_expr(&mod_env, ctx, tail_expr, &body[idx]));
+            self.compile_expr(&mod_env, ctx, tail_expr, &body[idx])?;
         }
 
         Ok(())
@@ -450,20 +448,20 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let exprs = try!(to_list(tail));
+        let exprs = to_list(tail)?;
 
         if exprs.len() == 2 || exprs.len() == 3 {
             let cond = &exprs[0];
             let then_expr = &exprs[1];
 
-            try!(self.compile_expr(env, ctx, false, cond));
+            self.compile_expr(env, ctx, false, cond)?;
 
             let cond_jump_pc = ctx.code.len();
             // placeholder to replace with JumpIfFalse
             ctx.code.push(Inst::Nop);
             ctx.code.push(Inst::DropArg(1));
 
-            try!(self.compile_expr(env, ctx, tail_ctx, then_expr));
+            self.compile_expr(env, ctx, tail_ctx, then_expr)?;
 
             let jump_pc = ctx.code.len();
             // push placeholder to replace with Jump
@@ -475,7 +473,7 @@ impl Compiler {
             if exprs.len() == 3 {
                 let else_expr = &exprs[2];
 
-                try!(self.compile_expr(env, ctx, tail_ctx, else_expr));
+                self.compile_expr(env, ctx, tail_ctx, else_expr)?;
             } else {
                 ctx.code.push(Inst::PushArg(MemRef::Undefined));
             }
@@ -524,16 +522,16 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (bindings, body) = try!(self.get_form(tail));
+        let (bindings, body) = self.get_form(tail)?;
         for binding in &bindings {
-            try!(self.compile_expr(env, ctx, false, &binding.expr));
+            self.compile_expr(env, ctx, false, &binding.expr)?;
         }
         ctx.code.push(Inst::PushFrame(bindings.len()));
 
         let syms = bindings.into_iter().map(|b| b.sym).collect();
         let new_env = env.update_arg(syms);
 
-        try!(self.compile_body(&new_env, ctx, &body));
+        self.compile_body(&new_env, ctx, &body)?;
 
         ctx.code.push(Inst::PopFrame);
 
@@ -544,7 +542,7 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (bindings, body) = try!(self.get_form(tail));
+        let (bindings, body) = self.get_form(tail)?;
 
         ctx.code.push(Inst::PushFrame(0));
 
@@ -553,13 +551,13 @@ impl Compiler {
         let syms: Vec<Cow<'static, str>> = bindings.iter().map(|b| b.sym.clone()).collect();
         for (i, binding) in bindings.iter().enumerate() {
             new_env.args = syms[0..i].to_vec();
-            try!(self.compile_expr(&new_env, ctx, false, &binding.expr));
+            self.compile_expr(&new_env, ctx, false, &binding.expr)?;
         }
 
         ctx.code.push(Inst::SetArgSize(syms.len()));
 
         new_env.args = syms;
-        try!(self.compile_body(&new_env, ctx, &body));
+        self.compile_body(&new_env, ctx, &body)?;
 
         ctx.code.push(Inst::PopFrame);
 
@@ -570,7 +568,7 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (bindings, body) = try!(self.get_form(tail));
+        let (bindings, body) = self.get_form(tail)?;
         let syms = bindings.iter().map(|b| b.sym.clone()).collect();
 
         ctx.code.push(Inst::PushFrame(0));
@@ -582,13 +580,13 @@ impl Compiler {
         let new_env = env.update_arg(syms);
 
         for (i, binding) in bindings.iter().enumerate() {
-            try!(self.compile_expr(&new_env, ctx, false, &binding.expr));
+            self.compile_expr(&new_env, ctx, false, &binding.expr)?;
             ctx.code.push(Inst::PopArg(MemRef::Arg(i)));
         }
 
         ctx.code.push(Inst::SetArgSize(bindings.len()));
 
-        try!(self.compile_body(&new_env, ctx, &body));
+        self.compile_body(&new_env, ctx, &body)?;
 
         ctx.code.push(Inst::PopFrame);
 
@@ -602,10 +600,10 @@ impl Compiler {
         if let &Datum::Cons(ref ptr) = tail {
             let (ref cur_args, ref body) = *ptr.as_ref();
             let res: Result<Vec<Datum<T>>, ()> = body.iter().collect();
-            let expr = cons(Datum::Sym(Cow::Borrowed("lambda")), try!(tail.try_conv()));
+            let expr = cons(Datum::Sym(Cow::Borrowed("lambda")), tail.try_conv()?);
             match res {
                 Ok(exprs) => {
-                    let block_ctx = try!(self.compile_proc(env, cur_args, exprs.as_ref()));
+                    let block_ctx = self.compile_proc(env, cur_args, exprs.as_ref())?;
 
                     ctx.code.push(Inst::PushArg(MemRef::Closure(
                             Rc::new(block_ctx.code),
@@ -669,7 +667,7 @@ impl Compiler {
 
         let new_env = env.update_arg(new_args);
 
-        try!(self.compile_exprs(&new_env, &mut ctx, true, body));
+        self.compile_exprs(&new_env, &mut ctx, true, body)?;
 
         ctx.code.push(Inst::Return);
 
@@ -730,10 +728,10 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let assignment = try!(to_list(formal));
+        let assignment = to_list(formal)?;
         if let &[Datum::Sym(ref sym), ref expr] = assignment.as_slice() {
-            try!(self.compile_expr(env, ctx, false, expr));
-            let ptr = try!(self.compile_ref(env, ctx, sym));
+            self.compile_expr(env, ctx, false, expr)?;
+            let ptr = self.compile_ref(env, ctx, sym)?;
             ctx.code.push(Inst::PopArg(ptr));
             ctx.code.push(Inst::PushArg(MemRef::Undefined));
             Ok(())
@@ -765,8 +763,8 @@ impl Compiler {
                 ctx.code.push(
                     Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS)))
                 );
-                try!(self.rec_quote(ctx, &pair.0));
-                try!(self.rec_quote(ctx, &pair.1));
+                self.rec_quote(ctx, &pair.0)?;
+                self.rec_quote(ctx, &pair.1)?;
                 ctx.code.push(Inst::Call(2));
             },
             &Datum::Vector(ref v) => {
@@ -774,7 +772,7 @@ impl Compiler {
                     Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR)))
                 );
                 for e in v.iter() {
-                    try!(self.rec_quote(ctx, e));
+                    self.rec_quote(ctx, e)?;
                 }
                 ctx.code.push(Inst::Call(v.len()));
             },
@@ -843,12 +841,12 @@ impl Compiler {
                 ctx.code.push(
                     Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("quasiquote"))))
                 );
-                try!(self.rec_quasiquote(qq_level+1, env, ctx, &arg));
+                self.rec_quasiquote(qq_level+1, env, ctx, &arg)?;
                 ctx.code.push(Inst::Call(2));
             },
             Some((PrimitiveSyntax::Unquote, arg)) => {
                 if qq_level == 0 {
-                    try!(self.compile_expr(env, ctx, false, &arg));
+                    self.compile_expr(env, ctx, false, &arg)?;
                 } else {
                     ctx.code.push(
                         Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("list", &PRIM_LIST)))
@@ -856,7 +854,7 @@ impl Compiler {
                     ctx.code.push(
                         Inst::PushArg(MemRef::Const(SimpleDatum::Sym(Cow::Borrowed("unquote"))))
                     );
-                    try!(self.rec_quasiquote(qq_level-1, env, ctx, &arg));
+                    self.rec_quasiquote(qq_level-1, env, ctx, &arg)?;
                     ctx.code.push(Inst::Call(2));
                 }
             },
@@ -868,21 +866,21 @@ impl Compiler {
                                 ctx.code.push(Inst::PushArg(
                                     MemRef::PrimFunc(PrimFuncPtr::new("append", &PRIM_APPEND))
                                 ));
-                                try!(self.compile_expr(env, ctx, false, &arg));
+                                self.compile_expr(env, ctx, false, &arg)?;
                             } else {
                                 ctx.code.push(Inst::PushArg(
                                     MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))
                                 ));
-                                try!(self.rec_quasiquote(qq_level-1, env, ctx, &pair.0));
+                                self.rec_quasiquote(qq_level-1, env, ctx, &pair.0)?;
                             }
                         } else {
                             ctx.code.push(Inst::PushArg(
                                 MemRef::PrimFunc(PrimFuncPtr::new("cons", &PRIM_CONS))
                             ));
-                            try!(self.rec_quasiquote(qq_level, env, ctx, &pair.0));
+                            self.rec_quasiquote(qq_level, env, ctx, &pair.0)?;
                         }
 
-                        try!(self.rec_quasiquote(qq_level, env, ctx, &pair.1));
+                        self.rec_quasiquote(qq_level, env, ctx, &pair.1)?;
                         ctx.code.push(Inst::Call(2));
                     },
                     &Datum::Vector(ref v) => {
@@ -890,7 +888,7 @@ impl Compiler {
                             MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR))
                         ));
                         for e in v.iter() {
-                            try!(self.rec_quasiquote(qq_level, env, ctx, e));
+                            self.rec_quasiquote(qq_level, env, ctx, e)?;
                         }
                         ctx.code.push(Inst::Call(v.len()));
                     },
@@ -923,7 +921,7 @@ impl Compiler {
             Some(last_clause) => match last_clause {
                 &Datum::Cons(ref pair) =>  {
                     if self.is_sym(&pair.0, "else") {
-                        let exprs = try!(to_list(&pair.1));
+                        let exprs = to_list(&pair.1)?;
                         Some(exprs)
                     } else {
                         None
@@ -949,18 +947,18 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses = try!(to_list(preds));
+        let mut clauses = to_list(preds)?;
 
-        let else_exprs = try!(self.get_else_clause(&mut clauses));
+        let else_exprs = self.get_else_clause(&mut clauses)?;
 
         for clause in &clauses {
-            let terms = try!(to_list(&clause));
+            let terms = to_list(&clause)?;
 
             if terms.len() < 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
-            try!(self.compile_expr(env, ctx, false, &terms[0]));
+            self.compile_expr(env, ctx, false, &terms[0])?;
 
             // placeholder for JumpIfFalse
             let jump_inst = ctx.code.len();
@@ -971,7 +969,7 @@ impl Compiler {
                     return Err(CompileError { kind: CompileErrorKind::BadSyntax });
                 }
 
-                try!(self.compile_expr(env, ctx, false, &terms[2]));
+                self.compile_expr(env, ctx, false, &terms[2])?;
                 ctx.code.push(Inst::SwapArg);
                 if tail_ctx {
                     ctx.code.push(Inst::TailCall);
@@ -980,7 +978,7 @@ impl Compiler {
                 }
             } else {
                 ctx.code.push(Inst::DropArg(1));
-                try!(self.compile_exprs(env, ctx, tail_ctx, &terms[1..]));
+                self.compile_exprs(env, ctx, tail_ctx, &terms[1..])?;
             }
 
             // placeholder for Jump: this jumps to the end of cond expr
@@ -995,7 +993,7 @@ impl Compiler {
         }
 
         if let Some(exprs) = else_exprs {
-            try!(self.compile_exprs(env, ctx, tail_ctx, &exprs));
+            self.compile_exprs(env, ctx, tail_ctx, &exprs)?;
         }
 
         let pos = ctx.code.len();
@@ -1015,7 +1013,7 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let mut clauses = try!(to_list(preds));
+        let mut clauses = to_list(preds)?;
 
         if clauses.len() < 2 {
             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
@@ -1023,23 +1021,23 @@ impl Compiler {
 
         let expr = clauses.remove(0);
 
-        try!(self.compile_expr(env, ctx, false, &expr));
+        self.compile_expr(env, ctx, false, &expr)?;
 
-        let else_exprs = try!(self.get_else_clause(&mut clauses));
+        let else_exprs = self.get_else_clause(&mut clauses)?;
 
         for clause in &clauses {
             let mut case_placeholders = Vec::new();
 
-            let terms = try!(to_list(clause));
+            let terms = to_list(clause)?;
 
             if terms.len() < 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
 
-            let cases = try!(to_list(&terms[0]));
+            let cases = to_list(&terms[0])?;
 
             for case in cases.iter() {
-                try!(self.rec_quote(ctx, case));
+                self.rec_quote(ctx, case)?;
 
                 ctx.code.push(Inst::Eqv);
 
@@ -1062,7 +1060,7 @@ impl Compiler {
 
             ctx.code.push(Inst::DropArg(3));
 
-            try!(self.compile_exprs(env, ctx, tail_ctx, &terms[1..]));
+            self.compile_exprs(env, ctx, tail_ctx, &terms[1..])?;
 
             // placeholder for Jump: to the end of case expression
             placeholders.push(ctx.code.len());
@@ -1074,7 +1072,7 @@ impl Compiler {
         }
 
         if let Some(exprs) = else_exprs {
-            try!(self.compile_exprs(env, ctx, tail_ctx, &exprs));
+            self.compile_exprs(env, ctx, tail_ctx, &exprs)?;
         }
 
         let pos = ctx.code.len();
@@ -1094,13 +1092,13 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs = try!(to_list(preds));
+        let exprs = to_list(preds)?;
         if exprs.is_empty() {
             ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(true))));
             return Ok(());
         }
 
-        try!(self.compile_expr(env, ctx, false, &exprs[0]));
+        self.compile_expr(env, ctx, false, &exprs[0])?;
 
         for expr in exprs[1..].iter() {
             placeholders.push(ctx.code.len());
@@ -1108,7 +1106,7 @@ impl Compiler {
             ctx.code.push(Inst::Nop);
             // Drop the value if the test fails
             ctx.code.push(Inst::DropArg(1));
-            try!(self.compile_expr(env, ctx, tail_ctx, &expr));
+            self.compile_expr(env, ctx, tail_ctx, &expr)?;
         }
 
         let jump_pc = ctx.code.len();
@@ -1128,13 +1126,13 @@ impl Compiler {
         where T: Clone + Debug + TryConv<(), CompileError>
     {
         let mut placeholders = Vec::new();
-        let exprs = try!(to_list(preds));
+        let exprs = to_list(preds)?;
         if exprs.is_empty() {
             ctx.code.push(Inst::PushArg(MemRef::Const(SimpleDatum::Bool(false))));
             return Ok(());
         }
 
-        try!(self.compile_expr(env, ctx, false, &exprs[0]));
+        self.compile_expr(env, ctx, false, &exprs[0])?;
 
         for expr in exprs[1..].iter() {
             placeholders.push(ctx.code.len());
@@ -1142,7 +1140,7 @@ impl Compiler {
             ctx.code.push(Inst::Nop);
             // Drop the value if the test fails
             ctx.code.push(Inst::DropArg(1));
-            try!(self.compile_expr(env, ctx, tail_ctx, &expr));
+            self.compile_expr(env, ctx, tail_ctx, &expr)?;
         }
 
         let jump_pc = ctx.code.len();
@@ -1161,15 +1159,15 @@ impl Compiler {
             -> Result<(), CompileError>
         where T: Clone + Debug + TryConv<(), CompileError>
     {
-        let (bindings, body) = try!(self.get_form(datum));
+        let (bindings, body) = self.get_form(datum)?;
         let mut new_env = env.clone();
 
         for binding in bindings {
-            let syntax_rules = try!(self.compile_syntax_rules(env, &binding.expr));
+            let syntax_rules = self.compile_syntax_rules(env, &binding.expr)?;
             new_env.syntax_env = new_env.syntax_env.insert(binding.sym, Rc::new(syntax_rules));
         }
 
-        let exprs = try!(to_exprs(&body));
+        let exprs = to_exprs(&body)?;
         self.compile_exprs(&new_env, ctx, tail_ctx, &exprs)
     }
 
@@ -1177,7 +1175,7 @@ impl Compiler {
             -> Result<CompiledMacro, CompileError>
         where T: Clone + Debug
     {
-        let rules = try!(to_list(datum));
+        let rules = to_list(datum)?;
         if rules.len() < 2 {
             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
         }
@@ -1187,7 +1185,7 @@ impl Compiler {
             return Err(CompileError { kind: CompileErrorKind::BadSyntax });
         }
 
-        let literals = try!(to_list(&rules[1]));
+        let literals = to_list(&rules[1])?;
         let mut vars = HashSet::new();
         for literal in literals {
             if let Datum::Sym(sym) = literal {
@@ -1203,7 +1201,7 @@ impl Compiler {
 
         let mut syntax_rules = Vec::new();
         for rule in &rules[2..] {
-            let form = try!(to_list(rule));
+            let form = to_list(rule)?;
             if form.len() != 2 {
                 return Err(CompileError { kind: CompileErrorKind::BadSyntax });
             }
@@ -1226,7 +1224,7 @@ impl Compiler {
                 self.compile_app(env, ctx, tail_ctx, datum),
             &Datum::Nil => Err(CompileError { kind: CompileErrorKind::NullEval }),
             &Datum::Sym(ref sym) => {
-                let ptr = try!(self.compile_ref(env, ctx, sym));
+                let ptr = self.compile_ref(env, ctx, sym)?;
                 ctx.code.push(Inst::PushArg(ptr));
                 Ok(())
             },
@@ -1235,7 +1233,7 @@ impl Compiler {
                     Inst::PushArg(MemRef::PrimFunc(PrimFuncPtr::new("vector", &PRIM_VECTOR)))
                 );
                 for e in v.iter() {
-                    try!(self.rec_quote(ctx, e));
+                    self.rec_quote(ctx, e)?;
                 }
                 ctx.code.push(Inst::Call(v.len()));
                 Ok(())

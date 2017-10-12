@@ -167,26 +167,26 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     pub fn lex_token(&mut self) -> Result<TokenWrapper, ParserError> {
-        try!(self.consume_whitespace());
+        self.consume_whitespace()?;
 
         let line = self.line;
         let col = self.column;
 
-        let token = try!(self.lex());
+        let token = self.lex()?;
 
-        try!(self.consume_whitespace());
+        self.consume_whitespace()?;
 
         Ok(wrap(line, col, token))
     }
 
     /// return next token
     fn lex(&mut self) -> Result<Token, ParserError> {
-        let c = match try!(self.consume_eof()) {
+        let c = match self.consume_eof()? {
             Some(c) => c,
             None => return Ok(Token::EOF)
         };
 
-        let end_of_token = try!(self.is_end_of_token());
+        let end_of_token = self.is_end_of_token()?;
 
         if is_initial(c) {
             let mut init = String::new();
@@ -202,14 +202,14 @@ impl <R: Read + Sized> Lexer<R> {
             if end_of_token {
                 Ok(Token::Identifier(Cow::Borrowed("-")))
             } else {
-                match try!(self.lookahead()) {
+                match self.lookahead()? {
                     Some('>') => self.lex_ident("-".to_string()).map(|s| Token::Identifier(Cow::Owned(s))),
                     Some(_) => self.lex_numeric("-".to_string()).map(Token::Numeric),
                     None => Ok(Token::Identifier(Cow::Borrowed("-")))
                 }
             }
         } else if c == ',' {
-            match try!(self.lookahead()) {
+            match self.lookahead()? {
                 Some('@') => {
                     self.consume().expect("lookahead buffer error");
                     Ok(Token::UnquoteSplicing)
@@ -228,7 +228,7 @@ impl <R: Read + Sized> Lexer<R> {
             if end_of_token {
                 Ok(Token::Dot)
             } else {
-                let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
+                let rest_prefix = self.read_while(|c| !is_delim(c))?;
                 if rest_prefix == ".." {
                     Ok(Token::Identifier(Cow::Borrowed("...")))
                 } else {
@@ -240,14 +240,14 @@ impl <R: Read + Sized> Lexer<R> {
         } else if c == '`' {
             Ok(Token::QuasiQuote)
         } else if c == '#' {
-            let c0 = try!(self.consume());
+            let c0 = self.consume()?;
             match c0 {
                 't' | 'T' => {
-                    try!(self.expect_delimiter());
+                    self.expect_delimiter()?;
                     Ok(Token::True)
                 },
                 'f' | 'F' => {
-                    try!(self.expect_delimiter());
+                    self.expect_delimiter()?;
                     Ok(Token::False)
                 },
                 'b' | 'B' | 'o' | 'O' | 'd' | 'D' | 'x' | 'X' | 'i' | 'I' | 'e' | 'E' => {
@@ -255,8 +255,8 @@ impl <R: Read + Sized> Lexer<R> {
                     self.lex_numeric(s).map(Token::Numeric)
                 },
                 'v' | 'u' => {
-                    let rest_prefix = try!(self.read_while(|c| !is_delim(c)));
-                    let delim = try!(self.consume());
+                    let rest_prefix = self.read_while(|c| !is_delim(c))?;
+                    let delim = self.consume()?;
                     let prefix = format!("{}{}{}", c0, rest_prefix, delim);
                     match prefix.as_ref() {
                         "vu8(" | "u8(" =>
@@ -268,14 +268,14 @@ impl <R: Read + Sized> Lexer<R> {
                 '\\' => self.lex_char().map(Token::Character),
                 '(' => Ok(Token::OpenVectorParen),
                 '|' => {
-                    try!(self.consume_nested_comment());
-                    try!(self.consume_whitespace());
+                    self.consume_nested_comment()?;
+                    self.consume_whitespace()?;
                     self.lex()
                 },
                 ';' => Ok(Token::DatumComment),
                 '\'' => Ok(Token::Syntax),
                 '`' => Ok(Token::QuasiSyntax),
-                ',' => if let Some('@') = try!(self.lookahead()) {
+                ',' => if let Some('@') = self.lookahead()? {
                         self.consume().expect("lookahead buffer error");
                         Ok(Token::UnsyntaxSplicing)
                     } else {
@@ -294,7 +294,7 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     fn is_end_of_token(&mut self) -> Result<bool, ParserError> {
-        match try!(self.lookahead()) {
+        match self.lookahead()? {
             Some(c) => Ok(is_whitespace(c) || is_delim(c)),
             None => Ok(true)
         }
@@ -302,18 +302,18 @@ impl <R: Read + Sized> Lexer<R> {
 
     fn lex_ident(&mut self, initial: String) -> Result<String, ParserError> {
         let mut s = initial;
-        let sub = try!(self.read_while(is_subsequent));
-        try!(self.expect_delimiter());
+        let sub = self.read_while(is_subsequent)?;
+        self.expect_delimiter()?;
         s.push_str(sub.as_ref());
         Ok(s)
     }
 
     fn lex_char(&mut self) -> Result<String, ParserError> {
-        let c = try!(self.consume());
+        let c = self.consume()?;
         let mut s = String::new();
         s.push(c);
-        let sub = try!(self.read_while(|c| c.is_alphanumeric()));
-        try!(self.expect_delimiter());
+        let sub = self.read_while(|c| c.is_alphanumeric())?;
+        self.expect_delimiter()?;
         s.push_str(sub.as_ref());
         return Ok(s);
     }
@@ -321,9 +321,9 @@ impl <R: Read + Sized> Lexer<R> {
     fn lex_string(&mut self) -> Result<String, ParserError> {
         let mut s = String::new();
         loop {
-            match try!(self.consume()) {
+            match self.consume()? {
                 '"' => return Ok(s),
-                '\\' => match try!(self.consume()) {
+                '\\' => match self.consume()? {
                     'a' => s.push('\x07'),
                     'b' => s.push('\x08'),
                     't' => s.push('\t'),
@@ -334,8 +334,8 @@ impl <R: Read + Sized> Lexer<R> {
                     '"' => s.push('"'),
                     '\\' => s.push('\\'),
                     'x' => {
-                        let hex_str = try!(self.read_while(|c| c != ';'));
-                        if try!(self.consume()) != ';' {
+                        let hex_str = self.read_while(|c| c != ';')?;
+                        if self.consume()? != ';' {
                             panic!("read_while error");
                         }
                         if hex_str.len() == 0 {
@@ -352,10 +352,10 @@ impl <R: Read + Sized> Lexer<R> {
                     },
                     c =>
                         if c.is_whitespace() {
-                            try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
+                            self.read_while(|c| c != '\n' && c.is_whitespace())?;
                             if c != '\n' {
-                                if let '\n' = try!(self.consume()) {
-                                    try!(self.read_while(|c| c != '\n' && c.is_whitespace()));
+                                if let '\n' = self.consume()? {
+                                    self.read_while(|c| c != '\n' && c.is_whitespace())?;
                                 } else {
                                     return Err(self.make_error(ParserErrorKind::InvalidStringLiteral))
                                 }
@@ -371,7 +371,7 @@ impl <R: Read + Sized> Lexer<R> {
 
     fn lex_numeric(&mut self, init: String) -> Result<String, ParserError> {
         let mut s = init;
-        let sub = try!(self.read_while(|c| !is_delim(c)));
+        let sub = self.read_while(|c| !is_delim(c))?;
         s.push_str(sub.as_ref());
         return Ok(s);
     }
@@ -425,7 +425,7 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     fn expect_delimiter(&mut self) -> Result<(), ParserError> {
-        if try!(self.is_end_of_token()) {
+        if self.is_end_of_token()? {
             Ok(())
         } else {
             Err(self.make_error(ParserErrorKind::ExpectedDelimiter))
@@ -445,7 +445,7 @@ impl <R: Read + Sized> Lexer<R> {
     }
 
     fn consume(&mut self) -> Result<char, ParserError> {
-        match try!(self.consume_eof()) {
+        match self.consume_eof()? {
             Some(c) => Ok(c),
             None => return Err(self.make_error(ParserErrorKind::UnexpectedEOF))
         }
@@ -453,9 +453,9 @@ impl <R: Read + Sized> Lexer<R> {
 
     fn consume_whitespace(&mut self) -> Result<(), ParserError> {
         loop {
-            try!(self.read_while(is_whitespace));
-            if let Some(';') = try!(self.lookahead()) {
-                try!(self.read_while(|c| c != '\n'));
+            self.read_while(is_whitespace)?;
+            if let Some(';') = self.lookahead()? {
+                self.read_while(|c| c != '\n')?;
             } else {
                 return Ok(());
             }
@@ -464,12 +464,12 @@ impl <R: Read + Sized> Lexer<R> {
 
     fn consume_nested_comment(&mut self) -> Result<(), ParserError> {
         loop {
-            match try!(self.consume()) {
-                '|' => if '#' == try!(self.consume()) {
+            match self.consume()? {
+                '|' => if '#' == self.consume()? {
                     return Ok(());
                 },
-                '#' => if '|' == try!(self.consume()) {
-                    try!(self.consume_nested_comment());
+                '#' => if '|' == self.consume()? {
+                    self.consume_nested_comment()?;
                 },
                 _ => ()
             }

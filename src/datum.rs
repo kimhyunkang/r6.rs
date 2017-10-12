@@ -37,7 +37,7 @@ pub enum Datum<T> {
 }
 
 fn format_char(c: char, f: &mut fmt::Formatter) -> fmt::Result {
-    try!(write!(f, "#\\"));
+    write!(f, "#\\")?;
     match c {
         '\0' => write!(f, "nul"),
         '\x08' => write!(f, "backspace"),
@@ -64,11 +64,11 @@ trait DatumFormatter<T> {
                 if vec.is_empty() {
                     write!(f, "#()")
                 } else {
-                    try!(write!(f, "#("));
-                    try!(self.datum_fmt(&vec[0], f));
+                    write!(f, "#(")?;
+                    self.datum_fmt(&vec[0], f)?;
                     for x in vec[1..].iter() {
-                        try!(f.write_str(" "));
-                        try!(self.datum_fmt(x, f));
+                        f.write_str(" ")?;
+                        self.datum_fmt(x, f)?;
                     }
                     write!(f, ")")
                 }
@@ -77,9 +77,9 @@ trait DatumFormatter<T> {
                 if vec.is_empty() {
                     write!(f, "#vu8()")
                 } else {
-                    try!(write!(f, "#vu8({}", vec[0]));
+                    write!(f, "#vu8({}", vec[0])?;
                     for x in vec[1..].iter() {
-                        try!(write!(f, " {}", x));
+                        write!(f, " {}", x)?;
                     }
                     write!(f, ")")
                 }
@@ -92,15 +92,15 @@ trait DatumFormatter<T> {
                     match SPECIAL_TOKEN_MAP.get(s.as_ref()) {
                         Some(ch) => if let Datum::Cons(ref tail) = pair.1 {
                             if let Datum::Nil = tail.1 {
-                                try!(write!(f, "{}", ch));
+                                write!(f, "{}", ch)?;
                                 return self.datum_fmt(&tail.0, f);
                             }
                         },
                         _ => ()
                     }
                 }
-                try!(write!(f, "("));
-                try!(self.datum_fmt(&pair.0, f));
+                write!(f, "(")?;
+                self.datum_fmt(&pair.0, f)?;
                 self.write_cons(&pair.1, f)
             }
         }
@@ -112,13 +112,13 @@ trait DatumFormatter<T> {
                 write!(f, ")")
             },
             &Datum::Cons(ref pair) => {
-                try!(write!(f, " "));
-                try!(self.datum_fmt(&pair.0, f));
+                write!(f, " ")?;
+                self.datum_fmt(&pair.0, f)?;
                 self.write_cons(&pair.1, f)
             },
             _ => {
-                try!(write!(f, " . "));
-                try!(self.datum_fmt(&tail, f));
+                write!(f, " . ")?;
+                self.datum_fmt(&tail, f)?;
                 write!(f, ")")
             }
         }
@@ -206,8 +206,8 @@ impl<S, T, E> TryConv<Datum<T>, E> for Datum<S> where S: TryConv<T, E> {
             &Datum::Num(ref v) => Ok(Datum::Num(v.clone())),
             &Datum::Nil => Ok(Datum::Nil),
             &Datum::Cons(ref v) => {
-                let h = try!(v.0.try_conv());
-                let t = try!(v.1.try_conv());
+                let h = v.0.try_conv()?;
+                let t = v.1.try_conv()?;
                 Ok(Datum::Cons(Rc::new((h, t))))
             },
             &Datum::Ext(ref v) => v.try_conv().map(Datum::Ext)

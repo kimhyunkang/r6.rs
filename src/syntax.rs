@@ -61,13 +61,13 @@ impl MacroPattern {
             -> Result<MacroPattern, MacroError>
         where T: Clone + Debug
     {
-        let cp = try!(CompiledPattern::compile(literals, pattern_src));
+        let cp = CompiledPattern::compile(literals, pattern_src)?;
 
         let template = {
             let compiler = TemplateCompiler::new(&cp.vars);
-            let (_, template) = try!(compiler.compile(template_src));
+            let (_, template) = compiler.compile(template_src)?;
 
-            try!(template.validate(&cp.pattern));
+            template.validate(&cp.pattern)?;
 
             template
         };
@@ -150,12 +150,12 @@ impl CompiledPattern {
                         desc: "Macro form (`...` ...) is not implemented yet".to_string()
                     }),
                     Some((rep, rest)) => {
-                        let (vars0, pats0) = try!(Pattern::compile_subpatterns(literals, rest));
+                        let (vars0, pats0) = Pattern::compile_subpatterns(literals, rest)?;
                         let mut vars = vars0;
-                        let (vars1, repeating) = try!(SubPattern::compile(literals, rep));
-                        try!(union_vars(&mut vars, vars1));
-                        let (vars2, pats2) = try!(Pattern::compile_subpatterns(literals, suffix));
-                        try!(union_vars(&mut vars, vars2));
+                        let (vars1, repeating) = SubPattern::compile(literals, rep)?;
+                        union_vars(&mut vars, vars1)?;
+                        let (vars2, pats2) = Pattern::compile_subpatterns(literals, suffix)?;
+                        union_vars(&mut vars, vars2)?;
                         Ok(CompiledPattern {
                             vars: vars,
                             pattern: Pattern::DelimitedList(pats0, Box::new(repeating), pats2)
@@ -262,8 +262,8 @@ impl Pattern {
                 data.iter().map(|sp| SubPattern::compile(literals, sp)).collect();
         let mut var_set = HashSet::new();
         let mut pattern = Vec::new();
-        for (subset, sp) in try!(subpats).into_iter() {
-            try!(union_vars(&mut var_set, subset));
+        for (subset, sp) in subpats?.into_iter() {
+            union_vars(&mut var_set, subset)?;
             pattern.push(sp);
         }
 
@@ -426,16 +426,16 @@ impl Template {
             },
             &Template::List(ref init, ref tail) => {
                 for elem in init.iter() {
-                    try!(elem.validate(pattern));
+                    elem.validate(pattern)?;
                 }
                 if let &Some(ref elem) = tail {
-                    try!(elem.validate(pattern));
+                    elem.validate(pattern)?;
                 }
                 Ok(())
             },
             &Template::Vector(ref v) => {
                 for elem in v.iter() {
-                    try!(elem.validate(pattern));
+                    elem.validate(pattern)?;
                 }
                 Ok(())
             }
@@ -518,7 +518,7 @@ impl TemplateElement {
                 for elem in vec.iter() {
                     if let &SubPattern::Pattern(ref cp) = elem {
                         if cp.vars.is_superset(vars) {
-                            try!(self.validate_repeat(vars, &cp.pattern));
+                            self.validate_repeat(vars, &cp.pattern)?;
                         }
                     }
                 }
@@ -529,7 +529,7 @@ impl TemplateElement {
                 for elem in prefix.iter() {
                     if let &SubPattern::Pattern(ref cp) = elem {
                         if cp.vars.is_superset(vars) {
-                            try!(self.validate_repeat(vars, &cp.pattern));
+                            self.validate_repeat(vars, &cp.pattern)?;
                         }
                     }
                 }
@@ -552,7 +552,7 @@ impl TemplateElement {
                         },
                     &SubPattern::Pattern(ref cp) =>
                         if cp.vars.is_superset(vars) {
-                            try!(self.validate(&cp.pattern));
+                            self.validate(&cp.pattern)?;
                         },
                     _ =>
                         ()
@@ -561,7 +561,7 @@ impl TemplateElement {
                 for elem in suffix.iter() {
                     if let &SubPattern::Pattern(ref cp) = elem {
                         if cp.vars.is_superset(vars) {
-                            try!(self.validate_repeat(vars, &cp.pattern));
+                            self.validate_repeat(vars, &cp.pattern)?;
                         }
                     }
                 }
@@ -601,7 +601,7 @@ impl<'a> TemplateCompiler<'a> {
         }
 
         let mut res = Vec::new();
-        let (mut last_vars, elem) = try!(self.compile(&data[0]));
+        let (mut last_vars, elem) = self.compile(&data[0])?;
         let mut vars = last_vars.clone();
         let mut last_elem = TemplateElement::Template(elem);
         for elem in data[1 .. ].iter() {
@@ -610,7 +610,7 @@ impl<'a> TemplateCompiler<'a> {
             } else {
                 res.push(last_elem);
 
-                let (cur_vars, cur_elem) = try!(self.compile(elem));
+                let (cur_vars, cur_elem) = self.compile(elem)?;
                 for v in cur_vars.iter() {
                     vars.insert(v.clone());
                 }
@@ -637,11 +637,11 @@ impl<'a> TemplateCompiler<'a> {
                 },
             &Datum::Cons(_) => {
                 let (list, tail) = datum.improper_list();
-                let (mut vars, res) = try!(self.compile_list(&list));
+                let (mut vars, res) = self.compile_list(&list)?;
 
                 let tail_template = match tail {
                     Some(t) => {
-                        let (tail_vars, tail_res) = try!(self.compile(&t));
+                        let (tail_vars, tail_res) = self.compile(&t)?;
                         for v in tail_vars.into_iter() {
                             vars.insert(v);
                         }

@@ -24,7 +24,7 @@ fn read(cl: &mut Copperline) -> Result<Datum<()>, String> {
         }
     };
 
-    if let Some(datum) = try!(parse(input.as_bytes())) {
+    if let Some(datum) = parse(input.as_bytes())? {
         return Ok(datum)
     }
 
@@ -44,7 +44,7 @@ fn read(cl: &mut Copperline) -> Result<Datum<()>, String> {
         input.push_str("\n");
         input.push_str(&line);
 
-        if let Some(datum) = try!(parse(input.as_bytes())) {
+        if let Some(datum) = parse(input.as_bytes())? {
             return Ok(datum)
         }
     }

@@ -97,7 +97,7 @@ impl NumberParser {
             return Ok(Number::new_int(0, 1));
         }
 
-        let (re, re_end) = try!(self.parse_real(exactness, radix, rep));
+        let (re, re_end) = self.parse_real(exactness, radix, rep)?;
 
         if re_end == rep.len() {
             return Ok(Number::Real(re));
@@ -106,7 +106,7 @@ impl NumberParser {
         match rep[re_end..].chars().next() {
             Some('@') => {
                 let arg_part = &rep[re_end+1 ..];
-                let (arg, arg_end) = try!(self.parse_real(exactness, radix, arg_part));
+                let (arg, arg_end) = self.parse_real(exactness, radix, arg_part)?;
                 if arg_end != arg_part.len() {
                     return Err("Invalid polar literal".to_string());
                 }
@@ -123,7 +123,7 @@ impl NumberParser {
             Some('i') => Ok(Number::new_imag(re)),
             Some('+') | Some('-') => {
                 let im_part = &rep[re_end ..];
-                let (im, im_end) = try!(self.parse_real(exactness, radix, im_part));
+                let (im, im_end) = self.parse_real(exactness, radix, im_part)?;
                 if im_end+1 == im_part.len() && im_part[im_end..].chars().next() == Some('i') {
                     if im.is_exact() && im.is_zero() {
                         Ok(Number::Real(re))
@@ -145,7 +145,7 @@ impl NumberParser {
             Some((_, idx)) => idx
         };
 
-        let (exactness, radix) = try!(parse_prefix(&rep[0 .. num_start]));
+        let (exactness, radix) = parse_prefix(&rep[0 .. num_start])?;
 
         self.parse_numerical_tower(exactness, radix, &rep[num_start ..])
     }
@@ -182,7 +182,7 @@ impl NumberParser {
                 Real::Flonum(Float::infinity())
             }
         } else {
-            let (r, default_exactness) = try!(parse_rational(radix, re_part, captures));
+            let (r, default_exactness) = parse_rational(radix, re_part, captures)?;
             let exact = match exactness {
                 Exactness::Exact => true,
                 Exactness::Unspecified => default_exactness,
@@ -341,8 +341,8 @@ impl <R: Read + Sized> Parser<R> {
     }
 
     pub fn parse_full<T>(&mut self) -> Result<Datum<T>, ParserError> {
-        let datum = try!(self.parse_datum());
-        let t = try!(self.lexer.lex_token());
+        let datum = self.parse_datum()?;
+        let t = self.lexer.lex_token()?;
         if let Token::EOF = t.token {
             Ok(datum)
         } else {
@@ -356,7 +356,7 @@ impl <R: Read + Sized> Parser<R> {
 
     /// Parse next datum
     pub fn parse_datum<T>(&mut self) -> Result<Datum<T>, ParserError> {
-        let tok = try!(self.consume_token());
+        let tok = self.consume_token()?;
         match tok.token {
             Token::Identifier(ident) => Ok(Datum::Sym(ident)),
             Token::OpenParen => self.parse_list(&Token::CloseParen),
@@ -365,7 +365,7 @@ impl <R: Read + Sized> Parser<R> {
                 Datum::Vector(Rc::new(v))
             ),
             Token::OpenBytesParen => {
-                let v:Vec<Datum<T>> = try!(self.parse_vector());
+                let v:Vec<Datum<T>> = self.parse_vector()?;
                 let bytes:Result<Vec<u8>, ParserError> = v.iter().map(|d|
                     match d {
                         &Datum::Num(Number::Real(Real::Fixnum(n))) if 0 <= n && n <= 0xff =>
@@ -404,7 +404,7 @@ impl <R: Read + Sized> Parser<R> {
             Token::UnsyntaxSplicing => self.parse_abbrev("unsyntax-splicing"),
             Token::DatumComment => {
                 // Treat the next datum as a comment
-                try!(self.parse_datum::<T>());
+                self.parse_datum::<T>()?;
                 self.parse_datum()
             },
             Token::EOF => {
@@ -435,7 +435,7 @@ impl <R: Read + Sized> Parser<R> {
 
     fn lookahead_token<'t>(&'t mut self) -> Result<&'t TokenWrapper, ParserError> {
         if self.token_buf.is_none() {
-            self.token_buf = Some(try!(self.lexer.lex_token()));
+            self.token_buf = Some(self.lexer.lex_token()?);
         }
 
         Ok(self.token_buf.as_ref().unwrap())
@@ -450,7 +450,7 @@ impl <R: Read + Sized> Parser<R> {
     }
 
     fn expect(&mut self, tok: &Token) -> Result<(), ParserError> {
-        let t = try!(self.consume_token());
+        let t = self.consume_token()?;
         if t.token == *tok {
             Ok(())
         } else if t.token == Token::EOF {
@@ -465,18 +465,18 @@ impl <R: Read + Sized> Parser<R> {
     }
 
     fn parse_list<T>(&mut self, delim: &Token) -> Result<Datum<T>, ParserError> {
-        if try!(self.consume_if(delim)) {
+        if self.consume_if(delim)? {
             return Ok(Datum::Nil);
         }
 
-        let head = try!(self.parse_datum());
+        let head = self.parse_datum()?;
 
-        if try!(self.consume_if(&Token::Dot)) {
-            let tail = try!(self.parse_datum());
-            try!(self.expect(delim));
+        if self.consume_if(&Token::Dot)? {
+            let tail = self.parse_datum()?;
+            self.expect(delim)?;
             Ok(cons(head, tail))
         } else {
-            let tail = try!(self.parse_list(delim));
+            let tail = self.parse_list(delim)?;
             Ok(cons(head, tail))
         }
     }
@@ -484,8 +484,8 @@ impl <R: Read + Sized> Parser<R> {
     fn parse_vector<T>(&mut self) -> Result<Vec<Datum<T>>, ParserError> {
         let mut vec = Vec::new();
 
-        while !try!(self.consume_if(&Token::CloseParen)) {
-            vec.push(try!(self.parse_datum()))
+        while !self.consume_if(&Token::CloseParen)? {
+            vec.push(self.parse_datum()?)
         }
 
         return Ok(vec);

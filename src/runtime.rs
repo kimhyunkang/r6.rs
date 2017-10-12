@@ -170,7 +170,7 @@ impl fmt::Display for RuntimeData {
             &RuntimeData::PrimFunc(ref func_ptr) =>
                 write!(f, "<primitive: {:?}>", func_ptr.name),
             &RuntimeData::Closure(ref closure) => {
-                try!(write!(f, "<procedure"));
+                write!(f, "<procedure")?;
                 match closure.source {
                     None => write!(f, ">"),
                     Some(ref ptr) => write!(f, ": {:?}>", ptr.deref())
@@ -257,48 +257,44 @@ pub struct HeapClosure {
 
 impl HeapClosure {
     fn debug_fmt(&self, f: &mut fmt::Formatter, depth: usize) -> fmt::Result {
-        try!(write!(f, "HeapClosure(args: ["));
+        write!(f, "HeapClosure(args: [")?;
         let mut first = true;
         for arg in self.args.iter() {
             if first {
                 first = false;
             } else {
-                try!(write!(f, ", "))
+                write!(f, ", ")?
             }
 
             if let &Datum::Ext(RuntimeData::Closure(Closure {code: _, ref source, static_link: Some(ref static_link)})) = arg {
-                try!(write!(f, "Ext(Closure(source: {:?}, static_link: ", source));
-                try!(
-                    match static_link.borrow().deref() {
-                        &ScopePtr::Stack(n) => write!(f, "Stack({})", n),
-                        &ScopePtr::Heap(ref heap_closure) =>
-                            if depth == 0 {
-                                write!(f, "HeapClosure(..)")
-                            } else {
-                                heap_closure.debug_fmt(f, depth-1)
-                            }
-                    }
-                );
-                try!(write!(f, "))"));
-            } else {
-                try!(write!(f, "{:?}", arg));
-            }
-        }
-        try!(write!(f, "], static_link: "));
-        try!(
-            match &self.static_link {
-                &None => write!(f, "None"),
-                &Some(ref ptr) => match ptr.borrow().deref() {
-                    &ScopePtr::Stack(n) => write!(f, "Stack({})", n),
+                write!(f, "Ext(Closure(source: {:?}, static_link: ", source)?;
+                match static_link.borrow().deref() {
+                    &ScopePtr::Stack(n) => write!(f, "Stack({})", n)?,
                     &ScopePtr::Heap(ref heap_closure) =>
                         if depth == 0 {
-                            write!(f, "HeapClosure(..)")
+                            write!(f, "HeapClosure(..)")?
                         } else {
-                            heap_closure.debug_fmt(f, depth-1)
+                            heap_closure.debug_fmt(f, depth-1)?
                         }
                 }
+                write!(f, "))")?;
+            } else {
+                write!(f, "{:?}", arg)?;
             }
-        );
+        }
+        write!(f, "], static_link: ")?;
+        match &self.static_link {
+            &None => write!(f, "None")?,
+            &Some(ref ptr) => match ptr.borrow().deref() {
+                &ScopePtr::Stack(n) => write!(f, "Stack({})", n)?,
+                &ScopePtr::Heap(ref heap_closure) =>
+                    if depth == 0 {
+                        write!(f, "HeapClosure(..)")?
+                    } else {
+                        heap_closure.debug_fmt(f, depth-1)?
+                    }
+            }
+        }
         write!(f, ")")
     }
 }
@@ -424,7 +420,7 @@ impl Runtime {
             })
         };
 
-        let src: Datum<()> = try!(datum.try_conv());
+        let src: Datum<()> = datum.try_conv()?;
         self.load_main(code, Some(src));
         self.run()
     }
@@ -504,7 +500,7 @@ impl Runtime {
         let val = match ptr {
             MemRef::RetVal => self.ret_val.clone(),
             MemRef::Arg(idx) => self.get_stack_val(idx),
-            MemRef::UpValue(i, j) => try!(self.get_upvalue(i, j)),
+            MemRef::UpValue(i, j) => self.get_upvalue(i, j)?,
             MemRef::Const(val) => DatumCast::wrap(val),
             MemRef::Global(data) => data.borrow().clone(),
             MemRef::Undefined => Datum::Ext(RuntimeData::Undefined),
@@ -591,7 +587,7 @@ impl Runtime {
     }
 
     pub fn top_is_false(&self) -> Result<bool, RuntimeError> {
-        match try!(self.peek_stack()) {
+        match self.peek_stack()? {
             &Datum::Bool(false) => Ok(true),
             _ => Ok(false)
         }
@@ -607,8 +603,8 @@ impl Runtime {
                 } else {
                     self.arg_stack.split_off(top-n)
                 };
-                let res = try!(fptr.function.call(args));
-                try!(self.pop_stack());
+                let res = fptr.function.call(args)?;
+                self.pop_stack()?;
                 self.push_stack(res);
                 self.frame.pc += 1;
             },
@@ -632,11 +628,11 @@ impl Runtime {
         } else {
             self.arg_stack.split_off(new_bottom+1)
         };
-        let datum = try!(self.pop_stack());
+        let datum = self.pop_stack()?;
 
         match datum {
             Datum::Ext(RuntimeData::PrimFunc(ref fptr)) => {
-                let res = try!(fptr.function.call(args));
+                let res = fptr.function.call(args)?;
                 self.push_stack(res);
                 self.frame.pc += 1;
             },
@@ -668,7 +664,7 @@ impl Runtime {
         let n = self.frame.arg_size;
         let top = self.arg_stack.len();
         let res = self.pop_call_stack();
-        let retval = try!(self.pop_stack());
+        let retval = self.pop_stack()?;
         if top < n+2 {
             return Err(runtime_panic("stack too low".to_string()));
         }
@@ -702,20 +698,20 @@ impl Runtime {
             },
             Inst::Type(typeinfo) => {
                 let val = {
-                    let arg = try!(self.peek_stack());
+                    let arg = self.peek_stack()?;
                     DatumType::get_type(arg) == typeinfo
                 };
                 self.arg_stack.push(Datum::Bool(val));
                 self.frame.pc += 1;
             },
-            Inst::Call(n) => try!(self.call(n)),
-            Inst::TailCall => try!(self.tail_call()),
+            Inst::Call(n) => self.call(n)?,
+            Inst::TailCall => self.tail_call()?,
             Inst::CallSplicing => {
                 let n_args = self.arg_stack.len() - self.frame.stack_bottom;
                 if n_args == 0 {
                     return Err(runtime_panic("Call args empty".to_string()));
                 }
-                try!(self.call(n_args - 1));
+                self.call(n_args - 1)?;
                 self.frame.arg_size = 0;
             },
             Inst::PushFrame(n) => {
@@ -746,7 +742,7 @@ impl Runtime {
                 let n = self.frame.arg_size;
                 let top = self.arg_stack.len();
                 self.pop_call_stack();
-                let retval = try!(self.pop_stack());
+                let retval = self.pop_stack()?;
                 if top < n+1 {
                     return Err(runtime_panic("stack too low".to_string()));
                 }
@@ -758,35 +754,35 @@ impl Runtime {
                 self.frame.pc = pc;
             },
             Inst::JumpIfFalse(pc) =>
-                if try!(self.top_is_false()) {
+                if self.top_is_false()? {
                     self.frame.pc = pc;
                 } else {
                     self.frame.pc += 1;
                 },
             Inst::JumpIfNotFalse(pc) =>
-                if try!(self.top_is_false()) {
+                if self.top_is_false()? {
                     self.frame.pc += 1;
                 } else {
                     self.frame.pc = pc;
                 },
             Inst::ThrowIfFalse(msg) =>
-                if try!(self.top_is_false()) {
+                if self.top_is_false()? {
                     return Err(runtime_panic(msg.to_string()));
                 } else {
                     self.frame.pc += 1;
                 },
             Inst::PushArg(ptr) => {
-                let val = try!(self.fetch_mem(ptr));
+                let val = self.fetch_mem(ptr)?;
                 self.arg_stack.push(val);
                 self.frame.pc += 1;
             },
             Inst::PopArg(ptr) => {
-                let val = try!(self.pop_stack());
-                try!(self.write_mem(ptr, val));
+                let val = self.pop_stack()?;
+                self.write_mem(ptr, val)?;
                 self.frame.pc += 1;
             },
             Inst::PopGlobal(sym) => {
-                let val = try!(self.pop_stack());
+                let val = self.pop_stack()?;
                 self.global.insert(sym, Rc::new(RefCell::new(val)));
                 self.frame.pc += 1;
             },
@@ -799,8 +795,8 @@ impl Runtime {
                 self.frame.pc += 1;
             },
             Inst::SwapArg => {
-                let y = try!(self.pop_stack());
-                let x = try!(self.pop_stack());
+                let y = self.pop_stack()?;
+                let x = self.pop_stack()?;
                 self.arg_stack.push(y);
                 self.arg_stack.push(x);
                 self.frame.pc += 1;
@@ -840,7 +836,7 @@ impl Runtime {
                 self.frame.pc += 1;
             },
             Inst::Uncons => {
-                let arg = try!(self.pop_stack());
+                let arg = self.pop_stack()?;
                 if let Datum::Cons(pair) = arg {
                     self.arg_stack.push(pair.0.clone());
                     self.arg_stack.push(pair.1.clone());
@@ -857,7 +853,7 @@ impl Runtime {
 
     pub fn run(&mut self) -> Result<RDatum, RuntimeError> {
         loop {
-            let cont = try!(self.step());
+            let cont = self.step()?;
             if !cont {
                 return self.pop_stack();
             }

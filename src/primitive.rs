@@ -153,8 +153,8 @@ impl<T0: DatumCast, T1: DatumCast, R: PossibleError> PrimFunc for F2<T0, T1, R> 
             });
         }
 
-        let a1 = try!(DatumCast::unwrap(args.pop().unwrap()));
-        let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
+        let a1 = DatumCast::unwrap(args.pop().unwrap())?;
+        let a0 = DatumCast::unwrap(args.pop().unwrap())?;
 
         ((self.f2)(a0, a1)).make_result()
     }
@@ -164,12 +164,12 @@ impl<T0: DatumCast, T1: DatumCast, R: PossibleError> PrimFunc for F2<T0, Option<
     fn call(&self, mut args: Vec<RDatum>) -> Result<RDatum, RuntimeError> {
         let (a0, a1) = match args.len() {
             1 => {
-                let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
+                let a0 = DatumCast::unwrap(args.pop().unwrap())?;
                 (a0, None)
             },
             2 => {
-                let a1 = try!(DatumCast::unwrap(args.pop().unwrap()));
-                let a0 = try!(DatumCast::unwrap(args.pop().unwrap()));
+                let a1 = DatumCast::unwrap(args.pop().unwrap())?;
+                let a0 = DatumCast::unwrap(args.pop().unwrap())?;
                 (a0, Some(a1))
             },
             _ => return Err(RuntimeError {
