@@ -156,16 +156,6 @@ pub struct Lexer<R: Read> {
     stream: Peekable<Chars<R>>
 }
 
-macro_rules! try_consume {
-    ($this:ident) => (
-        match $this.consume() {
-            Some(Ok(c)) => c,
-            Some(Err(e)) => return Err($this.make_error(ParserErrorKind::UnderlyingError(StreamError(e)))),
-            None => return Err($this.make_error(ParserErrorKind::UnexpectedEOF))
-        }
-    )
-}
-
 impl <R: Read + Sized> Lexer<R> {
     /// Creates new Lexer from io::Buffer
     pub fn new(stream: R) -> Lexer<R> {

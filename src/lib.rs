@@ -16,27 +16,24 @@ extern crate num;
 extern crate unicode_categories;
 extern crate immutable_map;
 
+#[cfg(test)]
 macro_rules! list{
     ($($x:expr),*) => (
         vec![$($x),*].into_iter().collect()
     )
 }
 
+#[cfg(test)]
 macro_rules! sym{
     ($e:expr) => (
         Datum::Sym(Cow::Borrowed($e))
     )
 }
 
+#[cfg(test)]
 macro_rules! num{
     ($e:expr) => (
         Datum::Num(Number::new_int($e, 0))
-    )
-}
-
-macro_rules! nil{
-    () => (
-        Datum::Nil
     )
 }
 
